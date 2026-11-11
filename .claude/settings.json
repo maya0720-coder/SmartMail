@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "ask": ["Bash(rm -r:*)", "Bash(rm -rf:*)", "PowerShell(Remove-Item:*)"]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".venv\\Scripts\\python -m ruff format --quiet src tests scripts"
+          }
+        ]
+      }
+    ]
+  }
+}

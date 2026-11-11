@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>업무 히스토리 검색</h2>
+<p class="desc">앱(최근 7일) → G-Knowledge → AI-Ground g-llm 순서로 찾고, 앞 단계에서 찾으면 멈춥니다.</p>
+<div class="card">
+  <form class="search full" id="hist-form">
+    <input name="q" id="hq" placeholder="키워드 입력 (예: 역분개, 원가센터)" autocomplete="off" maxlength="200" value="{{ initial_query }}">
+    <button>검색</button>
+  </form>
+  <div class="filters mb16" id="hist-module">
+    <button class="on" data-m="">전체 모듈</button><button data-m="FI">FI</button><button data-m="CO">CO</button><button data-m="MM">MM</button><button data-m="SD">SD</button><button data-m="Basis">Basis</button><button data-m="ABAP">ABAP</button>
+  </div>
+  <div id="hres"><div class="empty">검색어를 입력하세요.</div></div>
+</div>
+<div class="card mt16">
+  <h3>앱 히스토리 카드 (보관 기간 내)</h3>
+  <div id="hcards"><div class="empty">카드가 없습니다.</div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/history.js"></script>{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>설정·연결</h2>
+<p class="desc">로그인 정보(ID·암호)는 어디에도 저장하지 않습니다. 앱을 종료하면 모든 세션이 삭제됩니다.</p>
+<div class="card">
+  <div class="set-row"><div><div class="k">메일 수집 경로</div><div class="s" id="collect-desc">{{ collector_label }}</div></div>
+    <button class="btn sm" id="btn-detect">경로 다시 확인</button></div>
+  <div class="set-row"><div><div class="k">제외 규칙</div><div class="s">{{ exclusion_summary }}</div></div><span class="chip">설정 파일에서 관리</span></div>
+  <div class="set-row"><div><div class="k">보관 기간</div><div class="s">완료 업무는 {{ retention_days }}일 후 자동 삭제 · 삭제 2일 전 G-Knowledge 미등록 알림</div></div><span class="chip">고정 {{ retention_days }}일</span></div>
+  <div id="setconn"></div>
+  <div class="set-row"><div><div class="k">일괄 로그아웃</div><div class="s">모든 사이트 세션을 지금 폐기합니다</div></div><button class="btn sm" id="btn-logout-all">일괄 로그아웃</button></div>
+  <div class="set-row"><div><div class="k">로컬 데이터 전체 삭제</div><div class="s">업무·요약·이력·지표를 모두 지웁니다 (메일 원본은 그대로)</div></div><button class="btn sm due-crit" id="btn-wipe">전체 삭제</button></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/settings.js"></script>{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mhead">
+  <div><h2>대시보드</h2><p class="desc m0">수집 경로: {{ collector_label }} · 완료 업무는 {{ retention_days }}일 후 자동 삭제</p></div>
+  <div class="seg" id="seg">
+    <button data-g="year">연간</button><button data-g="half">반기</button><button data-g="quarter">분기</button><button data-g="month" class="on">월</button><button data-g="week">주</button>
+  </div>
+</div>
+<div class="mk" id="mk"></div>
+<div class="mnote"><span id="m-desc"></span> · <a href="#" id="toggle-table">표로 보기</a></div>
+<div class="card tbl-wrap mb16 hidden" id="m-tbl"></div>
+<div class="ret hidden mb16" id="alerts"></div>
+<div class="grid2">
+  <div class="card">
+    <h3>내 할 일
+      <span class="filters" id="filters">
+        <button class="on" data-f="all">전체</button><button data-f="suggested">제안됨</button><button data-f="in_progress">진행 중</button><button data-f="done_candidate">완료 후보</button><button data-f="soon">기한 임박</button><button data-f="done">완료</button>
+      </span>
+    </h3>
+    <table>
+      <thead><tr><th>업무</th><th>요청 부서</th><th>기한</th><th>상태</th></tr></thead>
+      <tbody id="todo"></tbody>
+    </table>
+    <div class="actions">
+      <button class="btn sm" id="btn-collect">메일 수집(이번 주)</button>
+      <button class="btn sm" id="btn-manual">+ 수동 업무 추가</button>
+    </div>
+  </div>
+  <div class="card detail" id="detail"><div class="empty">업무를 선택하세요.</div></div>
+</div>
+{% endblock %}
+{% block modals %}{% include "partials/gk_modal.html" %}{% endblock %}
+{% block scripts %}
+<script src="/static/js/charts.js"></script>
+<script src="/static/js/gk.js"></script>
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

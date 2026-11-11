@@ -1,0 +1,12 @@
+<!-- G-Knowledge 등록 미리보기(GK-02, GK-07) -->
+<div class="dim" id="dlg-gk" role="dialog" aria-modal="true" aria-labelledby="gk-head">
+  <div class="modal wide">
+    <h3 id="gk-head">G-Knowledge 지식 등록 미리보기</h3>
+    <p class="s">확인 후 등록하면 G-Knowledge 등록 화면에 자동 입력·제출합니다. 민감정보는 마스킹되었습니다.</p>
+    <p class="err" id="gk-err"></p>
+    <div class="field"><label for="gk-title">제목</label><input id="gk-title" maxlength="200"></div>
+    <div class="field"><label for="gk-body">본문 (문제 · 원인 · 조치 · R&amp;R)</label><textarea id="gk-body" maxlength="8000"></textarea></div>
+    <div class="field"><label for="gk-tag">태그(쉼표로 구분)</label><input id="gk-tag" maxlength="300"></div>
+    <div class="m-actions"><button class="btn" id="gk-cancel">취소</button><button class="btn gk" id="gk-submit">등록</button></div>
+  </div>
+</div>

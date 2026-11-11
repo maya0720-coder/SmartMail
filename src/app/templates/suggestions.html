@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>제안된 업무</h2>
+<p class="desc">메일에서 추출한 업무 후보입니다. 승인해야 할 일 목록에 들어갑니다. 근거 문장은 이번 실행 중에만 보여주고 저장하지 않습니다.</p>
+<div class="card">
+  <table>
+    <thead><tr><th>추출된 업무</th><th>근거 문장</th><th>기한</th><th></th></tr></thead>
+    <tbody id="sugg"></tbody>
+  </table>
+  <div class="actions"><button class="btn sm" id="btn-collect">메일 수집(이번 주)</button><button class="btn sm" id="btn-approve-all">모두 승인</button></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/suggestions.js"></script>{% endblock %}

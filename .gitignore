@@ -1,0 +1,33 @@
+# 비밀정보·환경 설정 (예제 파일만 추적)
+.env
+.env.*
+!.env.example
+
+# 로컬 DB·지표 원장
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# 로그
+*.log
+logs/
+
+# 브라우저 자동화 프로필·캐시 (비저장 프로필 원칙, 잔존 방지)
+browser-profile*/
+playwright-profile*/
+.playwright/
+
+# Python 가상환경·캐시·빌드 산출물
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Claude Code 개인 설정
+.claude/settings.local.json

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 id="wk-title">주간보고 초안</h2>
+<p class="desc">위키 주간보고 양식에 맞춘 초안입니다(한 줄에 한 항목). 내용을 고친 뒤 미리보기·승인하면 위키의 본인 영역만 갱신합니다.</p>
+<div class="card">
+  <div class="weekly">
+    <div class="col"><h4>금주 실적</h4><textarea id="wk-done" maxlength="15000"></textarea></div>
+    <div class="col"><h4>차주 계획</h4><textarea id="wk-planned" maxlength="15000"></textarea></div>
+    <div class="col"><h4>이슈·요청 사항</h4><textarea id="wk-issues" maxlength="15000"></textarea></div>
+  </div>
+  <div class="wk-bar">
+    <div class="flow"><b>① 편집</b> → <b>② 미리보기</b> → ③ 승인 후 위키 게시</div>
+    <div class="actions tight">
+      <button class="btn" id="btn-redraft">초안 다시 만들기</button>
+      <button class="btn" id="btn-preview">미리보기</button>
+      <button class="btn primary" id="btn-publish" disabled>승인 후 위키 게시</button>
+    </div>
+  </div>
+  <div class="preview-box hidden" id="wk-preview"></div>
+</div>
+<div class="card mt16">
+  <h3>게시 이력</h3>
+  <div id="wk-history"><div class="empty">게시 이력이 없습니다.</div></div>
+</div>
+{% endblock %}
+{% block modals %}
+<!-- 위키 게시 확인(WIKI-03) -->
+<div class="dim" id="dlg-wiki" role="dialog" aria-modal="true" aria-labelledby="wiki-head">
+  <div class="modal">
+    <h3 id="wiki-head">위키에 게시할까요?</h3>
+    <p class="s" id="wiki-sub"></p>
+    <div class="field radio">
+      <label><input type="radio" name="wiki-mode" value="update" checked> 기존 페이지 갱신</label>
+      <label><input type="radio" name="wiki-mode" value="create"> 새 페이지 만들기</label>
+    </div>
+    <p class="err" id="wiki-err"></p>
+    <div class="m-actions"><button class="btn" id="wiki-cancel">취소</button><button class="btn primary" id="wiki-ok">승인 후 게시</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/weekly.js"></script>{% endblock %}

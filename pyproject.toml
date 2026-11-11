@@ -1,0 +1,51 @@
+[project]
+name = "smartmail"
+version = "0.1.0"
+description = "업무 처리 관리 현황 - 로컬 테스트 버전"
+requires-python = ">=3.11,<3.12"
+# 운영 의존성. 실제 고정 버전은 requirements.lock(해시 포함)이 기준이다.
+dependencies = [
+    "fastapi>=0.162,<0.163",
+    "uvicorn>=0.54,<0.55",
+    "jinja2>=3.1.6,<3.2",
+    "pydantic-settings>=2.16,<2.17",
+    "playwright>=1.65,<1.66",
+    "pywin32==312; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+# 개발 의존성. 고정 버전은 requirements-dev.lock이 기준이다.
+dev = [
+    "pytest>=9.2,<9.3",
+    "httpx2>=2.16,<2.17",  # FastAPI TestClient용(starlette 권장)
+    "ruff>=0.17.4,<0.18",
+    "mypy>=2.4,<2.5",
+    "detect-secrets==1.5.0",
+    "pip-audit>=2.10,<2.11",
+    "pip-tools>=7.6,<7.7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-ra --strict-markers"
+markers = ["slow: mypy 실행 등 느린 테스트"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F/W: 기본, I: import 정렬, B: 버그 패턴, S: 보안(bandit), UP: 최신 문법
+select = ["E", "F", "W", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# 테스트에서는 assert 사용을 허용한다.
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src,tests"
+explicit_package_bases = true
+strict = true

@@ -1,0 +1,20 @@
+# 위키 주간보고 템플릿 매핑(WIKI-02, WIKI-04, WIKI-05).
+# 실제 ERP 주간보고 페이지(예: ERP_261113) 구조는 확인 필요다. 확인 전에는 아래 기본 3분류로 미리보기만 한다.
+
+# 페이지 제목 형식. {yymmdd}는 주 시작일(목) + title_date_offset_days 날짜(기본: 금요일)
+page_title_format = "ERP_{yymmdd}"
+title_date_offset_days = 1
+
+# Confluence 공간 키(확인 필요). 비어 있으면 실제 게시 불가
+space_key = ""
+
+# 본인 영역을 찾는 제목(h2). {name}은 SMARTMAIL_USER_DISPLAY_NAME. 페이지에 정확히 1개 있어야 갱신한다.
+own_section_heading = "{name}"
+
+# 분류 제목
+heading_done = "금주 실적"
+heading_planned = "차주 계획"
+heading_issues = "이슈·요청"
+
+# 항목 형식. 사용 가능: {module} {title} {dept} {status}
+item_format = "[{module}] {title} (요청: {dept})"

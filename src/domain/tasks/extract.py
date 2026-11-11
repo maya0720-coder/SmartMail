@@ -1,0 +1,166 @@
+"""메일 스레드에서 업무 후보 추출(TODO-01, 기획서 가설 H1).
+
+1차는 규칙(받는 사람/참조, 요청 표현, 기한 표현)으로 판별한다. 애매한 경우에만 AI 분류를 쓰며,
+AI에는 제목·근거 문장을 마스킹한 짧은 요약만 보낸다(AI-02·03). AI가 실패해도 규칙 결과로 진행한다.
+근거 문장은 화면 표시용으로 메모리에서만 쓰고 저장하지 않는다(MAIL-08).
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Final, Protocol
+
+from domain.ai import AiUnavailableError, Classification
+from domain.clock import KST
+from domain.mail import MailMessage, MailThread
+from domain.tasks.modules import guess_module
+from security.masking import MaskedText, mask
+
+REQUEST_PATTERNS: Final = re.compile(
+    r"요청(?:드립|합니|드려|함)|부탁|해\s?주(?:세요|시기|실\s?수)|주시기\s?바랍|바랍니다|"
+    r"가능할까요|가능하실까요|확인\s?(?:요청|바랍|부탁)|처리\s?(?:요청|바랍|부탁)|필요합니다|검토\s?바랍"
+)
+REQUEST_SUBJECT: Final = re.compile(r"\[(?:요청|문의|긴급)\]|요청|문의|부탁")
+REPLY_PREFIX: Final = re.compile(
+    r"^\s*(?:(?:re|fw|fwd|회신|전달)\s*:\s*|\[(?:요청|문의|긴급)\]\s*)+", re.I
+)
+DEPT_PATTERN: Final = re.compile(r"(\S+(?:팀|부|실|센터|본부|그룹))")
+SENTENCE_SPLIT: Final = re.compile(r"(?<=[.!?。])\s+|\n+")
+
+WEEKDAYS: Final = "월화수목금토일"
+DUE_MD: Final = re.compile(
+    r"(\d{1,2})[ \t]{0,2}[/.월][ \t]{0,2}(\d{1,2})[ \t]{0,2}일?[ \t]{0,2}(?:까지|중|전)"
+)
+DUE_RELATIVE: Final = re.compile(r"(오늘|금일|내일|명일|모레)[ \t]{0,2}(?:중|까지|안)")
+DUE_WEEKDAY: Final = re.compile(
+    r"(이번 ?주|금주|다음 ?주|차주)?[ \t]{0,2}([월화수목금])요일[ \t]{0,2}(?:까지|중|전)"
+)
+
+MAX_EVIDENCE_CHARS: Final = 200
+MAX_DUE_SCAN: Final = 2000
+MAX_TITLE_CHARS: Final = 200
+SCORE_TASK: Final = 2  # 이 점수 이상이면 규칙만으로 후보
+SCORE_AMBIGUOUS: Final = 1  # 이 점수면 AI 분류로 결정
+
+
+class TaskClassifier(Protocol):
+    def classify_task(self, summary: MaskedText, task_id: int | None = None) -> Classification: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TaskCandidate:
+    title: str
+    thread_id: str
+    requested_at: datetime
+    requester_dept: str | None
+    due_at: datetime | None
+    module_tag: str | None
+    evidence: str  # 메모리 전용
+    confidence: float
+
+
+def clean_title(subject: str) -> str:
+    title = REPLY_PREFIX.sub("", subject).strip()
+    return (title or "(제목 없음)")[:MAX_TITLE_CHARS]
+
+
+def requester_dept(sender_name: str) -> str | None:
+    match = DEPT_PATTERN.search(sender_name)
+    return match.group(1)[:100] if match else None
+
+
+def _end_of_day(day: datetime) -> datetime:
+    return day.replace(hour=23, minute=59, second=59, microsecond=0)
+
+
+def parse_due(text: str, base: datetime) -> datetime | None:
+    """기한 표현을 KST 그날 23:59:59로 바꾼다. 해석할 수 없으면 None."""
+    local = base.astimezone(KST)
+    match = DUE_MD.search(text)
+    if match:
+        month, day = int(match.group(1)), int(match.group(2))
+        for year in (local.year, local.year + 1):
+            try:
+                candidate = local.replace(year=year, month=month, day=day)
+            except ValueError:
+                return None
+            if candidate.date() >= (local - timedelta(days=30)).date():
+                return _end_of_day(candidate)
+        return None
+    match = DUE_RELATIVE.search(text)
+    if match:
+        offset = {"오늘": 0, "금일": 0, "내일": 1, "명일": 1, "모레": 2}[match.group(1)]
+        return _end_of_day(local + timedelta(days=offset))
+    match = DUE_WEEKDAY.search(text)
+    if match:
+        target = WEEKDAYS.index(match.group(2))
+        days = (target - local.weekday()) % 7
+        if match.group(1) and match.group(1).replace(" ", "") in ("다음주", "차주"):
+            # 다음 주: 이번 주(월요일 시작) 다음 주의 해당 요일
+            monday = local - timedelta(days=local.weekday())
+            return _end_of_day(monday + timedelta(days=7 + target))
+        return _end_of_day(local + timedelta(days=days))
+    return None
+
+
+def _evidence(message: MailMessage) -> tuple[str, int]:
+    """요청 표현이 있는 첫 문장과 요청 표현 점수."""
+    for sentence in SENTENCE_SPLIT.split(message.body):
+        if REQUEST_PATTERNS.search(sentence):
+            return sentence.strip()[:MAX_EVIDENCE_CHARS], 1
+    return "", 0
+
+
+class TaskExtractor:
+    def __init__(self, classifier: TaskClassifier | None = None) -> None:
+        self._classifier = classifier
+
+    def score(self, message: MailMessage) -> tuple[int, str]:
+        evidence, body_hit = _evidence(message)
+        points = body_hit
+        points += 1 if REQUEST_SUBJECT.search(message.subject) else 0
+        points += 1 if message.to_me else 0
+        if not message.to_me and not message.cc_me:
+            points -= 1  # 단체 발송·참조 외 수신
+        return points, evidence
+
+    def _ai_says_task(self, message: MailMessage, evidence: str) -> Classification | None:
+        if self._classifier is None:
+            return None
+        # 마스킹한 뒤 자르고 다시 마스킹 타입으로 만든다(경계 노출 방지)
+        summary = mask(mask(f"{clean_title(message.subject)} / {evidence}").value[:500])
+        try:
+            return self._classifier.classify_task(summary)
+        except (AiUnavailableError, ValueError):
+            return None
+
+    def extract(self, thread: MailThread) -> TaskCandidate | None:
+        received = [m for m in thread.messages if not m.sent_by_me]
+        if not received:
+            return None
+        first = received[0]
+        points, evidence = self.score(first)
+        confidence = min(1.0, 0.4 + 0.2 * points)
+        module = guess_module(f"{first.subject} {first.body}")
+        if points < SCORE_TASK:
+            if points < SCORE_AMBIGUOUS:
+                return None
+            verdict = self._ai_says_task(first, evidence)
+            if verdict is None or not verdict.is_task:
+                return None
+            confidence = verdict.confidence
+            module = module or verdict.module_tag
+        # 기한 탐색은 앞부분만(긴 본문으로 인한 처리 지연 방지)
+        text_for_due = f"{first.subject}\n{first.body[:MAX_DUE_SCAN]}"
+        return TaskCandidate(
+            title=clean_title(first.subject),
+            thread_id=thread.thread_id,
+            requested_at=first.received_at,
+            requester_dept=requester_dept(first.sender_name),
+            due_at=parse_due(text_for_due, first.received_at),
+            module_tag=module,
+            evidence=evidence or clean_title(first.subject),
+            confidence=confidence,
+        )

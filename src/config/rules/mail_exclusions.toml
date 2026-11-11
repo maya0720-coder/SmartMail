@@ -1,0 +1,17 @@
+# 메일 제외 규칙(MAIL-05). 사용자 PC에 맞게 수정한다.
+# 실제 주소·이름을 넣을 때는 이 파일을 저장소에 커밋하지 않는다(SMARTMAIL_MAIL_RULES_FILE로 다른 경로 지정 가능).
+
+# 자동발송 메일 제외(Auto-Submitted, Precedence: bulk/list, List-Unsubscribe 헤더)
+exclude_auto = true
+
+# 제목에 들어 있으면 제외(공지·뉴스레터 등)
+subject_keywords = ["[공지]", "[안내]", "[뉴스레터]", "newsletter", "[광고]", "(광고)"]
+
+# 보낸 사람 주소에 들어 있으면 제외
+sender_patterns = ["noreply", "no-reply", "donotreply", "do-not-reply", "mailer-daemon", "postmaster"]
+
+# 정확히 일치하는 보낸 사람 주소
+excluded_senders = []
+
+# 제외할 메일 폴더 이름
+excluded_folders = ["정크 메일", "Junk Email", "지운 편지함", "Deleted Items"]

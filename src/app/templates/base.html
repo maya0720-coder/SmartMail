@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<title>업무 처리 현황</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body data-page="{{ active }}">
+{% if demo_mode %}
+<div class="demo">데모 모드입니다 · 실제 메일·사이트와 연동되지 않으며 모든 데이터는 가상입니다</div>
+{% endif %}
+<header>
+  <h1>업무 처리 현황</h1>
+  <form class="search" id="search-form" action="/history" method="get">
+    <input name="q" placeholder="키워드·유사 업무 검색 (예: 전표 역분개)" autocomplete="off" maxlength="200">
+    <button>검색</button>
+  </form>
+  <div class="hdr-right">
+    <div class="conn" id="conn"></div>
+    <a class="btn primary" href="/weekly">주간보고 초안</a>
+  </div>
+</header>
+
+<div class="layout">
+<nav>
+  {% for key, href, label in nav_items %}
+  <a href="{{ href }}"{% if key == active %} class="active"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+</div>
+
+{% include "partials/login_modal.html" %}
+{% block modals %}{% endblock %}
+<div class="toast" id="toast" role="status"></div>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/login.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
