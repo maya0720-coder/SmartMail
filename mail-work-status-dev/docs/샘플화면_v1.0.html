@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업무 처리 현황 – 샘플 화면</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#fff; --line:#e3e6eb; --ink:#1d2330; --sub:#5d6675; --mute:#8a93a3;
+  --brand:#1f6feb; --brand-weak:#e8f0fe; --ok:#1a7f37; --ok-weak:#e6f4ea; --warn:#b26a00; --warn-weak:#fff4e0;
+  --crit:#c62828; --crit-weak:#fdecea; --ai:#6f42c1; --ai-weak:#f1ebfb; --gk:#0e7c86; --gk-weak:#e3f5f6;
+  --r:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+button{font:inherit;cursor:pointer}
+.demo{background:#fff8d6;border-bottom:1px solid #f0e2a0;color:#6b5800;font-size:12px;padding:6px 16px;text-align:center}
+header{display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0 16px 0 0;white-space:nowrap}
+.search{flex:1;max-width:420px;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.search input{flex:1;border:0;padding:8px 10px;font:inherit;outline:none}
+.search button{border:0;background:var(--brand);color:#fff;padding:0 14px}
+.hdr-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.conn{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--sub);white-space:nowrap}
+.chip.on{background:var(--ok-weak);border-color:#b7dfc2;color:var(--ok)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;color:var(--ink)}
+.btn:hover{background:#f0f2f5}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:#1a5fd0}
+.btn.ai{background:var(--ai-weak);border-color:#d6c6f2;color:var(--ai);font-weight:600}
+.btn.gk{background:var(--gk-weak);border-color:#b5e2e5;color:var(--gk);font-weight:600}
+.btn.sm{padding:4px 9px;font-size:12.5px}
+.layout{display:flex;min-height:calc(100vh - 90px)}
+nav{width:184px;background:var(--panel);border-right:1px solid var(--line);padding:14px 10px;flex-shrink:0}
+nav a{display:flex;justify-content:space-between;padding:9px 12px;border-radius:8px;color:var(--ink);text-decoration:none;margin-bottom:2px}
+nav a.active{background:var(--brand-weak);color:var(--brand);font-weight:600}
+nav a:hover:not(.active){background:#f0f2f5}
+nav .cnt{font-size:12px;color:var(--mute)}
+main{flex:1;padding:20px;min-width:0}
+.page{display:none}.page.active{display:block}
+h2{font-size:18px;margin:0 0 4px}
+.desc{color:var(--sub);margin:0 0 16px;font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.kpi .l{color:var(--sub);font-size:12.5px}.kpi .v{font-size:24px;font-weight:700;margin-top:4px}
+.kpi.warn .v{color:var(--warn)}.kpi.crit .v{color:var(--crit)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card h3{font-size:15px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;color:var(--sub)}
+.filters button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--mute);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:10px 8px;border-bottom:1px solid #f0f1f4;vertical-align:middle}
+tr.row{cursor:pointer}tr.row:hover td{background:#fafbfc}tr.row.sel td{background:var(--brand-weak)}
+.t-title{font-weight:600}.t-sub{font-size:12px;color:var(--mute);margin-top:2px}
+.badge{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.b-prop{background:#eef0f4;color:var(--sub)}.b-wait{background:#eef0f4;color:var(--ink)}
+.b-prog{background:var(--brand-weak);color:var(--brand)}.b-done{background:var(--ok-weak);color:var(--ok)}
+.b-cand{background:var(--warn-weak);color:var(--warn)}
+.tag{font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--sub);margin-right:4px}
+.due-crit{color:var(--crit);font-weight:600}.due-warn{color:var(--warn);font-weight:600}
+.detail .meta{display:grid;grid-template-columns:72px 1fr;gap:6px 10px;font-size:13px;margin-bottom:12px}
+.detail .meta div:nth-child(odd){color:var(--mute)}
+.mail{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:#fafbfc;font-size:13px;margin-bottom:12px}
+.mail .h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;color:var(--sub);font-size:12px}
+.sec{font-size:13px;font-weight:700;margin:14px 0 8px;display:flex;align-items:center;gap:6px}
+.step{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+.step .src{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:6px}
+.src.app{background:var(--brand-weak);color:var(--brand)}.src.gk{background:var(--gk-weak);color:var(--gk)}.src.ai{background:var(--ai-weak);color:var(--ai)}
+.step.miss{color:var(--mute);background:#fafbfc}
+.step.hit{border-color:#b5e2e5}
+.step.aihit{border-color:#d6c6f2;background:#fcfaff}
+.ai-label{font-size:11.5px;color:var(--ai);margin-top:6px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ret{font-size:12px;color:var(--warn);background:var(--warn-weak);border-radius:6px;padding:6px 10px;margin-top:10px}
+.weekly{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.weekly .col{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff}
+.weekly .col h4{margin:0 0 8px;font-size:13px}
+.weekly ul{margin:0;padding-left:18px;font-size:13px;line-height:1.7}
+.wk-bar{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap}
+.flow{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--sub)}
+.flow b{color:var(--ink)}
+.result-group{margin-bottom:14px}
+.empty{color:var(--mute);font-size:13px;padding:8px 0}
+.set-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f0f1f4;gap:12px}
+.set-row .k{font-weight:600}.set-row .s{font-size:12px;color:var(--mute);margin-top:2px}
+.radio{display:flex;gap:12px}
+/* modal */
+.dim{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.dim.show{display:flex}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:440px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+.modal.wide{max-width:600px}
+.modal h3{margin:0 0 4px;font-size:16px}
+.modal .s{color:var(--sub);font-size:12.5px;margin:0 0 14px}
+.field{margin-bottom:12px}.field label{display:block;font-size:12.5px;color:var(--sub);margin-bottom:4px}
+.field input,.field textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit}
+.field textarea{min-height:110px;resize:vertical}
+.notice{font-size:12px;background:#f3f6fb;border:1px solid #dbe5f5;color:#2b4a7a;border-radius:8px;padding:8px 10px;margin-bottom:14px;line-height:1.5}
+.m-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+/* 성과 지표 */
+.mhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:#fff;padding:7px 14px;color:var(--sub);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--ink);color:#fff}
+.mk{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}
+.mk .kpi{padding:14px 14px 8px}
+.mk .chartbox{margin-top:8px}
+.mk .chartbox svg{width:100%;height:auto;display:block}
+.mnote{font-size:12px;color:var(--mute);margin-bottom:16px}.mnote a{color:var(--brand)}
+.mk .kpi .v{font-size:22px}
+.mk .u{font-size:13px;font-weight:500;color:var(--sub);margin-left:2px}
+.dl{font-size:12px;margin-top:4px;color:var(--sub)}
+.dl .up{color:var(--ok)}.dl .dn{color:var(--crit)}
+.kdef{font-size:11px;color:var(--mute);margin-top:6px;line-height:1.4}
+.mgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.chart h3{margin-bottom:2px}.chart .cs{font-size:12px;color:var(--mute);margin:0 0 8px}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.tip{position:fixed;pointer-events:none;background:#fff;border:1px solid var(--line);box-shadow:0 4px 16px rgba(0,0,0,.12);border-radius:8px;padding:8px 10px;font-size:12px;display:none;z-index:40;min-width:120px}
+.tip b{display:block;margin-bottom:4px}
+.tip .r{display:flex;justify-content:space-between;gap:12px}
+.tbl-wrap{overflow-x:auto;margin-top:16px}
+.tbl-wrap table{font-size:12.5px}.tbl-wrap td,.tbl-wrap th{white-space:nowrap;text-align:right}.tbl-wrap td:first-child,.tbl-wrap th:first-child{text-align:left}
+@media (max-width:900px){.mk{grid-template-columns:repeat(2,1fr)}.mgrid{grid-template-columns:1fr}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;display:none;z-index:30}
+@media (max-width:900px){
+  nav{display:none}.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.weekly{grid-template-columns:1fr}
+  .conn{display:none}header{flex-wrap:wrap}.search{order:3;max-width:none;flex-basis:100%}
+}
+</style>
+</head>
+<body>
+<div class="demo">샘플 화면입니다 · 실제 메일·사이트와 연동되지 않으며 모든 데이터는 가상입니다</div>
+<header>
+  <h1>업무 처리 현황</h1>
+  <form class="search" onsubmit="event.preventDefault();goSearch(this.q.value)">
+    <input name="q" placeholder="키워드·유사 업무 검색 (예: 전표 역분개)" autocomplete="off">
+    <button>검색</button>
+  </form>
+  <div class="hdr-right">
+    <div class="conn" id="conn"></div>
+    <button class="btn primary" onclick="show('weekly')">주간보고 초안</button>
+  </div>
+</header>
+
+<div class="layout">
+<nav>
+  <a href="#" data-p="dash" class="active">대시보드</a>
+  <a href="#" data-p="prop">제안된 업무 <span class="cnt">3</span></a>
+  <a href="#" data-p="weekly">주간보고</a>
+  <a href="#" data-p="hist">업무 히스토리</a>
+  <a href="#" data-p="set">설정·연결</a>
+</nav>
+<main>
+
+<!-- 대시보드 -->
+<section class="page active" id="p-dash">
+  <div class="mhead">
+    <div><h2>대시보드</h2><p class="desc" style="margin:0">수집 기간: 11/06(목) ~ 11/12(수) · 수집 경로: PC 아웃룩(클래식) · 마지막 수집 10분 전</p></div>
+    <div class="seg" id="seg">
+      <button data-g="year">연간</button><button data-g="half">반기</button><button data-g="quarter">분기</button><button data-g="month" class="on">월</button><button data-g="week">주</button>
+    </div>
+  </div>
+  <div class="mk" id="mk"></div>
+  <div class="mnote"><span id="m-desc"></span> · <a href="#" onclick="const w=document.getElementById('m-tbl');w.style.display=w.style.display==='none'?'block':'none';return false">표로 보기</a></div>
+  <div class="card tbl-wrap" id="m-tbl" style="display:none;margin-bottom:16px"></div>
+  <div class="grid2">
+    <div class="card">
+      <h3>내 할 일
+        <span class="filters" id="filters">
+          <button class="on" data-f="all">전체</button><button data-f="prop">제안됨</button><button data-f="prog">진행 중</button><button data-f="cand">완료 후보</button><button data-f="done">완료</button>
+        </span>
+      </h3>
+      <table>
+        <thead><tr><th>업무</th><th>요청자</th><th>기한</th><th>상태</th></tr></thead>
+        <tbody id="todo"></tbody>
+      </table>
+      <div class="actions"><button class="btn sm">+ 수동 업무 추가</button></div>
+    </div>
+    <div class="card detail" id="detail"></div>
+  </div>
+</section>
+
+<!-- 제안된 업무 -->
+<section class="page" id="p-prop">
+  <h2>제안된 업무</h2>
+  <p class="desc">메일에서 추출한 업무 후보입니다. 승인해야 할 일 목록에 들어갑니다.</p>
+  <div class="card">
+    <table>
+      <thead><tr><th>추출된 업무</th><th>근거 문장</th><th>기한</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><div class="t-title">신규 거래처 구매처 마스터 생성</div><div class="t-sub">메일: [요청] 신규 거래처 등록 건 · 구매팀 김가상</div></td><td class="t-sub">"…<b>금주 금요일까지</b> 구매처 생성 <b>부탁드립니다</b>"</td><td>11/14</td><td><div class="actions" style="margin:0"><button class="btn sm primary" onclick="toast('할 일 목록에 추가했습니다')">승인</button><button class="btn sm">수정</button><button class="btn sm">무시</button></div></td></tr>
+        <tr><td><div class="t-title">CO 원가센터 계층 변경 검토</div><div class="t-sub">메일: RE: 조직 개편 반영 문의 · 재무팀 이예시</div></td><td class="t-sub">"…반영 가능 여부 <b>검토 요청드립니다</b>"</td><td>미정</td><td><div class="actions" style="margin:0"><button class="btn sm primary" onclick="toast('할 일 목록에 추가했습니다')">승인</button><button class="btn sm">수정</button><button class="btn sm">무시</button></div></td></tr>
+        <tr><td><div class="t-title">Fiori 타일 권한 추가</div><div class="t-sub">메일: 앱 접근 권한 요청 · 영업지원팀 박샘플</div></td><td class="t-sub">"…해당 앱 <b>권한 추가 요청</b>합니다"</td><td>11/18</td><td><div class="actions" style="margin:0"><button class="btn sm primary" onclick="toast('할 일 목록에 추가했습니다')">승인</button><button class="btn sm">수정</button><button class="btn sm">무시</button></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 주간보고 -->
+<section class="page" id="p-weekly">
+  <h2>주간보고 초안 · 2026-11-13 주차</h2>
+  <p class="desc">위키 주간보고 양식에 맞춘 초안입니다. 내용을 고친 뒤 승인하면 위키의 본인 영역만 갱신합니다.</p>
+  <div class="card">
+    <div class="weekly">
+      <div class="col" contenteditable="true"><h4>금주 실적</h4><ul><li>MM 구매오더 출력 양식 수정 완료</li><li>FI 전표 역분개 오류 원인 분석·조치</li><li>SD 출하 인터페이스 재처리 (3건)</li></ul></div>
+      <div class="col" contenteditable="true"><h4>차주 계획</h4><ul><li>신규 거래처 구매처 마스터 생성</li><li>CO 원가센터 계층 변경 검토</li><li>Fiori 타일 권한 추가</li></ul></div>
+      <div class="col" contenteditable="true"><h4>이슈·요청 사항</h4><ul><li>조직 개편 일정 확정 필요 (재무팀)</li></ul></div>
+    </div>
+    <div class="wk-bar">
+      <div class="flow"><b>① 편집</b> → <b>② 미리보기</b> → ③ 승인 후 위키 게시</div>
+      <div class="actions" style="margin:0"><button class="btn">미리보기</button><button class="btn primary" onclick="needLogin('wiki',()=>open('dlg-wiki'))">승인 후 위키 게시</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- 업무 히스토리 -->
+<section class="page" id="p-hist">
+  <h2>업무 히스토리 검색</h2>
+  <p class="desc">앱(최근 7일) → G-Knowledge → AI-Ground g-llm 순서로 찾고, 앞 단계에서 찾으면 멈춥니다.</p>
+  <div class="card">
+    <form class="search" style="max-width:none;margin-bottom:12px" onsubmit="event.preventDefault();runSearch(this.q.value)">
+      <input name="q" id="hq" placeholder="키워드 입력 (예: 역분개, 원가센터, 신규 키워드)" autocomplete="off">
+      <button>검색</button>
+    </form>
+    <div class="t-sub" style="margin-bottom:10px">예시: <a href="#" onclick="runSearch('역분개');return false">역분개</a>(앱에서 찾음) · <a href="#" onclick="runSearch('원가센터');return false">원가센터</a>(G-Knowledge에서 찾음) · <a href="#" onclick="runSearch('배치 잡 지연');return false">배치 잡 지연</a>(AI 문의)</div>
+    <div id="hres"><div class="empty">검색어를 입력하세요.</div></div>
+  </div>
+</section>
+
+<!-- 설정 -->
+<section class="page" id="p-set">
+  <h2>설정·연결</h2>
+  <p class="desc">로그인 정보(ID·암호)는 어디에도 저장하지 않습니다. 앱을 종료하면 모든 세션이 삭제됩니다.</p>
+  <div class="card">
+    <div class="set-row"><div><div class="k">메일 수집 경로</div><div class="s">새 아웃룩 PC는 자동으로 그룹웨어 메일함으로 전환됩니다</div></div>
+      <div class="radio"><label><input type="radio" name="m" checked> PC 아웃룩(클래식)</label><label><input type="radio" name="m"> 그룹웨어 메일함</label></div></div>
+    <div class="set-row"><div><div class="k">제외 규칙</div><div class="s">공지·뉴스레터·자동발송, 지정 발신자/폴더</div></div><button class="btn sm">편집</button></div>
+    <div class="set-row"><div><div class="k">보관 기간</div><div class="s">완료 업무는 7일 후 자동 삭제 · 삭제 2일 전 G-Knowledge 미등록 알림</div></div><span class="chip">고정 7일</span></div>
+    <div id="setconn"></div>
+    <div class="set-row"><div><div class="k">로컬 데이터 전체 삭제</div><div class="s">업무·요약·로그를 모두 지웁니다 (메일 원본은 그대로)</div></div><button class="btn sm" style="color:var(--crit)">전체 삭제</button></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<!-- 로그인 -->
+<div class="dim" id="dlg-login"><div class="modal">
+  <h3 id="lg-title">로그인</h3>
+  <p class="s" id="lg-sub"></p>
+  <div class="notice">입력한 ID·암호는 이번 로그인에만 쓰고 바로 지웁니다. 파일·로그·브라우저 어디에도 저장하지 않으며, 자동 로그인 기능은 없습니다.</div>
+  <form id="lg-form" autocomplete="off" onsubmit="event.preventDefault();doLogin()">
+    <div class="field"><label>ID</label><input id="lg-id" name="x-id" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label>암호</label><input id="lg-pw" type="password" name="x-pw" autocomplete="new-password"></div>
+    <div class="m-actions"><button type="button" class="btn" onclick="closeLogin()">취소</button><button class="btn primary">로그인</button></div>
+  </form>
+</div></div>
+
+<!-- G-Knowledge 등록 미리보기 -->
+<div class="dim" id="dlg-gk"><div class="modal wide">
+  <h3>G-Knowledge 지식 등록 미리보기</h3>
+  <p class="s">확인 후 등록하면 G-Knowledge 등록 화면에 자동 입력·제출합니다. 민감정보는 마스킹되었습니다.</p>
+  <div class="field"><label>제목</label><input id="gk-title"></div>
+  <div class="field"><label>본문 (문제 · 원인 · 조치)</label><textarea id="gk-body"></textarea></div>
+  <div class="field"><label>R&amp;R 정보</label><input id="gk-rr"></div>
+  <div class="field"><label>태그</label><input id="gk-tag"></div>
+  <div class="m-actions"><button class="btn" onclick="closeDlg('dlg-gk')">취소</button><button class="btn gk" onclick="closeDlg('dlg-gk');markGk();toast('G-Knowledge에 등록했습니다 (샘플)')">등록</button></div>
+</div></div>
+
+<!-- 위키 게시 확인 -->
+<div class="dim" id="dlg-wiki"><div class="modal">
+  <h3>위키에 게시할까요?</h3>
+  <p class="s">ERP 주간보고 페이지(2026-11-13 주차)의 본인 영역만 갱신합니다. 다른 팀원 내용은 바꾸지 않습니다.</p>
+  <div class="m-actions"><button class="btn" onclick="closeDlg('dlg-wiki')">취소</button><button class="btn primary" onclick="closeDlg('dlg-wiki');toast('위키에 게시했습니다 (샘플)')">승인 후 게시</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- 가상 데이터 (실제 인물·메일 아님) ----
+const todos=[
+ {id:1,title:'FI 전표 역분개 오류 조치',req:'재무팀 이예시',due:'11/12',dueCls:'due-crit',st:'cand',tags:['FI'],
+  mail:{subj:'RE: 전표 역분개 시 오류 발생 문의',from:'재무팀 이예시',date:'11/10 14:22',sum:'역분개 시 기간 마감 오류 발생 → 회신에서 전기기간 오픈 후 재처리 안내함'},
+  stage:'app', gk:false, retain:5},
+ {id:2,title:'MM 구매오더 출력 양식 수정',req:'구매팀 김가상',due:'11/13',dueCls:'due-warn',st:'prog',tags:['MM','ABAP'],
+  mail:{subj:'[요청] PO 출력물 문구 변경',from:'구매팀 김가상',date:'11/07 09:10',sum:'PO 하단 결제 조건 문구 변경 요청, 양식 수정 필요'},
+  stage:'gk', gk:false, retain:null},
+ {id:3,title:'SD 출하 인터페이스 재처리',req:'물류팀 최테스트',due:'11/11',dueCls:'',st:'done',tags:['SD','I/F'],
+  mail:{subj:'출하 I/F 실패 건 확인 부탁',from:'물류팀 최테스트',date:'11/06 16:40',sum:'I/F 실패 3건 → 원인 데이터 수정 후 재처리 완료 회신'},
+  stage:'app', gk:true, retain:6},
+ {id:4,title:'배치 잡 지연 원인 확인',req:'IT운영팀 정더미',due:'11/17',dueCls:'',st:'prog',tags:['Basis'],
+  mail:{subj:'야간 배치 지연 현상',from:'IT운영팀 정더미',date:'11/11 08:05',sum:'야간 배치가 평소보다 2시간 지연, 원인 확인 요청'},
+  stage:'ai', gk:false, retain:null}
+];
+const stLabel={prop:['제안됨','b-prop'],wait:['대기','b-wait'],prog:['진행 중','b-prog'],cand:['완료 후보','b-cand'],done:['완료','b-done']};
+const sessions={wiki:false,gk:false,ai:false,gw:false};
+const siteName={wiki:'Confluence 위키',gk:'G-Knowledge',ai:'AI-Ground',gw:'그룹웨어 메일함'};
+let sel=1, filter='all', pending=null;
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function renderTodo(){setTimeout(()=>window.renderFilterCounts&&renderFilterCounts());
+  const rows=todos.filter(t=>filter==='all'||t.st===filter);
+  document.getElementById('todo').innerHTML=rows.map(t=>`<tr class="row ${t.id===sel?'sel':''}" onclick="pick(${t.id})">
+    <td><div class="t-title">${esc(t.title)}</div><div class="t-sub">${t.tags.map(g=>`<span class="tag">${esc(g)}</span>`).join('')}${t.gk?'<span class="tag" style="color:var(--gk)">G-K 등록됨</span>':''}</div></td>
+    <td>${esc(t.req)}</td><td class="${t.dueCls}">${esc(t.due)}</td><td><span class="badge ${stLabel[t.st][1]}">${stLabel[t.st][0]}</span></td></tr>`).join('');
+}
+function stepsHtml(stage,kw){
+  const app=`<div class="step ${stage==='app'?'hit':'miss'}"><span class="src app">1 앱</span>${stage==='app'
+    ?`최근 처리 사례: <b>${esc(kw)} 관련 처리 기록</b> — 전기기간 오픈 후 재처리 (11/10, 담당 홍길동)`:'최근 7일 기록 없음'}</div>`;
+  const gk=stage==='app'?'':`<div class="step ${stage==='gk'?'hit':'miss'}"><span class="src gk">2 G-Knowledge</span>${stage==='gk'
+    ?`<b>[지식] ${esc(kw)} 변경 절차</b> — 담당 IE팀 · 2026-08 등록 · <a href="#" onclick="return false">G-Knowledge에서 열기</a>`:'등록된 이력 없음'}</div>`;
+  const ai=stage==='ai'?`<div class="step aihit"><span class="src ai">3 AI-Ground g-llm</span>제안: ① 배치 잡 실행 이력에서 지연 구간 확인 ② 동시 실행 잡과 리소스 경합 점검 ③ 대용량 선행 잡 시간대 조정 검토
+    <div class="ai-label">AI 생성 · 검증 필요 · 민감정보 마스킹 후 질의함</div>
+    <div class="actions"><button class="btn sm">도움 됨</button><button class="btn sm">도움 안 됨</button><button class="btn sm gk" onclick="openGk(sel)">G-Knowledge에 등록</button></div></div>`:'';
+  return app+gk+ai;
+}
+function renderDetail(){
+  const t=todos.find(x=>x.id===sel);
+  document.getElementById('detail').innerHTML=`
+    <h3>${esc(t.title)} <span class="badge ${stLabel[t.st][1]}">${stLabel[t.st][0]}</span></h3>
+    <div class="meta"><div>요청자</div><div>${esc(t.req)}</div><div>기한</div><div class="${t.dueCls}">${esc(t.due)}</div><div>모듈</div><div>${t.tags.map(esc).join(', ')}</div></div>
+    <div class="mail"><div class="h"><span>원본 메일 (아웃룩 참조 · 앱에 저장 안 함)</span><button class="btn sm" onclick="toast('아웃룩에서 원본 메일을 엽니다 (샘플)')">아웃룩에서 열기</button></div>
+      <div><b>${esc(t.mail.subj)}</b></div><div class="t-sub">${esc(t.mail.from)} · ${esc(t.mail.date)}</div><div style="margin-top:6px">${esc(t.mail.sum)}</div></div>
+    <div class="sec">유사 업무 이력</div>
+    ${stepsHtml(t.stage,t.tags[0])}
+    <div class="actions">
+      ${t.stage!=='ai'?`<button class="btn ai" onclick="needLogin('ai',()=>{toast('g-llm에 문의했습니다 (샘플)')})">AI 지식 요청 (g-llm)</button>`:''}
+      <button class="btn gk" onclick="openGk(${t.id})">${t.gk?'G-Knowledge 재등록':'G-Knowledge 지식 등록'}</button>
+      ${t.st==='cand'?`<button class="btn primary" onclick="complete(${t.id})">완료 확정</button>`:''}
+    </div>
+    ${t.retain!=null&&!t.gk?`<div class="ret">완료 후 ${7-t.retain}일 남음 · G-Knowledge에 등록하지 않으면 R&amp;R·처리 기록이 앱에서 삭제됩니다</div>`:''}
+    ${t.gk?`<div class="t-sub" style="margin-top:10px">G-Knowledge 등록됨 · 앱 기록은 완료 7일 후 삭제되어도 G-Knowledge에서 조회됩니다</div>`:''}`;
+}
+function pick(id){sel=id;renderTodo();renderDetail()}
+function complete(id){const t=todos.find(x=>x.id===id);t.st='done';t.retain=0;renderTodo();renderDetail();toast('완료 처리했습니다. 7일 후 앱에서 삭제됩니다')}
+function openGk(id){
+  needLogin('gk',()=>{
+    const t=todos.find(x=>x.id===id);
+    document.getElementById('gk-title').value=`[${t.tags[0]}] ${t.title}`;
+    document.getElementById('gk-body').value=`문제: ${t.mail.sum}\n원인: (확인 내용 입력)\n조치: (처리 방법 입력)`;
+    document.getElementById('gk-rr').value=`담당 홍길동(IE팀) · 요청 ${t.req.split(' ')[0]} · 처리일 2026-11-11`;
+    document.getElementById('gk-tag').value=t.tags.join(', ');
+    open('dlg-gk');
+  });
+}
+function markGk(){const t=todos.find(x=>x.id===sel);t.gk=true;renderTodo();renderDetail()}
+
+// ---- 로그인: 값을 변수에 보관하지 않고 즉시 비움 ----
+function needLogin(site,next){ if(sessions[site]){next();return} pending={site,next};
+  document.getElementById('lg-title').textContent=siteName[site]+' 로그인';
+  document.getElementById('lg-sub').textContent=siteName[site]+'에 접속하려면 로그인이 필요합니다.';
+  open('dlg-login'); setTimeout(()=>document.getElementById('lg-id').focus(),50);
+}
+function clearLogin(){document.getElementById('lg-form').reset();document.getElementById('lg-id').value='';document.getElementById('lg-pw').value=''}
+function doLogin(){
+  const ok=document.getElementById('lg-id').value.length>0&&document.getElementById('lg-pw').value.length>0;
+  clearLogin();
+  if(!ok){toast('ID와 암호를 입력하세요');return}
+  closeDlg('dlg-login'); sessions[pending.site]=true; renderConn(); toast(siteName[pending.site]+' 로그인됨 (세션은 메모리에만 유지)');
+  const n=pending.next; pending=null; n&&n();
+}
+function closeLogin(){clearLogin();closeDlg('dlg-login');pending=null}
+function logoutAll(){Object.keys(sessions).forEach(k=>sessions[k]=false);renderConn();toast('모든 세션을 삭제했습니다')}
+function renderConn(){
+  document.getElementById('conn').innerHTML=`<span class="chip on">아웃룩 연결</span>`+['wiki','gk','ai'].map(k=>`<span class="chip ${sessions[k]?'on':''}">${siteName[k]} ${sessions[k]?'로그인':'미로그인'}</span>`).join('');
+  document.getElementById('setconn').innerHTML=['wiki','gk','ai','gw'].map(k=>`<div class="set-row"><div><div class="k">${siteName[k]}</div><div class="s">${sessions[k]?'로그인됨 · 앱 종료 시 세션 삭제':'로그인 안 됨'}</div></div>${sessions[k]?`<button class="btn sm" onclick="sessions['${k}']=false;renderConn()">로그아웃</button>`:`<button class="btn sm" onclick="needLogin('${k}')">로그인</button>`}</div>`).join('')
+   +`<div class="set-row"><div><div class="k">모든 세션 삭제</div><div class="s">로그인 세션·브라우저 자동화 프로필을 즉시 지웁니다</div></div><button class="btn sm" onclick="logoutAll()">모두 로그아웃</button></div>`;
+}
+
+// ---- 히스토리 3단계 검색 ----
+function runSearch(q){
+  q=(q||'').trim(); document.getElementById('hq').value=q; const box=document.getElementById('hres');
+  if(!q){box.innerHTML='<div class="empty">검색어를 입력하세요.</div>';return}
+  const stage=/역분개|출하|I\/F/.test(q)?'app':/원가센터|구매오더|PO/.test(q)?'gk':'ai';
+  const go=()=>{box.innerHTML=`<div class="result-group">${stepsHtml(stage,q)}</div>`};
+  if(stage==='app') go(); else needLogin('gk',()=>{ if(stage==='gk') go(); else needLogin('ai',go); });
+}
+function goSearch(q){show('hist');runSearch(q)}
+
+// ---- 공통 ----
+function open(id){document.getElementById(id).classList.add('show')}
+function closeDlg(id){document.getElementById(id).classList.remove('show')}
+function show(p){document.querySelectorAll('.page').forEach(e=>e.classList.toggle('active',e.id==='p-'+p));document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.p===p))}
+let tt;function toast(m){const e=document.getElementById('toast');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',2200)}
+document.querySelectorAll('nav a').forEach(a=>a.onclick=e=>{e.preventDefault();show(a.dataset.p)});
+function renderFilterCounts(){document.querySelectorAll('#filters button').forEach(b=>{const f=b.dataset.f,n=f==='all'?todos.length:todos.filter(t=>t.st===f).length;b.textContent=b.textContent.replace(/ \d+$/,'')+' '+n})}
+document.getElementById('filters').onclick=e=>{if(!e.target.dataset.f)return;filter=e.target.dataset.f;document.querySelectorAll('#filters button').forEach(b=>b.classList.toggle('on',b===e.target));renderTodo()};
+window.addEventListener('beforeunload',()=>{clearLogin();Object.keys(sessions).forEach(k=>sessions[k]=false)});
+renderTodo();renderDetail();renderConn();
+
+// ================= 성과 지표 (가상 데이터) =================
+// 실제 앱에서는 '지표 원장'(업무별 수치 레코드: 완료일·모듈·리드타임·기한 준수·해결 단계·G-K 등록 여부)에서 집계한다.
+// 메일 제목·본문·상대방 정보는 원장에 넣지 않는다.
+const PAL={s1:'#2a78d6',s2:'#eb6834',s3:'#1baf7a',s4:'#eda100',other:'#a3a8b1',grid:'#eceef2',axis:'#8a93a3',ink:'#1d2330',sub:'#5d6675'};
+const DAY=864e5, END=Date.UTC(2026,10,11);
+function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261111);
+function pickW(a,w){let r=R(),c=0;for(let i=0;i<a.length;i++){c+=w[i];if(r<c)return a[i]}return a[a.length-1]}
+const MODS=['FI','CO','MM','SD','기타'], STAGES=['app','gk','ai','none'];
+const STAGE_NAME={app:'앱(7일)',gk:'G-Knowledge',ai:'AI 제안',none:'미해결'};
+const ledger=[], weekLog=[];
+(function gen(){let t=Date.UTC(2024,0,4),w=0;while(t<=END){const p=Math.min(1,w/150);const n=Math.round(9+p*5+R()*6);
+  for(let i=0;i<n;i++){const day=t+Math.floor(R()*7)*DAY;if(day>END)continue;
+    const hasDue=R()<.7, searched=R()<.6; let stage=null;
+    if(searched){const r=R(),a=.22+.06*p,g=.12+.33*p,ai=.32-.12*p;stage=r<a?'app':r<a+g?'gk':r<a+g+ai?'ai':'none'}
+    ledger.push({t:day,mod:pickW(MODS,[.3,.15,.25,.2,.1]),lead:Math.max(.3,(4.2-1.6*p)*Math.exp((R()-.5)*1.2)),hasDue,onTime:hasDue&&R()<(.78+.14*p),
+      reply:Math.max(.2,(6-3*p)*Math.exp((R()-.5)*1.4)),stage,gk:R()<(.2+.5*p)});}
+  const prop=12+Math.floor(R()*8);weekLog.push({t,prop,ok:Math.round(prop*(.68+.22*p+(R()-.5)*.1)),reportMin:Math.max(10,55-38*p+(R()-.5)*10)});
+  t+=7*DAY;w++;}})();
+
+// 기간 키: 주 = 목~수(주간보고 주기), 반기 H1=1~6월, 분기·월·연은 달력 기준
+function bucket(t,g){const d=new Date(t),y=d.getUTCFullYear(),m=d.getUTCMonth();
+  if(g==='week'){const off=(d.getUTCDay()-4+7)%7,s=t-off*DAY-(t%DAY),sd=new Date(s),e=new Date(s+6*DAY);
+    return {k:s,l:`${sd.getUTCMonth()+1}/${sd.getUTCDate()}~${e.getUTCMonth()+1}/${e.getUTCDate()}`,s:`${sd.getUTCMonth()+1}/${sd.getUTCDate()}`}}
+  if(g==='month')return {k:y*100+m,l:`${String(y).slice(2)}.${String(m+1).padStart(2,'0')}`};
+  if(g==='quarter')return {k:y*10+Math.floor(m/3),l:`${String(y).slice(2)} Q${Math.floor(m/3)+1}`};
+  if(g==='half')return {k:y*10+(m<6?0:1),l:`${y} ${m<6?'상':'하'}반기`};
+  return {k:y,l:`${y}`};}
+const SHOW={year:3,half:6,quarter:8,month:13,week:13};
+const GNAME={year:'연간',half:'반기',quarter:'분기',month:'월',week:'주'};
+function med(a){if(!a.length)return null;const s=[...a].sort((x,y)=>x-y),h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2}
+function aggregate(g){const map=new Map();
+  const get=(t)=>{const b=bucket(t,g);if(!map.has(b.k))map.set(b.k,{k:b.k,l:b.l,s:b.s||b.l,tasks:[],weeks:[]});return map.get(b.k)};
+  ledger.forEach(r=>get(r.t).tasks.push(r));weekLog.forEach(w=>get(w.t).weeks.push(w));
+  const rows=[...map.values()].sort((a,b)=>a.k-b.k).slice(-SHOW[g]),last=rows[rows.length-1];
+  return rows.map(b=>{const T=b.tasks,due=T.filter(x=>x.hasDue),srch=T.filter(x=>x.stage);
+    const st={};STAGES.forEach(s=>st[s]=srch.filter(x=>x.stage===s).length);
+    const md={};MODS.forEach(m=>md[m]=T.filter(x=>x.mod===m).length);
+    const P=b.weeks.reduce((a,w)=>a+w.prop,0),O=b.weeks.reduce((a,w)=>a+w.ok,0);
+    return {l:b.l,s:b.s,partial:b===last,done:T.length,ontime:due.length?100*due.filter(x=>x.onTime).length/due.length:null,nDue:due.length,
+      lead:med(T.map(x=>x.lead)),reply:med(T.map(x=>x.reply)),gkRate:T.length?100*T.filter(x=>x.gk).length/T.length:null,
+      reuse:srch.length?100*(st.app+st.gk)/srch.length:null,nSrch:srch.length,acc:P?100*O/P:null,
+      report:b.weeks.length?b.weeks.reduce((a,w)=>a+w.reportMin,0)/b.weeks.length:null,st,md,nSt:srch.length}});}
+
+const KPIS=[
+ {k:'done',n:'완료 건수',u:'건',f:0,up:true,def:'완료 확정된 업무 수',chart:'bar'},
+ {k:'ontime',n:'기한 준수율',u:'%',f:1,up:true,pp:true,def:'기한 내 완료 ÷ 기한 있는 완료 · 점선 목표 90%',chart:'line',lo:60,hi:100,step:20,target:90,nn:r=>r.nDue},
+ {k:'gkRate',n:'지식 등록률',u:'%',f:1,up:true,pp:true,def:'G-Knowledge 등록 ÷ 완료 업무',chart:'line',lo:0,hi:100,step:50,nn:r=>r.done},
+ {k:'reuse',n:'이력 재사용률',u:'%',f:1,up:true,pp:true,def:'앱·G-K에서 해결 ÷ 유사 검색',chart:'line',lo:0,hi:100,step:50,nn:r=>r.nSrch}];
+
+const tip=document.createElement('div');tip.className='tip';document.body.appendChild(tip);
+function showTip(e,html){tip.innerHTML=html;tip.style.display='block';const x=Math.min(e.clientX+14,innerWidth-tip.offsetWidth-8);tip.style.left=x+'px';tip.style.top=(e.clientY+14)+'px'}
+function hideTip(){tip.style.display='none'}
+function nice(max){const p=Math.pow(10,Math.floor(Math.log10(max||1))),s=[1,2,2.5,5,10].map(x=>x*p).find(x=>max/x<=4)||10*p;return {top:Math.ceil(max/s)*s,step:s}}
+let W=300,H=130;const L=34,Rm=8,Tm=10,B=24;
+function frame(labels,lo,hi,step,fmt){const pw=W-L-Rm,ph=H-Tm-B,bw=pw/labels.length;let g='';
+  for(let v=lo;v<=hi+1e-9;v+=step){const y=Tm+ph-(v-lo)/(hi-lo)*ph;g+=`<line x1="${L}" x2="${W-Rm}" y1="${y}" y2="${y}" stroke="${PAL.grid}"/><text x="${L-6}" y="${y+4}" text-anchor="end" font-size="10.5" fill="${PAL.axis}">${fmt(v)}</text>`}
+  const every=Math.ceil(labels.length/4);
+  labels.forEach((l,i)=>{if((labels.length-1-i)%every===0)g+=`<text x="${L+bw*i+bw/2}" y="${H-12}" text-anchor="middle" font-size="10.5" fill="${PAL.axis}">${esc(l)}</text>`});
+  return {g,pw,ph,bw,y:v=>Tm+ph-(v-lo)/(hi-lo)*ph};}
+function topRound(x,y,w,h,c){const r=Math.min(4,w/2,h);if(h<=0)return'';return `<path d="M${x} ${y+h}V${y+r}Q${x} ${y} ${x+r} ${y}H${x+w-r}Q${x+w} ${y} ${x+w} ${y+r}V${y+h}Z" fill="${c}"/>`}
+// 누적 막대(series 1개면 일반 막대)
+function bars(el,rows,series,opt={}){
+  const tot=rows.map(r=>series.reduce((a,s)=>a+(s.v(r)||0),0)),nt=opt.pct?{top:100,step:25}:nice(Math.max(...tot));
+  W=300;H=130;const F=frame(rows.map(r=>r.s),0,nt.top,nt.step,v=>opt.pct?v+'%':v);let g=F.g;const bwid=Math.min(16,F.bw*.62);
+  rows.forEach((r,i)=>{let acc=0;g+=`<g opacity="${r.partial?0.45:1}">`;const x=L+F.bw*i+(F.bw-bwid)/2;const vals=series.map(s=>s.v(r)||0),sum=vals.reduce((a,b)=>a+b,0);
+    series.forEach((s,j)=>{let v=vals[j];if(opt.pct)v=sum?100*v/sum:0;if(v<=0)return;const y0=F.y(acc),y1=F.y(acc+v);acc+=v;
+      const last=series.slice(j+1).every((_,q)=>!(vals[j+1+q]>0));const h=y0-y1-(acc<(opt.pct?100:tot[i])-1e-9?2:0);
+      g+=last?topRound(x,y1,bwid,Math.max(0,y0-y1),s.c):`<rect x="${x}" y="${y1+2}" width="${bwid}" height="${Math.max(0,h)}" fill="${s.c}"/>`;});
+    g+=`</g><rect class="hit" data-i="${i}" x="${L+F.bw*i}" y="${Tm}" width="${F.bw}" height="${F.ph}" fill="transparent"/>`;});
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img">${g}<line x1="${L}" x2="${W-Rm}" y1="${F.y(0)}" y2="${F.y(0)}" stroke="${PAL.axis}"/></svg>`;
+  el.querySelectorAll('.hit').forEach(h=>{const r=rows[+h.dataset.i];h.onmousemove=e=>{const vals=series.map(s=>s.v(r)||0),sum=vals.reduce((a,b)=>a+b,0);
+    showTip(e,`<b>${esc(r.l)}${r.partial?' (진행 중)':''}</b>`+series.map((s,j)=>`<div class="r"><span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.c};margin-right:5px"></i>${s.n}</span><span>${opt.pct?(sum?(100*vals[j]/sum).toFixed(1)+'%':'-'):vals[j]+'건'}</span></div>`).join('')+(opt.n?`<div class="r" style="color:${PAL.axis}"><span>표본</span><span>${opt.n(r)}건</span></div>`:''))};h.onmouseleave=hideTip});}
+function line(el,rows,v,opt){
+  const vals=rows.map(v).filter(x=>x!=null);let lo=opt.lo!=null?opt.lo:0,hi;
+  if(opt.hi!=null)hi=opt.hi;else{const n=nice(Math.max(...vals)*1.1);hi=n.top}
+  W=300;H=130;const step=opt.step||nice(hi-lo).step;const F=frame(rows.map(r=>r.s),lo,hi,step,v=>v+(opt.u==='%'?'%':''));let g=F.g;
+  if(opt.target!=null)g+=`<line x1="${L}" x2="${W-Rm}" y1="${F.y(opt.target)}" y2="${F.y(opt.target)}" stroke="${PAL.sub}" stroke-dasharray="4 4"/>`;
+  const pts=rows.map((r,i)=>v(r)==null?null:[L+F.bw*i+F.bw/2,F.y(v(r))]);
+  g+=`<path d="${pts.filter(Boolean).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join('')}" fill="none" stroke="${PAL.s1}" stroke-width="2" stroke-linejoin="round"/>`;
+  pts.forEach((p,i)=>{if(p)g+=`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${rows[i].partial?'#fff':PAL.s1}" stroke="${rows[i].partial?PAL.s1:'#fff'}" stroke-width="1.5"/>`});
+  g+=`<line id="xh" y1="${Tm}" y2="${Tm+F.ph}" stroke="${PAL.axis}" stroke-dasharray="2 3" style="display:none"/>`;
+  rows.forEach((r,i)=>g+=`<rect class="hit" data-i="${i}" x="${L+F.bw*i}" y="${Tm}" width="${F.bw}" height="${F.ph}" fill="transparent"/>`);
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;const xh=el.querySelector('#xh');
+  el.querySelectorAll('.hit').forEach(h=>{const i=+h.dataset.i,r=rows[i];h.onmousemove=e=>{const x=L+F.bw*i+F.bw/2;xh.setAttribute('x1',x);xh.setAttribute('x2',x);xh.style.display='';
+    showTip(e,`<b>${esc(r.l)}${r.partial?' (진행 중)':''}</b><div class="r"><span>${opt.n}</span><span>${v(r)==null?'-':v(r).toFixed(1)+opt.u}</span></div>`+(opt.nn?`<div class="r" style="color:${PAL.axis}"><span>표본</span><span>${opt.nn(r)}건</span></div>`:''))};
+    h.onmouseleave=()=>{hideTip();xh.style.display='none'}});}
+
+let gran='month';
+function fmtV(v,f){return v==null?'-':v.toFixed(f)}
+function renderMetrics(){
+  const rows=aggregate(gran),live=rows[rows.length-1],cur=rows[rows.length-2],prev=rows[rows.length-3];
+  document.getElementById('m-desc').textContent=`성과 지표 · ${GNAME[gran]} 단위 최근 ${rows.length}개 기간 · 카드 값 = 최근 완료 기간(${cur.l}) · 진행 중(${live.l})은 흐리게${gran==='week'?' · 주 = 목~수':''} · 가상 데이터`;
+  document.getElementById('mk').innerHTML=KPIS.map(K=>{const a=cur[K.k],b=prev?prev[K.k]:null;let d='';
+    if(a!=null&&b!=null){const diff=a-b,good=K.up?diff>=0:diff<=0;d=`<div class="dl"><span class="${good?'up':'dn'}">${diff>=0?'▲':'▼'} ${Math.abs(diff).toFixed(K.f)}${K.pp?'%p':K.u} ${good?'개선':'악화'}</span> · 직전 대비</div>`}
+    return `<div class="kpi"><div class="l">${K.n}</div><div class="v">${fmtV(a,K.f)}<span class="u">${K.u}</span></div>${d}<div class="kdef">${K.def}</div><div class="chartbox" id="ch-${K.k}"></div></div>`}).join('');
+  KPIS.forEach(K=>{const el=document.getElementById('ch-'+K.k);
+    if(K.chart==='bar')bars(el,rows,[{n:K.n,c:PAL.s1,v:r=>r[K.k]}]);
+    else line(el,rows,r=>r[K.k],{lo:K.lo,hi:K.hi,step:K.step,u:'%',n:K.n,target:K.target,nn:K.nn});});
+  document.getElementById('m-tbl').innerHTML=`<table><thead><tr><th>기간</th>${KPIS.map(K=>`<th>${K.n}(${K.u})</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r=>`<tr><td>${esc(r.l)}${r.partial?' (진행 중)':''}</td>${KPIS.map(K=>`<td>${fmtV(r[K.k],K.f)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+document.getElementById('seg').onclick=e=>{const g=e.target.dataset.g;if(!g)return;gran=g;document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b===e.target));renderMetrics()};
+renderMetrics();
+</script>
+</body>
+</html>
