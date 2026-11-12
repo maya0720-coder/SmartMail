@@ -64,6 +64,7 @@ def sync_status(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "last_synced_at": None if last is None else last.astimezone(KST).isoformat(),
+            "syncing": container.mail_lock.locked(),  # 자동·수동 수집이 진행 중인지
             "initial_days": container.mail.initial_sync_days,
             "interval_minutes": container.settings.mail_sync_minutes,
         }

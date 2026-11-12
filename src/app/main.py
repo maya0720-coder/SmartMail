@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import socket
 import sys
 import threading
 import webbrowser
@@ -32,6 +33,13 @@ def _open_browser_later(url: str) -> None:
     timer.start()
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    """같은 주소에 이미 서버가 떠 있는지(앱 중복 실행 방지, 로컬실행가이드 1장)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(1.0)
+        return probe.connect_ex((host, port)) == 0
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -41,10 +49,18 @@ def main() -> int:
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    url = f"http://{settings.app_host}:{settings.app_port}/"
+    if _port_in_use(settings.app_host, settings.app_port):
+        # 두 번째 실행은 잔존 검사가 실행 중인 앱의 브라우저 임시 폴더를 지울 수 있다.
+        # 그래서 새로 띄우지 않고 기존 화면만 연다.
+        print(f"이미 실행 중입니다: {url}")
+        print("다시 시작하려면 실행 중인 창에서 Ctrl+C로 종료한 뒤 실행하세요.")
+        if open_browser:
+            webbrowser.open(url)
+        return 3
     configure_logging(settings.log_dir / LOG_FILE_NAME)
     container = build_container(settings)
     app = create_app(container)
-    url = f"http://{settings.app_host}:{settings.app_port}/"
     print(f"업무 처리 현황: {url} (종료: Ctrl+C)")
     if open_browser:
         _open_browser_later(url)

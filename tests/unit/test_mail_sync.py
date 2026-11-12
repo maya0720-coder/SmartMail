@@ -176,6 +176,7 @@ def test_mail04_api_sync_status_and_range(tmp_path: Path, clock: FixedClock) -> 
     with app_client(container) as client:
         status = client.get("/api/mail/sync-status").json()
         assert status["last_synced_at"] is None and status["initial_days"] == 30
+        assert status["syncing"] is False
         first = client.post("/api/mail/collect", json={}).json()
         assert first["initial"] is True and first["suggested"] > 0
         assert client.get("/api/mail/sync-status").json()["last_synced_at"] is not None

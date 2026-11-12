@@ -209,16 +209,26 @@ document.getElementById("toggle-table").addEventListener("click", (event) => {
   event.preventDefault();
   document.getElementById("m-tbl").classList.toggle("hidden");
 });
+// 백그라운드 자동 수집이 끝나면 화면을 새로 고친다(처음 30일 수집은 몇 분 걸릴 수 있음).
+const SYNC_POLL_MS = 15000;
+let lastSyncSeen;
 async function loadSyncStatus() {
   const result = await api("GET", "/api/mail/sync-status");
   const target = document.getElementById("sync-status");
   if (!result.ok) { target.textContent = "메일 자동 수집 상태를 읽지 못했습니다"; return; }
   const data = result.data;
   const every = data.interval_minutes > 0 ? data.interval_minutes + "분마다 자동 새로고침" : "자동 새로고침 꺼짐";
-  target.textContent = data.last_synced_at
-    ? "마지막 메일 수집 " + data.last_synced_at.slice(5, 16).replace("T", " ") + " (" + every + ")"
-    : "처음 실행 시 최근 " + data.initial_days + "일 메일을 자동 수집합니다";
+  if (data.syncing) {
+    target.textContent = data.last_synced_at ? "메일 수집 중…" : "최근 " + data.initial_days + "일 메일을 처음 수집하는 중… (몇 분 걸릴 수 있습니다)";
+  } else {
+    target.textContent = data.last_synced_at
+      ? "마지막 메일 수집 " + data.last_synced_at.slice(5, 16).replace("T", " ") + " (" + every + ")"
+      : "처음 실행 시 최근 " + data.initial_days + "일 메일을 자동 수집합니다";
+  }
+  if (lastSyncSeen !== undefined && data.last_synced_at !== lastSyncSeen) refresh();
+  lastSyncSeen = data.last_synced_at;
 }
+setInterval(loadSyncStatus, SYNC_POLL_MS);
 async function collectMail(body) {
   const result = await api("POST", "/api/mail/collect", body);
   if (!result.ok) { toast(errorText(result, "수집하지 못했습니다")); return; }
