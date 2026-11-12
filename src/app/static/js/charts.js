@@ -27,7 +27,8 @@ function formatMetric(metric, value) {
 // buckets: [{label, partial, values: {metric: {value, sample, reference_only}}}]
 function drawChart(metric, buckets, target) {
   const width = 240, height = 70, pad = 6;
-  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height + 14}`, role: "img", "aria-label": metric + " 추이" });
+  // 카드 폭에 맞춰 늘어나도 높이는 CSS로 고정(preserveAspectRatio=none). 날짜 글자는 SVG 밖 HTML로 둔다.
+  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none", role: "img", "aria-label": metric + " 추이" });
   const values = buckets.map((b) => b.values[metric].value);
   const isCount = metric === "MET-01";
   const max = isCount ? Math.max(1, ...values.map((v) => v || 0)) : 1;
@@ -57,14 +58,13 @@ function drawChart(metric, buckets, target) {
     hit.addEventListener("mouseleave", hideTip);
     if (mark) svg.append(mark);
     svg.append(hit);
-    if (index === 0 || index === buckets.length - 1) {
-      const label = svgEl("text", { class: "chart-label", x: cx, y: height + 10, "text-anchor": "middle" });
-      label.textContent = bucket.label;
-      svg.append(label);
-    }
   });
   if (points.length > 1) {
     svg.insertBefore(svgEl("polyline", { class: "chart-line", points: points.map((p) => p.join(",")).join(" ") }), svg.firstChild.nextSibling);
   }
-  return svg;
+  const first = buckets.length ? buckets[0].label : "";
+  const last = buckets.length ? buckets[buckets.length - 1].label : "";
+  const box = document.createDocumentFragment();
+  box.append(svg, el("div", { class: "chart-range" }, el("span", {}, first), el("span", {}, last)));
+  return box;
 }

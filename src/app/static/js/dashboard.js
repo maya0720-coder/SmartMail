@@ -167,7 +167,8 @@ async function selectTask(taskId) {
     buttons.push(el("button", { class: "btn sm gk", onclick: () => openGkPreview(task.id, refresh) }, task.gk_link ? "G-Knowledge 재등록" : "G-Knowledge 지식 등록"));
   }
   buttons.push(el("button", { class: "btn sm ai", onclick: () => runTaskSearch(task, "ai", searchBox) }, "AI 지식 요청"));
-  panel.replaceChildren(
+  // replaceChildren은 null을 "null" 글자로 바꾸므로 빈 항목은 걸러서 넘긴다.
+  panel.replaceChildren(...[
     el("h3", {}, task.title, statusBadge(task)),
     el("div", { class: "meta" },
       el("div", {}, "요청 부서"), el("div", {}, task.requester_dept || "-"),
@@ -183,7 +184,8 @@ async function selectTask(taskId) {
     searchBox,
     el("div", { class: "actions" }, ...buttons),
     cardBox,
-    task.retention_days_left !== null ? el("div", { class: "ret" }, "보관 D-" + task.retention_days_left + " · 보관 기간이 지나면 앱에서 삭제됩니다" + (task.gk_link ? "" : " (G-Knowledge 미등록)")) : null);
+    task.retention_days_left != null ? el("div", { class: "ret" }, "보관 D-" + task.retention_days_left + " · 보관 기간이 지나면 앱에서 삭제됩니다" + (task.gk_link ? "" : " (G-Knowledge 미등록)")) : null,
+  ].filter(Boolean));
 }
 
 async function refresh() {

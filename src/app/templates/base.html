@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <title>업무 처리 현황</title>
 <link rel="stylesheet" href="/static/css/app.css">
@@ -13,8 +14,8 @@
 {% endif %}
 <header>
   <h1>업무 처리 현황</h1>
-  <form class="search" id="search-form" action="/history" method="get">
-    <input name="q" placeholder="키워드·유사 업무 검색 (예: 전표 역분개)" autocomplete="off" maxlength="200">
+  <form class="search" id="search-form" action="/history" method="get" role="search">
+    <input name="q" placeholder="유사 업무 검색 (예: 전표 역분개)" autocomplete="off" maxlength="200" aria-label="유사 업무 검색">
     <button>검색</button>
   </form>
   <div class="hdr-right">
@@ -24,15 +25,21 @@
 </header>
 
 <div class="layout">
-<nav>
+<nav class="side" aria-label="주 메뉴">
   {% for key, href, label in nav_items %}
-  <a href="{{ href }}"{% if key == active %} class="active"{% endif %}>{{ label }}</a>
+  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
 </nav>
 <main>
 {% block content %}{% endblock %}
 </main>
 </div>
+{% set short_labels = {"dashboard": "홈", "suggestions": "제안", "weekly": "주간보고", "history": "히스토리", "settings": "설정"} %}
+<nav class="tabbar" aria-label="하단 메뉴">
+  {% for key, href, label in nav_items %}
+  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ short_labels.get(key, label) }}</a>
+  {% endfor %}
+</nav>
 
 {% include "partials/login_modal.html" %}
 {% block modals %}{% endblock %}
