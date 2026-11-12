@@ -8,7 +8,18 @@ function clearLoginInputs() {
   document.getElementById("lg-pw").value = "";
 }
 
+const COMPANY_SITES = ["ai-ground", "g-knowledge"];
+
 async function requireLogin(site, onDone) {
+  if (COMPANY_SITES.includes(site)) {
+    // 다른 회사 계정 사이트가 로그인돼 있으면 입력 없이 SSO로 연결한다.
+    const pending = await api("GET", "/api/login/pending");
+    if (pending.ok && !pending.data.need_company && pending.data.sites.includes(site)) {
+      const sso = await api("POST", "/api/login/all", { only: site });
+      const mine = sso.ok ? sso.data.results.find((r) => r.site === site) : null;
+      if (mine && mine.logged_in) { renderConnections(); if (onDone) onDone(); return; }
+    }
+  }
   const status = await api("GET", "/api/connections");
   const info = (status.data || []).find((item) => item.site === site);
   if (info && info.browser_login) {
@@ -34,6 +45,24 @@ function closeLogin() {
   loginPending = null;
 }
 
+// 로그인이 끝날 때까지 2단계 인증 안내(Authenticator 번호)를 보여 준다. 반환값을 호출하면 멈춘다.
+function watchMfa(target) {
+  let stopped = false;
+  async function tick() {
+    if (stopped) return;
+    const result = await api("GET", "/api/login/progress");
+    if (!stopped && result.ok) {
+      const data = result.data;
+      target.textContent = !data.mfa_waiting ? ""
+        : data.mfa_number ? "휴대폰 Authenticator 앱에서 번호 " + data.mfa_number + " 을(를) 눌러 승인해 주세요."
+        : "휴대폰에서 로그인 요청을 승인해 주세요.";
+    }
+    if (!stopped) setTimeout(tick, 1000);
+  }
+  tick();
+  return () => { stopped = true; target.textContent = ""; };
+}
+
 async function submitLogin(event) {
   event.preventDefault();
   if (!loginPending) return;
@@ -41,7 +70,10 @@ async function submitLogin(event) {
   const pwBox = document.getElementById("lg-pw");
   const payload = { site: loginPending.site, user_id: idBox.value, password: pwBox.value };
   clearLoginInputs();  // 전송 직후 화면에서 지운다
+  document.getElementById("lg-err").textContent = "";
+  const stopMfa = watchMfa(document.getElementById("lg-mfa"));
   const result = await api("POST", "/api/login", payload);
+  stopMfa();
   payload.user_id = ""; payload.password = "";
   if (!result.ok) {
     document.getElementById("lg-err").textContent = errorText(result, "로그인하지 못했습니다.");

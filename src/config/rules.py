@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Final
 
 from config.settings import ConfigError
+from domain.errors import UserInputError
 from domain.mail_rules import ExclusionRules
 from domain.weekly.report import WikiTemplate
+from domain.weekly.title_rule import validate_title_rule
 
 RULES_DIR: Final = Path(__file__).resolve().parent / "rules"
 DEFAULT_MAIL_RULES: Final = RULES_DIR / "mail_exclusions.toml"
@@ -74,6 +76,8 @@ def load_wiki_template(path: Path = DEFAULT_WIKI_TEMPLATE) -> WikiTemplate:
     if unknown:
         raise ConfigError(f"{path.name}: 알 수 없는 키 {sorted(unknown)}")
     template = WikiTemplate(**values)  # type: ignore[arg-type]
-    if not 0 <= template.title_date_offset_days <= 6:
-        raise ConfigError(f"{path.name}: title_date_offset_days는 0~6이어야 합니다")
+    try:
+        validate_title_rule(template.page_title_format, template.title_date_offset_days)
+    except UserInputError as exc:
+        raise ConfigError(f"{path.name}: 제목 규칙 오류 - {exc}") from None
     return template

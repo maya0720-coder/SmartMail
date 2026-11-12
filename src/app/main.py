@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import sys
+import threading
+import webbrowser
 
 import uvicorn
 
@@ -20,11 +22,20 @@ from config.settings import ConfigError, load_settings
 from security.logging_policy import configure_logging
 
 LOG_FILE_NAME = "smartmail.log"
+BROWSER_OPEN_DELAY_SECONDS = 2.0
+
+
+def _open_browser_later(url: str) -> None:
+    """서버가 뜰 시간을 두고 기본 브라우저로 화면을 연다(실행 파일용 `--open`)."""
+    timer = threading.Timer(BROWSER_OPEN_DELAY_SECONDS, webbrowser.open, args=(url,))
+    timer.daemon = True
+    timer.start()
 
 
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    open_browser = "--open" in sys.argv[1:]
     try:
         settings = load_settings()
     except ConfigError as exc:
@@ -33,7 +44,10 @@ def main() -> int:
     configure_logging(settings.log_dir / LOG_FILE_NAME)
     container = build_container(settings)
     app = create_app(container)
-    print(f"업무 처리 현황: http://{settings.app_host}:{settings.app_port}/ (종료: Ctrl+C)")
+    url = f"http://{settings.app_host}:{settings.app_port}/"
+    print(f"업무 처리 현황: {url} (종료: Ctrl+C)")
+    if open_browser:
+        _open_browser_later(url)
     uvicorn.run(
         app,
         host=settings.app_host,

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="mhead">
-  <div><h2>대시보드</h2><p class="desc m0">수집 경로: {{ collector_label }} · 완료 업무는 {{ retention_days }}일 후 자동 삭제</p></div>
+  <div><h2>대시보드</h2><p class="desc m0">수집 경로: {{ collector_label }} · <span id="sync-status">메일 자동 수집 확인 중</span> · 완료 업무는 {{ retention_days }}일 후 자동 삭제</p></div>
   <div class="seg" id="seg">
     <button data-g="year">연간</button><button data-g="half">반기</button><button data-g="quarter">분기</button><button data-g="month" class="on">월</button><button data-g="week">주</button>
   </div>
@@ -22,9 +22,15 @@
       <tbody id="todo"></tbody>
     </table>
     <div class="actions">
-      <button class="btn sm" id="btn-collect">메일 수집(이번 주)</button>
+      <button class="btn sm" id="btn-collect">메일 새로고침</button>
+      <button class="btn sm" id="btn-range-toggle">기간 지정 수집</button>
       <button class="btn sm" id="btn-manual">+ 수동 업무 추가</button>
     </div>
+    <form class="actions hidden" id="range-form">
+      <label class="t-sub">시작일 <input type="date" id="range-start" required></label>
+      <label class="t-sub">종료일 <input type="date" id="range-end" required></label>
+      <button class="btn sm primary" type="submit">이 기간 수집</button>
+    </form>
   </div>
   <div class="card detail" id="detail"><div class="empty">업무를 선택하세요.</div></div>
 </div>

@@ -33,6 +33,30 @@ document.getElementById("btn-wipe").addEventListener("click", async () => {
   toast(result.ok ? "로컬 데이터를 모두 지웠습니다" : errorText(result, "삭제하지 못했습니다"));
 });
 
+function showTitleRule(data) {
+  document.getElementById("title-format").value = data.page_title_format;
+  const select = document.getElementById("title-offset");
+  select.replaceChildren(...data.weekday_labels.map((label, index) =>
+    el("option", { value: String(index) }, label + (index === 0 ? " (주 시작일)" : ""))));
+  select.value = String(data.offset_days);
+  document.getElementById("title-example").textContent = data.example;
+}
+async function loadTitleRule() {
+  const result = await api("GET", "/api/weekly/title-rule");
+  if (result.ok) showTitleRule(result.data);
+}
+document.getElementById("title-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const result = await api("PUT", "/api/weekly/title-rule", {
+    page_title_format: document.getElementById("title-format").value,
+    offset_days: Number(document.getElementById("title-offset").value),
+  });
+  if (!result.ok) { toast(errorText(result, "저장하지 못했습니다")); return; }
+  showTitleRule(result.data);
+  toast("제목 규칙을 저장했습니다");
+});
+loadTitleRule();
+
 document.getElementById("btn-detect").addEventListener("click", async () => {
   const result = await api("POST", "/api/mail/detect");
   if (result.ok) document.getElementById("collect-desc").textContent = result.data.message;

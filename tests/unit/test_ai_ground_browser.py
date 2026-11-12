@@ -236,8 +236,15 @@ def test_parsers_linear_on_long_input() -> None:
     assert time.perf_counter() - started < 0.5
 
 
-def test_default_chat_fields_unconfirmed(tmp_path: Path) -> None:
-    assert not load_chat_fields().ready
+def test_ai01_default_chat_fields_confirmed(tmp_path: Path) -> None:
+    # 2026-11-12 실제 화면에서 확인한 선택자(결정기록 0010)
+    fields = load_chat_fields()
+    assert fields.ready
+    assert fields.prompt == "#messageInput"
+    assert fields.answer.endswith(".chat-text")  # 복사 버튼 글자가 답변에 섞이지 않게
+    empty = tmp_path / "empty.toml"
+    empty.write_text("[chat]\n", encoding="utf-8")
+    assert not load_chat_fields(empty).ready  # 비어 있으면 호출하지 않음
     bad = tmp_path / "f.toml"
     bad.write_text("[chat]\nunknown = 'x'\n", encoding="utf-8")
     with pytest.raises(ConfigError):

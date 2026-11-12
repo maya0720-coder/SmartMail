@@ -68,6 +68,14 @@ class MailRefRepository(Protocol):
     def set_summary(self, ref_id: int, summary: str | None) -> None: ...
 
 
+class SyncStateRepository(Protocol):
+    """이름별 동기화 기준 시각(예: 메일 자동 수집 마지막 성공 시각)."""
+
+    def get(self, name: str) -> datetime | None: ...
+
+    def set(self, name: str, synced_at: datetime) -> None: ...
+
+
 class HistoryRepository(Protocol):
     def add(self, card: HistoryCard) -> HistoryCard: ...
 

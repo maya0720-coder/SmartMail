@@ -28,6 +28,8 @@ DATA_TABLES: Final = (
     "ai_call_log",
     "metric_ledger",
     "task",
+    "sync_state",
+    "app_setting",
 )
 
 SCHEMA: Final = """
@@ -112,6 +114,19 @@ CREATE TABLE IF NOT EXISTS ai_call_log (
     called_at TEXT NOT NULL,
     request_summary TEXT NOT NULL CHECK (length(request_summary) <= 300),
     success INTEGER NOT NULL
+);
+
+-- 동기화 기준 시각(예: 메일 자동 수집 마지막 성공 시각). 값은 시각 문자열만 둔다(MAIL-04).
+CREATE TABLE IF NOT EXISTS sync_state (
+    name TEXT PRIMARY KEY CHECK (length(name) <= 40),
+    synced_at TEXT NOT NULL
+);
+
+-- 화면에서 바꾼 앱 설정(예: 위키 제목 규칙). 개인정보·자격증명은 넣지 않는다.
+-- 저장 가능한 이름은 저장소 코드의 허용 목록으로 제한한다.
+CREATE TABLE IF NOT EXISTS app_setting (
+    name TEXT PRIMARY KEY CHECK (length(name) <= 40),
+    value TEXT NOT NULL CHECK (length(value) <= 200)
 );
 """
 

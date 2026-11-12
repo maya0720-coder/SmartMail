@@ -72,49 +72,72 @@ class SessionStore:
             _close_quietly(previous)
         return handle
 
-    def _expire_if_idle(self, site: Site) -> _Entry | None:
+    def _expire_if_idle(self, site: Site, expired: list[_Entry]) -> _Entry | None:
+        """만료됐거나 실제 세션이 이미 닫혔으면 목록에서 빼고 `expired`에 담는다.
+
+        닫기(close)는 잠금 밖에서 한다. 브라우저 닫기가 오래 걸려도 다른 조회가 멈추지 않게 한다.
+        """
         entry = self._entries.get(site)
         if entry is None:
             return None
-        if self._clock.now() - entry.last_used >= self._idle:
+        idle = self._clock.now() - entry.last_used >= self._idle
+        # 함께 쓰던 세션(회사 계정 공용 컨텍스트)이 다른 사이트 쪽에서 폐기된 경우
+        gone = bool(getattr(entry.native, "closed", False))
+        if idle or gone:
             del self._entries[site]
-            _close_quietly(entry)
-            log_event(EventType.IDLE_TIMEOUT, site, success=True)
+            expired.append(entry)
+            if idle:
+                log_event(EventType.IDLE_TIMEOUT, site, success=True)
             return None
         return entry
 
+    @staticmethod
+    def _close_all(expired: list[_Entry]) -> None:
+        for entry in expired:
+            _close_quietly(entry)
+
     def use(self, handle: SessionHandle) -> NativeSession:
         """핸들로 실제 세션을 꺼낸다. 만료·로그아웃·교체된 핸들은 거부한다."""
-        with self._lock:
-            entry = self._expire_if_idle(handle.site)
-            if entry is None or not secrets.compare_digest(
-                entry.handle.handle_id, handle.handle_id
-            ):
-                raise SessionExpiredError("다시 로그인해 주세요")
-            entry.last_used = self._clock.now()
-            return entry.native
+        expired: list[_Entry] = []
+        try:
+            with self._lock:
+                entry = self._expire_if_idle(handle.site, expired)
+                if entry is None or not secrets.compare_digest(
+                    entry.handle.handle_id, handle.handle_id
+                ):
+                    raise SessionExpiredError("다시 로그인해 주세요")
+                entry.last_used = self._clock.now()
+                return entry.native
+        finally:
+            self._close_all(expired)
 
     def current(self, site: Site) -> SessionHandle | None:
+        expired: list[_Entry] = []
         with self._lock:
-            entry = self._expire_if_idle(site)
-            return None if entry is None else entry.handle
+            entry = self._expire_if_idle(site, expired)
+        self._close_all(expired)
+        return None if entry is None else entry.handle
 
     def status(self) -> list[SessionStatus]:
         result = []
+        expired: list[_Entry] = []
         with self._lock:
             for site in Site:
                 if site in (Site.APP, Site.OUTLOOK):
                     continue
-                entry = self._expire_if_idle(site)
+                entry = self._expire_if_idle(site, expired)
                 expires = None if entry is None else entry.last_used + self._idle
                 result.append(SessionStatus(site, entry is not None, expires))
+        self._close_all(expired)
         return result
 
     def sweep(self) -> None:
         """유휴 시간이 지난 세션을 호출이 없어도 닫는다(주기 작업에서 실행)."""
+        expired: list[_Entry] = []
         with self._lock:
             for site in list(self._entries):
-                self._expire_if_idle(site)
+                self._expire_if_idle(site, expired)
+        self._close_all(expired)
 
     def logout(self, site: Site) -> bool:
         with self._lock:

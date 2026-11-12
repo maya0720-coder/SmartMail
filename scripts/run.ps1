@@ -2,9 +2,11 @@
 # 사용법(저장소 루트에서):  powershell -ExecutionPolicy Bypass -File scripts\run.ps1
 #   -Install : 가상환경 생성과 운영 의존성 설치(해시 검증)까지 수행
 #   -Demo    : 이번 실행만 데모 모드(가상 데이터, 외부 연동 없음)로 실행
+#   -Open    : 서버가 뜨면 기본 브라우저로 화면을 연다(실행 파일이 사용)
 param(
     [switch]$Install,
-    [switch]$Demo
+    [switch]$Demo,
+    [switch]$Open
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -32,7 +34,7 @@ $env:PYTHONPATH = Join-Path $Root "src"
 $env:PYTHONIOENCODING = "utf-8"
 if ($Demo) { $env:SMARTMAIL_DEMO_MODE = "true" }
 try {
-    & $Python -m app.main
+    if ($Open) { & $Python -m app.main --open } else { & $Python -m app.main }
 }
 finally {
     if ($Demo) { Remove-Item Env:SMARTMAIL_DEMO_MODE -ErrorAction SilentlyContinue }

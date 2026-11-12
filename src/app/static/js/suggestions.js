@@ -43,7 +43,7 @@ async function loadSuggestions() {
 }
 
 document.getElementById("btn-collect").addEventListener("click", async () => {
-  const result = await api("POST", "/api/mail/collect", { period: "week" });
+  const result = await api("POST", "/api/mail/collect", { period: "sync" });
   toast(result.ok ? "제안 " + result.data.suggested + "건 · 제외 " + result.data.excluded_messages + "건" : errorText(result, "수집하지 못했습니다"));
   loadSuggestions();
 });

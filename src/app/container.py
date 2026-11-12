@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 
 from app.ratelimit import RateLimiter
 from collectors.detect import DetectionResult
@@ -19,8 +20,10 @@ from security.browser import BrowserRuntime
 from security.credentials import LoginService
 from security.residue_check import ResidueChecker
 from security.sessions import SessionStore
+from security.site_login import LoginProgress
 from storage.db import Database
 from storage.knowledge_repos import SqliteLedgerRepository, SqlitePublishLog
+from storage.repositories import SqliteAppSettings
 from storage.retention import RetentionJob
 
 
@@ -46,3 +49,7 @@ class Container:
     weekly: WeeklyService
     publish_log: SqlitePublishLog
     ledger: SqliteLedgerRepository
+    app_settings: SqliteAppSettings
+    login_progress: LoginProgress
+    # 메일 수집 + 업무 반영을 한 번에 하나만 실행(자동 수집과 화면 버튼이 겹치지 않게)
+    mail_lock: threading.Lock = field(default_factory=threading.Lock)

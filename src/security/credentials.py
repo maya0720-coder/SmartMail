@@ -2,8 +2,9 @@
 
 - ID·암호는 로그인 요청 1회 동안만 `bytearray`로 다루고, 어댑터 호출이 끝나면 0으로 덮어쓴다.
 - 반환값은 `SessionHandle`뿐이다. ID·암호를 담는 필드·속성·로그·예외 메시지는 없다.
-- 2단계 인증·SSO 사이트는 `BrowserLoginAuthenticator`로 사이트 로그인 화면을 직접 띄우며,
-  앱은 입력값을 받지 않는다(AUTH-09).
+- 확인된 사이트(AI-Ground·G-Knowledge·위키)는 입력값으로 사이트 로그인 화면을 자동으로 채운다
+  (`security.site_login`, AUTH-09 개정, 결정기록 0011). 자동 로그인이 없는 사이트는
+  `BrowserLoginAuthenticator`로 사이트 로그인 화면을 직접 띄우며, 이때 앱은 입력값을 받지 않는다.
 
 한계: HTTP 요청 본문을 파싱하면 Python `str`(불변)이 잠시 생긴다. 이 값은 덮어쓸 수 없으므로
 참조를 바로 끊어 GC에 맡긴다(결정기록 0005).
@@ -33,6 +34,10 @@ LOGIN_SITES: Final = (Site.WIKI, Site.GKNOWLEDGE, Site.AIGROUND, Site.GROUPWARE)
 
 class LoginFailedError(Exception):
     """로그인 실패. 메시지는 일반 문구만 쓴다."""
+
+
+class CredentialsRequiredError(LoginFailedError):
+    """SSO만으로 로그인되지 않아 ID·암호가 필요함."""
 
 
 class LoginUnavailableError(Exception):
@@ -79,7 +84,27 @@ class LoginService:
     interactive_authenticators: Mapping[Site, InteractiveAuthenticator]
 
     def uses_browser_login(self, site: Site) -> bool:
-        return site in self.interactive_authenticators
+        """ID·암호 자동 로그인 어댑터가 없을 때만 사이트 화면 직접 로그인을 쓴다."""
+        return site in self.interactive_authenticators and site not in self.password_authenticators
+
+    def supports_password(self, site: Site) -> bool:
+        return site in self.password_authenticators
+
+    def try_sso(self, site: Site) -> SessionHandle | None:
+        """입력 없이 SSO로만 로그인해 본다. 입력이 필요하거나 실패하면 None(실패 기록 없음)."""
+        authenticator = self.password_authenticators.get(site)
+        if authenticator is None or not getattr(authenticator, "supports_sso", False):
+            return None
+        try:
+            native = authenticator.authenticate(bytearray(), bytearray())
+        except CredentialsRequiredError:
+            return None  # 입력이 필요할 뿐 실패가 아님
+        except Exception:
+            # 브라우저 오류·시간 초과는 조사할 수 있게 실패로 기록한다(보안 검토 L4)
+            log_event(EventType.LOGIN, site, success=False)
+            return None
+        log_event(EventType.LOGIN, site, success=True)
+        return self.sessions.open(site, native)
 
     def login(self, site: Site, user_id: bytearray, secret: bytearray) -> SessionHandle:
         """ID·암호 로그인. 성공·실패와 관계없이 끝나면 두 버퍼를 0으로 덮어쓴다."""

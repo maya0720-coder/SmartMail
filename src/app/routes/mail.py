@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.bootstrap import select_collector
 from app.deps import get_container
+from app.mail_sync import collect_and_ingest
 from domain.clock import KST
+from domain.errors import UserInputError
 from domain.mail import CollectorUnavailableError
-from domain.mail_service import MISSING_ORIGINAL
-from security.logging_policy import EventType, Site, log_event
+from domain.mail_service import MISSING_ORIGINAL, CollectionResult
 
 router = APIRouter(prefix="/api/mail")
 
@@ -22,8 +23,20 @@ router = APIRouter(prefix="/api/mail")
 class CollectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # week: 이번 주(목~수, 기본) / recent7: 최근 7일
-    period: Literal["week", "recent7"] = "week"
+    # sync: 자동 수집과 같은 증분 수집(기본, 처음이면 최근 N일)
+    # range: 수동 기간 지정(start~end, 날짜 포함) / week: 이번 주(목~수) / recent7: 최근 7일
+    period: Literal["sync", "range", "week", "recent7"] = "sync"
+    start: date | None = None
+    end: date | None = None
+
+    @model_validator(mode="after")
+    def _range_dates(self) -> CollectRequest:
+        has_dates = self.start is not None or self.end is not None
+        if self.period == "range" and (self.start is None or self.end is None):
+            raise ValueError("기간 지정 수집은 시작일과 종료일이 필요합니다")
+        if self.period != "range" and has_dates:
+            raise ValueError("시작일·종료일은 기간 지정 수집에서만 씁니다")
+        return self
 
 
 def _unavailable(exc: Exception) -> JSONResponse:
@@ -44,33 +57,41 @@ def detect(request: Request) -> JSONResponse:
     return JSONResponse({"kind": result.kind.value, "message": result.message})
 
 
+@router.get("/sync-status")
+def sync_status(request: Request) -> JSONResponse:
+    container = get_container(request)
+    last = container.mail.last_synced_at
+    return JSONResponse(
+        {
+            "last_synced_at": None if last is None else last.astimezone(KST).isoformat(),
+            "initial_days": container.mail.initial_sync_days,
+            "interval_minutes": container.settings.mail_sync_minutes,
+        }
+    )
+
+
 @router.post("/collect")
 def collect(request: Request, body: CollectRequest) -> JSONResponse:
     container = get_container(request)
-    site = Site.OUTLOOK if container.mail.collector.source == "outlook" else Site.GROUPWARE
-    try:
+    mail = container.mail
+
+    def run() -> CollectionResult:
+        if body.period == "range" and body.start is not None and body.end is not None:
+            return mail.collect_range(body.start, body.end)
         if body.period == "recent7":
             now = container.clock.now()
-            result = container.mail.collect(now - timedelta(days=7), now + timedelta(minutes=1))
-        else:
-            result = container.mail.collect()
+            return mail.collect(now - timedelta(days=7), now + timedelta(minutes=1))
+        if body.period == "week":
+            return mail.collect()
+        return mail.sync()
+
+    try:
+        payload = collect_and_ingest(container, run)
     except CollectorUnavailableError as exc:
-        log_event(EventType.MAIL_COLLECT, site, success=False)
         return _unavailable(exc)
-    log_event(EventType.MAIL_COLLECT, site, success=True)
-    ingest = container.tasks.ingest(result.threads)
-    return JSONResponse(
-        {
-            "suggested": len(ingest.suggested),
-            "linked": ingest.linked,
-            "reply_detected": ingest.reply_detected,
-            "threads": len(result.threads),
-            "new_messages": result.new_messages,
-            "excluded_messages": result.excluded_messages,
-            "since": result.since.astimezone(KST).isoformat(),
-            "until": result.until.astimezone(KST).isoformat(),
-        }
-    )
+    except UserInputError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse(payload)
 
 
 @router.get("/{ref_id}")

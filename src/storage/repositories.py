@@ -126,6 +126,48 @@ def _mail_from_row(row: sqlite3.Row) -> MailRef:
     )
 
 
+class SqliteSyncState:
+    """동기화 기준 시각 저장소(MAIL-04 자동 수집 커서)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get(self, name: str) -> datetime | None:
+        rows = self._db.query("SELECT synced_at FROM sync_state WHERE name = ?", (name,))
+        return from_db_time(rows[0]["synced_at"]) if rows else None
+
+    def set(self, name: str, synced_at: datetime) -> None:
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO sync_state (name, synced_at) VALUES (?, ?)"
+                " ON CONFLICT(name) DO UPDATE SET synced_at = excluded.synced_at",
+                (name, to_db_time(synced_at)),
+            )
+
+
+class SqliteAppSettings:
+    """화면에서 바꾼 앱 설정. 허용된 이름만 저장한다(자격증명·개인정보 저장 방지)."""
+
+    ALLOWED = frozenset({"wiki_title_format", "wiki_title_offset_days"})
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get(self, name: str) -> str | None:
+        rows = self._db.query("SELECT value FROM app_setting WHERE name = ?", (name,))
+        return str(rows[0]["value"]) if rows else None
+
+    def set(self, name: str, value: str) -> None:
+        if name not in self.ALLOWED:
+            raise ValueError("허용되지 않은 설정 이름입니다")
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO app_setting (name, value) VALUES (?, ?)"
+                " ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+                (name, value),
+            )
+
+
 class SqliteMailRefRepository:
     def __init__(self, db: Database) -> None:
         self._db = db

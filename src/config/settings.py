@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     mail_source: Literal["auto", "outlook", "groupware"] = "auto"
     # 제외 규칙 파일(MAIL-05). 비우면 기본 규칙(src/config/rules/mail_exclusions.toml)
     mail_rules_file: Path | None = None
+    # 처음 실행 시 자동 수집 기간(일, MAIL-04). 이후에는 마지막 수집 시각부터 증분 수집한다.
+    mail_initial_days: int = Field(default=30, ge=1, le=366)
+    # 자동 증분 수집 간격(분). 0이면 앱 시작 시 1회만 수집하고 이후는 화면 버튼으로 수집한다.
+    mail_sync_minutes: int = Field(default=10, ge=0, le=1440)
 
     # 지식 AI 어댑터(AI-08): gllm(AI-Ground) / fake(가짜, 외부 전송 없음)
     ai_adapter: Literal["gllm", "fake"] = "gllm"

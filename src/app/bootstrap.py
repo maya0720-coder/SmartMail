@@ -8,6 +8,7 @@ from typing import Final
 
 from app.container import Container
 from app.ratelimit import RateLimiter
+from app.title_rule import apply_saved_rule
 from app.web_security import new_csrf_token
 from collectors.demo_data import demo_messages
 from collectors.detect import CollectorKind, DetectionResult, detect_collector
@@ -44,8 +45,15 @@ from security.credentials import (
     PasswordAuthenticator,
 )
 from security.logging_policy import Site
+from security.login_flows import load_login_fields
 from security.residue_check import ResidueChecker
 from security.sessions import SessionStore
+from security.site_login import (
+    EntraLoginGroup,
+    EntraPasswordAuthenticator,
+    LoginProgress,
+    WikiPasswordAuthenticator,
+)
 from storage.db import Database
 from storage.knowledge_repos import (
     SqliteAiCallLog,
@@ -54,8 +62,10 @@ from storage.knowledge_repos import (
     SqlitePublishLog,
 )
 from storage.repositories import (
+    SqliteAppSettings,
     SqliteEventRecorder,
     SqliteMailRefRepository,
+    SqliteSyncState,
     SqliteTaskRepository,
 )
 from storage.retention import RetentionJob
@@ -106,16 +116,30 @@ def build_container(
     browser: BrowserRuntime | None = None,
 ) -> Container:
     clock = clock or SystemClock()
-    db = db or Database(settings.db_path)
+    # 데모 모드는 메모리 DB만 쓴다. 가상 데이터·수집 기준 시각이 실제 DB에 섞이지 않게 한다.
+    db = db or (Database.in_memory() if settings.demo_mode else Database(settings.db_path))
     browser = browser or BrowserRuntime()
     sessions = SessionStore(clock, timedelta(minutes=settings.session_idle_minutes))
 
     password: dict[Site, PasswordAuthenticator] = {}
     interactive: dict[Site, InteractiveAuthenticator] = {}
+    login_progress = LoginProgress()
     if settings.demo_mode:
         password = {site: FakePasswordAuthenticator() for site in LOGIN_SITES}
     else:
-        # ID·암호 로그인 어댑터는 사이트별 규격 확인 후 추가한다(확인 필요).
+        # 확인된 사이트는 ID·암호 자동 로그인(결정기록 0011). 그룹웨어는 규격 확인 전(보류).
+        fields = load_login_fields()
+        entra = EntraLoginGroup(browser, fields, login_progress)
+        password[Site.AIGROUND] = EntraPasswordAuthenticator(
+            entra, "ai-ground", str(settings.aiground_base_url)
+        )
+        password[Site.GKNOWLEDGE] = EntraPasswordAuthenticator(
+            entra, "g-knowledge", str(settings.gknowledge_base_url)
+        )
+        password[Site.WIKI] = WikiPasswordAuthenticator(
+            browser, str(settings.wiki_base_url), fields.wiki
+        )
+        # 자동 로그인이 안 될 때 쓰는 대안: 사이트 로그인 화면 직접 열기
         for site in LOGIN_SITES:
             if site.value in settings.browser_login_site_names:
                 interactive[site] = BrowserLoginAuthenticator(
@@ -130,6 +154,8 @@ def build_container(
         events,
         load_mail_rules(settings.mail_rules_file or DEFAULT_MAIL_RULES),
         clock,
+        sync_state=SqliteSyncState(db),
+        initial_sync_days=settings.mail_initial_days,
     )
 
     ai_adapter: KnowledgeAI
@@ -183,7 +209,8 @@ def build_container(
     history_service = HistoryService(history, tasks, mail, clock)
     search = SearchPipeline(history_service, knowledge, ai, events, SqliteLedgerRepository(db))
 
-    template = load_wiki_template()
+    app_settings = SqliteAppSettings(db)
+    template = apply_saved_rule(load_wiki_template(), app_settings)
     wiki: WikiApi
     if settings.demo_mode:
         wiki = FakeWiki()
@@ -223,4 +250,6 @@ def build_container(
         weekly=weekly,
         publish_log=publish_log,
         ledger=SqliteLedgerRepository(db),
+        app_settings=app_settings,
+        login_progress=login_progress,
     )

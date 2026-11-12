@@ -100,10 +100,14 @@ class EphemeralContext:
         return self._runtime.run(lambda: func(raw), timeout)
 
     def close(self) -> None:
-        raw, self._raw = self._raw, None
-        if raw is not None:
-            self._runtime.run(raw.close)
-            self._runtime.forget(self)
+        raw = self._raw
+        if raw is None:
+            return
+        # 닫기에 실패(예: 브라우저 스레드가 로그인 대기로 바쁨)하면 원본을 그대로 두어
+        # 앱 종료(shutdown) 때 다시 닫는다. 실패를 '닫힘'으로 표시하지 않는다(보안 검토 M2).
+        self._runtime.run(raw.close)
+        self._raw = None
+        self._runtime.forget(self)
 
 
 class BrowserRuntime:

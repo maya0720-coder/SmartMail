@@ -209,12 +209,35 @@ document.getElementById("toggle-table").addEventListener("click", (event) => {
   event.preventDefault();
   document.getElementById("m-tbl").classList.toggle("hidden");
 });
-document.getElementById("btn-collect").addEventListener("click", async () => {
-  const result = await api("POST", "/api/mail/collect", { period: "week" });
+async function loadSyncStatus() {
+  const result = await api("GET", "/api/mail/sync-status");
+  const target = document.getElementById("sync-status");
+  if (!result.ok) { target.textContent = "메일 자동 수집 상태를 읽지 못했습니다"; return; }
+  const data = result.data;
+  const every = data.interval_minutes > 0 ? data.interval_minutes + "분마다 자동 새로고침" : "자동 새로고침 꺼짐";
+  target.textContent = data.last_synced_at
+    ? "마지막 메일 수집 " + data.last_synced_at.slice(5, 16).replace("T", " ") + " (" + every + ")"
+    : "처음 실행 시 최근 " + data.initial_days + "일 메일을 자동 수집합니다";
+}
+async function collectMail(body) {
+  const result = await api("POST", "/api/mail/collect", body);
   if (!result.ok) { toast(errorText(result, "수집하지 못했습니다")); return; }
   toast("새 메일 " + result.data.new_messages + "건 · 제안 " + result.data.suggested + "건 · 제외 " + result.data.excluded_messages + "건");
+  await loadSyncStatus();
   await refresh();
+}
+document.getElementById("btn-collect").addEventListener("click", () => collectMail({ period: "sync" }));
+document.getElementById("btn-range-toggle").addEventListener("click", () => {
+  document.getElementById("range-form").classList.toggle("hidden");
 });
+document.getElementById("range-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const start = document.getElementById("range-start").value;
+  const end = document.getElementById("range-end").value;
+  if (!start || !end) { toast("시작일과 종료일을 고르세요"); return; }
+  collectMail({ period: "range", start: start, end: end });
+});
+loadSyncStatus();
 document.getElementById("btn-manual").addEventListener("click", async () => {
   const title = window.prompt("업무 제목을 입력하세요 (200자 이내)");
   if (!title) return;

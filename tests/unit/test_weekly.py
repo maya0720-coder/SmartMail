@@ -74,9 +74,9 @@ def test_wiki01_week_boundaries_and_classification(db: Database, clock: FixedClo
     assert draft.week_start == start and end - start == timedelta(days=7)
 
 
-def test_page_title_format() -> None:
+def test_wiki02_page_title_format_thursday_default() -> None:
     start = datetime(2026, 11, 12, tzinfo=KST)  # 목
-    assert TEMPLATE.page_title(start) == "ERP_261113"
+    assert TEMPLATE.page_title(start) == "ERP_261112"  # 사용자 결정 2026-11-12: 목요일
 
 
 def _draft(clock: FixedClock) -> WeeklyDraft:

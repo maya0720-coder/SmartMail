@@ -7,9 +7,18 @@ from pathlib import Path
 
 import pytest
 
+from app.bootstrap import build_container
 from domain.clock import FixedClock
-from fixtures.app_factory import BASE_URL, app_client, make_container
+from fixtures.app_factory import (
+    BASE_URL,
+    FakeBackend,
+    app_client,
+    make_container,
+    make_settings,
+)
+from security.browser import BrowserRuntime
 from security.logging_policy import configure_logging, uninstall_record_sanitizer
+from storage.db import Database
 
 
 def _creds() -> dict[str, str]:
@@ -18,7 +27,14 @@ def _creds() -> dict[str, str]:
 
 def test_auth10_credentials_never_reach_disk_or_logs(tmp_path: Path, clock: FixedClock) -> None:
     """로그인·로그아웃·종료 후 DB·로그·임시 폴더 어디에도 테스트 ID·암호가 없어야 한다."""
-    container = make_container(tmp_path, clock)
+    # 데모 모드는 메모리 DB를 쓰므로, 디스크 검사를 위해 파일 DB를 직접 넘긴다.
+    settings = make_settings(tmp_path)
+    container = build_container(
+        settings,
+        clock=clock,
+        db=Database(settings.db_path),
+        browser=BrowserRuntime(backend_factory=FakeBackend),
+    )
     configure_logging(tmp_path / "logs" / "app.log")
     creds = _creds()
     try:
@@ -78,9 +94,14 @@ def test_login_failure_generic_message(tmp_path: Path, clock: FixedClock) -> Non
     container = make_container(tmp_path, clock, demo_mode=False)
     creds = _creds()
     with app_client(container) as client:
+        # 위키는 자동 로그인 어댑터가 있다(결정기록 0011). 가짜 브라우저라 로그인은 실패한다.
         response = client.post("/api/login", json={"site": "wiki", **creds})
-    assert response.status_code == 503  # 실제 연동 규격 미확인
-    assert creds["user_id"] not in response.text
+        assert response.status_code == 401
+        assert creds["user_id"] not in response.text
+        # 그룹웨어는 규격 미확인
+        response = client.post("/api/login", json={"site": "groupware", **creds})
+        assert response.status_code == 503
+        assert creds["user_id"] not in response.text
 
 
 def test_csrf_token_required(tmp_path: Path, clock: FixedClock) -> None:

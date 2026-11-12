@@ -18,6 +18,7 @@ from domain.errors import UserInputError
 from domain.models import STATUS_LABELS, Task, TaskStatus
 from domain.weekly.sections import OwnSectionError as OwnSectionError
 from domain.weekly.sections import replace_own_section as replace_own_section
+from domain.weekly.title_rule import render_title
 from security.masking import mask
 
 MAX_ITEMS = 50
@@ -28,7 +29,7 @@ MAX_ITEM_CHARS = 300
 @dataclass(frozen=True, slots=True)
 class WikiTemplate:
     page_title_format: str = "ERP_{yymmdd}"
-    title_date_offset_days: int = 1
+    title_date_offset_days: int = 0  # 주 시작(목)과 같은 날. 사용자 결정 2026-11-12
     space_key: str = ""
     own_section_heading: str = "{name}"
     heading_done: str = "금주 실적"
@@ -38,7 +39,7 @@ class WikiTemplate:
 
     def page_title(self, week_start: datetime) -> str:
         day = (week_start + timedelta(days=self.title_date_offset_days)).astimezone(KST)
-        return self.page_title_format.replace("{yymmdd}", day.strftime("%y%m%d"))
+        return render_title(self.page_title_format, day)
 
     def heading(self, name: str) -> str:
         return self.own_section_heading.replace("{name}", name)

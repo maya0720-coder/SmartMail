@@ -1,0 +1,34 @@
+# 사이트 자동 로그인 화면 선택자(AUTH-01·09, 결정기록 0011).
+# 사용자가 앱 화면에 1회 입력한 ID·암호로 사이트 로그인 화면을 자동으로 채운다. 값은 저장하지 않는다.
+# 선택자는 Playwright CSS 선택자. 화면이 바뀌면 이 파일만 고친다.
+# concealed_input = 암호 입력칸(가려진 입력칸)의 선택자. 암호 값이 아니다.
+
+# 회사 계정(Microsoft Entra ID) — AI-Ground·G-Knowledge 공통. 2026-11-12 화면 확인
+[entra]
+host = "login.microsoftonline.com"
+email = "input[name='loginfmt']"
+concealed_input = "input[name='passwd']"
+next = "#idSIButton9"                                  # '다음'·'로그인' 공통 버튼
+kmsi_marker = "#KmsiCheckboxField"                     # '로그인 상태 유지?' 화면 표시
+kmsi_no = "#idBtn_Back"                                # 위 화면의 '아니요'(세션을 남기지 않음)
+mfa_number = "#idRichContext_DisplaySign"              # Authenticator 번호 일치 화면의 번호
+mfa_marker = "#idDiv_SAOTCAS_Title, #idDiv_SAOTCC_Title, #idDiv_SAOTCS_Title"  # 2단계 인증 화면
+error = "#usernameError, #passwordError, #idTD_Error, #service_exception_message"
+account_tile = "#tilesHolder [role='button'], #tilesHolder .table"   # 계정 선택 화면
+
+# 로그인 완료 판정: 사이트 주소로 돌아와 아래 요소가 보이면 성공
+[sites.ai-ground]
+logged_in = "#messageInput"
+
+[sites.g-knowledge]
+logged_in = "a[href='/admin/logout']"
+
+# 위키(Confluence Data Center) 자체 로그인 화면. 2026-11-12 화면 확인
+[wiki]
+path = "/login.action"
+user = "#username-field"
+concealed_input = "#password-field"
+submit = "#login-button"
+error = ".aui-message-error, .aui-message.error"
+# 로그인 확인용 API: type이 known이면 로그인됨
+current_user_api = "/rest/api/user/current"
