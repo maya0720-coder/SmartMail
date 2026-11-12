@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -14,10 +13,7 @@ from domain.models import TaskEventType
 from fixtures.synthetic import group4, synthetic_card, synthetic_rrn
 from integrations.ai.fake import FakeKnowledgeAI
 from integrations.ai.gateway import AiGateway, PayloadRejectedError, check_payload
-from integrations.ai.ground_gllm import GroundGllmAdapter
-from security.logging_policy import Site
 from security.masking import mask
-from security.sessions import SessionStore
 from storage.db import Database
 from storage.knowledge_repos import SqliteAiCallLog
 from storage.repositories import SqliteEventRecorder
@@ -93,21 +89,6 @@ def test_unexpected_adapter_error_hidden(db: Database, clock: FixedClock) -> Non
     with pytest.raises(AiUnavailableError) as info:
         gateway.classify_task(mask("확인"))
     assert "secret" not in str(info.value)
-
-
-def test_ai05_gllm_requires_login_then_reports_unconfirmed(db: Database, clock: FixedClock) -> None:
-    sessions = SessionStore(clock, timedelta(minutes=30))
-    adapter = GroundGllmAdapter("https://ai.example.invalid", sessions)
-    with pytest.raises(AiUnavailableError, match="로그인"):
-        adapter.classify_task(mask("x"))
-
-    class Native:
-        def close(self) -> None:
-            return None
-
-    sessions.open(Site.AIGROUND, Native())
-    with pytest.raises(AiUnavailableError, match="확인 필요"):
-        adapter.suggest_solution(mask("x"), [])
 
 
 @pytest.mark.slow

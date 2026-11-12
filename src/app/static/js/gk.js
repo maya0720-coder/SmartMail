@@ -2,16 +2,14 @@
 "use strict";
 
 let gkTaskId = null;
-let gkForce = false;
 let gkDone = null;
 
 async function openGkPreview(taskId, onDone) {
   const result = await api("GET", "/api/gk/preview/" + encodeURIComponent(taskId));
   if (!result.ok) { toast(errorText(result, "미리보기를 만들지 못했습니다")); return; }
   const data = result.data;
-  if (data.already_registered && !window.confirm("이미 등록한 업무입니다. 다시 등록할까요?")) return;
+  if (data.already_registered) { toast("이미 G-Knowledge에 등록한 업무입니다(중복 등록 불가)"); return; }
   gkTaskId = taskId;
-  gkForce = Boolean(data.already_registered);
   gkDone = onDone || null;
   document.getElementById("gk-title").value = data.title;
   document.getElementById("gk-body").value = data.body;
@@ -25,7 +23,6 @@ async function submitGk() {
     title: document.getElementById("gk-title").value,
     body: document.getElementById("gk-body").value,
     tags: document.getElementById("gk-tag").value.split(",").map((t) => t.trim()).filter(Boolean).slice(0, 10),
-    force: gkForce,
   };
   const send = async () => {
     const result = await api("POST", "/api/gk/register/" + encodeURIComponent(gkTaskId), payload);

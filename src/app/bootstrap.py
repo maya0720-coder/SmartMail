@@ -30,7 +30,7 @@ from domain.tasks.service import TaskService
 from domain.weekly.service import WeeklyService, WikiApi
 from integrations.ai.fake import FakeKnowledgeAI
 from integrations.ai.gateway import AiGateway
-from integrations.ai.ground_gllm import GroundGllmAdapter
+from integrations.ai.ground_browser import BrowserGllmAdapter, load_chat_fields
 from integrations.gknowledge.browser import BrowserKnowledgeStore, load_fields
 from integrations.gknowledge.fake import FakeKnowledgeStore
 from integrations.wiki.confluence import ConfluenceWiki
@@ -63,6 +63,8 @@ from storage.retention import RetentionJob
 # 사이트별 로그인 시도 제한: 1분에 5회
 LOGIN_MAX_ATTEMPTS: Final = 5
 LOGIN_WINDOW: Final = timedelta(minutes=1)
+# AI 관문 시간 초과 = 어댑터 답변 대기 + 이 여유(초)
+AI_GATEWAY_MARGIN_SECONDS: Final = 15.0
 
 
 def _site_base_url(settings: Settings, site: Site) -> str:
@@ -131,16 +133,26 @@ def build_container(
     )
 
     ai_adapter: KnowledgeAI
+    ai_timeout, ai_retries = settings.http_timeout_seconds, 1
     if settings.demo_mode or settings.ai_adapter == "fake":
         ai_adapter = FakeKnowledgeAI()
     else:
-        ai_adapter = GroundGllmAdapter(str(settings.aiground_base_url), sessions)
+        ai_adapter = BrowserGllmAdapter(
+            str(settings.aiground_base_url),
+            sessions,
+            load_chat_fields(),
+            timeout_seconds=settings.ai_timeout_seconds,
+        )
+        # 화면 자동화는 어댑터가 자체 마감 시각을 가지므로 관문 시간 초과는 그보다 길게 둔다.
+        # 보낸 내용이 AI-Ground에 저장·학습되므로 시간 초과 시 다시 보내지 않는다(결정기록 0008).
+        ai_timeout, ai_retries = settings.ai_timeout_seconds + AI_GATEWAY_MARGIN_SECONDS, 0
     ai = AiGateway(
         ai_adapter,
         SqliteAiCallLog(db),
         events,
         clock,
-        timeout_seconds=settings.http_timeout_seconds,
+        timeout_seconds=ai_timeout,
+        retries=ai_retries,
         link_bases=(
             str(settings.aiground_base_url),
             str(settings.gknowledge_base_url),

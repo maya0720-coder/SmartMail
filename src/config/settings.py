@@ -31,6 +31,9 @@ DEFAULT_RETENTION_DAYS: Final = 7
 # 외부 사이트 호출 기본 타임아웃(초).
 DEFAULT_HTTP_TIMEOUT_SECONDS: Final = 30.0
 
+# AI-Ground 답변(스트리밍) 대기 기본 시간(초). 화면 자동화라 HTTP보다 길게 둔다(결정기록 0008).
+DEFAULT_AI_TIMEOUT_SECONDS: Final = 90.0
+
 # 로컬 DB 기본 위치(추적 제외 폴더).
 DEFAULT_DB_PATH: Final = PROJECT_ROOT / "data" / "smartmail.db"
 DEFAULT_LOG_DIR: Final = PROJECT_ROOT / "logs"
@@ -100,6 +103,8 @@ class Settings(BaseSettings):
 
     # 외부 호출 타임아웃(초)
     http_timeout_seconds: float = Field(default=DEFAULT_HTTP_TIMEOUT_SECONDS, gt=0, le=300)
+    # AI-Ground 답변 대기 시간(초). 스트리밍 답변이 끝날 때까지 기다리는 상한
+    ai_timeout_seconds: float = Field(default=DEFAULT_AI_TIMEOUT_SECONDS, gt=0, le=300)
 
     @field_validator("app_host")
     @classmethod

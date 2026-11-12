@@ -125,7 +125,13 @@ class BrowserRuntime:
         return self._temp_dir
 
     def run(self, func: Callable[[], T], timeout: float | None = None) -> T:
-        return self._executor.submit(func).result(timeout or self._timeout)
+        future = self._executor.submit(func)
+        try:
+            return future.result(timeout or self._timeout)
+        except TimeoutError:
+            # 아직 시작하지 않은 작업은 취소한다(시간 초과로 끝난 요청이 나중에 실행되지 않게)
+            future.cancel()
+            raise
 
     def _ensure_backend(self) -> BrowserBackend:
         if self._backend is None:

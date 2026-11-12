@@ -33,7 +33,6 @@ class RegisterBody(BaseModel):
     tags: list[Annotated[str, Field(max_length=30)]] = Field(
         default_factory=list, max_length=MAX_TAGS
     )
-    force: bool = False  # 재등록(명시적 버튼)
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -64,7 +63,7 @@ def register(request: Request, task_id: int, body: RegisterBody) -> JSONResponse
     container = get_container(request)
     try:
         draft = draft_from_edit(body.title, body.body, body.tags)  # 사용자 수정값 재마스킹
-        task = container.knowledge.register(task_id, draft, force=body.force)
+        task = container.knowledge.register(task_id, draft)
     except TaskNotFoundError:
         return _error("요청한 항목을 찾을 수 없습니다.", 404)
     except DuplicateRegistrationError as exc:
