@@ -24,6 +24,8 @@ __all__ = ["CredentialsRequiredError"]  # 기존 import 경로 호환
 DEFAULT_LOGIN_FIELDS: Final = RULES_DIR / "login_fields.toml"
 POLL_SECONDS: Final = 0.5
 SETTLE_SECONDS: Final = 2.0  # 버튼을 누른 뒤 다음 화면으로 바뀔 때까지 기다리는 시간
+# 그룹웨어: 제출 뒤 이 시간이 지나도 로그인 화면이면 입력이 틀린 것으로 본다(다시 제출하지 않음)
+GROUPWARE_SETTLE_SECONDS: Final = 10.0
 MAX_FILLS: Final = 3  # 같은 칸을 이보다 많이 채워야 하면 입력값이 틀린 것으로 본다
 
 WRONG_INPUT: Final = "로그인하지 못했습니다. 입력 내용을 확인해 주세요."
@@ -77,10 +79,29 @@ class WikiFields:
 
 
 @dataclass(frozen=True, slots=True)
+class GroupwareFields:
+    user: str
+    concealed_placeholder: str
+    concealed_input: str
+    otp: str
+    login_path_marker: str
+
+
+class FormLoginPage(LoginPage, Protocol):
+    """자체 로그인 폼(그룹웨어)에 더 필요한 부분: 키 입력, 알림창 발생 횟수."""
+
+    def press(self, selector: str, key: str) -> None: ...
+
+    @property
+    def dialog_count(self) -> int: ...
+
+
+@dataclass(frozen=True, slots=True)
 class LoginFields:
     entra: EntraFields
     site_logged_in: dict[str, str]
     wiki: WikiFields
+    groupware: GroupwareFields
 
 
 def _section(data: dict[str, object], name: str, cls: type[Any]) -> Any:
@@ -105,7 +126,10 @@ def load_login_fields(path: Path = DEFAULT_LOGIN_FIELDS) -> LoginFields:
             raise ConfigError("login_fields: sites.*.logged_in 형식 오류")
         logged_in[str(site)] = marker.strip()
     return LoginFields(
-        _section(data, "entra", EntraFields), logged_in, _section(data, "wiki", WikiFields)
+        _section(data, "entra", EntraFields),
+        logged_in,
+        _section(data, "wiki", WikiFields),
+        _section(data, "groupware", GroupwareFields),
     )
 
 
@@ -204,6 +228,66 @@ def run_wiki_login(
             info = page.get_json(base + fields.current_user_api)
             if isinstance(info, dict) and info.get("type") == "known":
                 return
+            raise LoginFailedError(WRONG_INPUT)
+        sleep(POLL_SECONDS)
+    raise LoginFailedError(TIMEOUT)
+
+
+def run_groupware_login(
+    page: FormLoginPage,
+    base_url: str,
+    user_id: str,
+    secret: str,
+    fields: GroupwareFields,
+    *,
+    deadline: float,
+    now: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> None:
+    """그룹웨어 자체 로그인(ID는 '@도메인' 없는 아이디). 암호는 한 번만 제출한다.
+
+    성공: 같은 사이트에서 주소 경로가 로그인 화면을 벗어남.
+    실패: 알림창이 뜸, 추가 인증(OTP) 화면이 나옴, 일정 시간 뒤에도 로그인 화면에 머묾.
+    """
+    if not user_id or not secret:
+        raise CredentialsRequiredError(CREDENTIALS_REQUIRED)
+    page.goto(base_url)
+    # 다른 호스트로 넘어갔으면 입력하지 않는다(위키와 같은 규칙)
+    expected, landed = urlsplit(base_url), urlsplit(page.url)
+    if landed.scheme != "https" or landed.netloc != expected.netloc:
+        raise LoginFailedError(GENERIC_PAGE_ERROR)
+    marker = fields.login_path_marker.lower()
+    if marker not in landed.path.lower() or not page.visible(fields.user):
+        raise LoginFailedError(GENERIC_PAGE_ERROR)  # 로그인 화면이 아니면 입력하지 않는다
+
+    def still_on_login_page() -> bool:
+        current = urlsplit(page.url)
+        return (
+            current.scheme == "https"
+            and current.netloc == expected.netloc
+            and marker in current.path.lower()
+        )
+
+    page.fill(fields.user, user_id)
+    if page.visible(fields.concealed_placeholder):
+        page.click(fields.concealed_placeholder)  # 자리표시 칸을 누르면 실제 암호칸이 나온다
+    # 암호를 넣기 직전과 제출 직전에 주소를 다시 확인한다(그 사이 다른 곳으로 넘어갔으면 중단)
+    if not still_on_login_page():
+        raise LoginFailedError(GENERIC_PAGE_ERROR)
+    page.fill(fields.concealed_input, secret)
+    if not still_on_login_page():
+        raise LoginFailedError(GENERIC_PAGE_ERROR)
+    dialogs_before = page.dialog_count  # 화면을 열 때 뜬 공지 알림창은 실패로 세지 않는다
+    page.press(fields.concealed_input, "Enter")
+    settle_until = now() + GROUPWARE_SETTLE_SECONDS
+    while now() < deadline:
+        current = urlsplit(page.url)
+        on_site = current.scheme == "https" and current.netloc == expected.netloc
+        if on_site and marker not in current.path.lower():
+            return
+        if page.dialog_count > dialogs_before or page.visible(fields.otp):
+            raise LoginFailedError(WRONG_INPUT)
+        if on_site and now() >= settle_until:
             raise LoginFailedError(WRONG_INPUT)
         sleep(POLL_SECONDS)
     raise LoginFailedError(TIMEOUT)

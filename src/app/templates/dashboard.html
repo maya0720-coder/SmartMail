@@ -1,14 +1,18 @@
 {% extends "base.html" %}
-{% block content %}
+{% block head %}<link rel="stylesheet" href="{{ asset('css/reflow.css') }}">{% endblock %}
+{% block page_title %}<h2>대시보드</h2>{% endblock %}
+{% block page_sub %}<span class="page-sub" id="sync-status" title="수집 경로: {{ collector_label }} · 완료 업무는 {{ retention_days }}일 후 자동 삭제">메일 자동 수집 확인 중</span>{% endblock %}
+{% block page_tools %}
 {% set ic = asset("img/icons.svg") ~ "#i-" %}
-<div class="mhead" title="수집 경로: {{ collector_label }} · 완료 업무는 {{ retention_days }}일 후 자동 삭제">
-  <h2>대시보드</h2>
-  <span class="sync" id="sync-status">메일 자동 수집 확인 중</span>
+<div class="page-tools">
   <a href="#" class="mlink" id="toggle-table" role="button"><svg class="ic" aria-hidden="true"><use href="{{ ic }}info"></use></svg>기준 · 표로 보기</a>
   <div class="seg" id="seg" role="group" aria-label="지표 기간">
     <button data-g="year">연간</button><button data-g="half">반기</button><button data-g="quarter">분기</button><button data-g="month" class="on">월</button><button data-g="week">주</button>
   </div>
 </div>
+{% endblock %}
+{% block content %}
+{% set ic = asset("img/icons.svg") ~ "#i-" %}
 <div class="kpi-row">
   <div class="mk" id="mk"></div>
   <div class="kpi donut-card" id="status-donut" aria-label="상태 분포"></div>
@@ -20,7 +24,7 @@
     <div class="card-head">
       <h3>내 할 일</h3>
       <div class="filters seg" id="filters" role="group" aria-label="업무 상태 필터">
-        <button class="on" data-f="todo">할 일</button><button data-f="all">전체</button><button data-f="suggested">제안됨</button><button data-f="in_progress">진행 중</button><button data-f="done_candidate">완료 후보</button><button data-f="soon">기한 임박</button><button data-f="done">완료</button>
+        <button data-f="todo">할 일</button><button class="on" data-f="all">전체</button><button data-f="suggested">제안됨</button><button data-f="in_progress">진행 중</button><button data-f="done_candidate">완료 후보</button><button data-f="soon">기한 임박</button><button data-f="done">완료</button>
       </div>
       <div class="head-tools">
         <button class="icon-btn" id="btn-collect" type="button" aria-label="메일 새로고침" title="메일 새로고침"><svg class="ic" aria-hidden="true"><use href="{{ ic }}refresh-cw"></use></svg></button>
@@ -50,16 +54,27 @@
     <div class="bulk" id="bulk" role="toolbar" aria-label="선택한 업무 일괄 작업"></div>
     <div class="pg"><span id="todo-info" class="pg-info"></span><nav class="pager" id="todo-pager" aria-label="내 할 일 페이지"></nav></div>
   </section>
+  <div class="splitter" id="split-detail" role="separator" aria-orientation="vertical" tabindex="0" aria-controls="detail" aria-label="업무 상세 패널 크기 조절" title="끌어서 크기 조절 · 더블클릭: 기본 폭"></div>
   <aside class="card detail" id="detail" aria-label="업무 상세">
     <button type="button" class="d-close" id="d-close" aria-label="상세 닫기"><svg class="ic" aria-hidden="true"><use href="{{ ic }}x"></use></svg></button>
     <div class="d-body" id="d-body"></div>
     <div class="d-foot" id="d-foot"></div>
   </aside>
 </div>
-<div class="scrim" id="scrim" aria-hidden="true"></div>
 {% endblock %}
+{% block overlays %}<div class="scrim" id="scrim" aria-hidden="true"></div>{% endblock %}
 {% block modals %}
+{% set ic = asset("img/icons.svg") ~ "#i-" %}
 {% include "partials/gk_modal.html" %}
+<!-- 원본 메일 보기(MAIL-08~10): 저장하지 않고 열 때마다 원본에서 다시 읽어 넓은 모달로 표시 -->
+<div class="dim" id="dlg-mail" role="dialog" aria-modal="true" aria-labelledby="mail-head">
+  <div class="modal xl mail-modal">
+    <button type="button" class="mail-x" id="mail-close" aria-label="원본 닫기"><svg class="ic" aria-hidden="true"><use href="{{ ic }}x"></use></svg></button>
+    <h3 id="mail-head">원본 메일</h3>
+    <div class="mail-view" id="mail-body"></div>
+    <div class="m-actions" id="mail-foot"></div>
+  </div>
+</div>
 <!-- 지표 표로 보기(화면을 밀어내지 않도록 모달) -->
 <div class="dim" id="dlg-mtbl" role="dialog" aria-modal="true" aria-labelledby="mtbl-head">
   <div class="modal wide">
@@ -71,6 +86,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="{{ asset('js/splitter.js') }}"></script>
 <script src="{{ asset('js/charts.js') }}"></script>
 <script src="{{ asset('js/gk.js') }}"></script>
 <script src="{{ asset('js/todo_list.js') }}"></script>

@@ -98,9 +98,9 @@ def test_login_failure_generic_message(tmp_path: Path, clock: FixedClock) -> Non
         response = client.post("/api/login", json={"site": "wiki", **creds})
         assert response.status_code == 401
         assert creds["user_id"] not in response.text
-        # 그룹웨어는 규격 미확인
+        # 그룹웨어도 자동 로그인 어댑터가 있다(결정기록 0017). 가짜 브라우저라 로그인은 실패한다.
         response = client.post("/api/login", json={"site": "groupware", **creds})
-        assert response.status_code == 503
+        assert response.status_code == 401
         assert creds["user_id"] not in response.text
 
 

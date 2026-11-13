@@ -120,12 +120,21 @@ def logout_all(request: Request) -> JSONResponse:
 @router.get("/connections")
 def connections(request: Request) -> JSONResponse:
     container = get_container(request)
+    settings = container.settings
+    # 상태 칩을 누르면 여는 사이트 주소(설정에서 검증한 https 주소, 자격증명·쿼리 없음)
+    site_urls = {
+        Site.WIKI: str(settings.wiki_base_url),
+        Site.GKNOWLEDGE: str(settings.gknowledge_base_url),
+        Site.AIGROUND: str(settings.aiground_base_url),
+        Site.GROUPWARE: str(settings.groupware_mail_base_url),
+    }
     return JSONResponse(
         [
             {
                 "site": status.site.value,
                 "logged_in": status.logged_in,
                 "browser_login": container.login.uses_browser_login(status.site),
+                "url": site_urls.get(status.site, ""),
             }
             for status in container.sessions.status()
         ]

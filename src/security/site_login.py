@@ -21,9 +21,11 @@ from security.browser import BrowserRuntime, EphemeralContext
 from security.credentials import LoginFailedError
 from security.login_flows import (
     EntraFields,
+    GroupwareFields,
     LoginFields,
     WikiFields,
     run_entra_login,
+    run_groupware_login,
     run_wiki_login,
 )
 from security.sessions import NativeSession
@@ -67,6 +69,26 @@ class PlaywrightLoginPage:
     def get_json(self, url: str) -> Any:
         response = self._context.request.get(url, timeout=PAGE_TIMEOUT_MS, max_redirects=0)
         return response.json() if response.ok else None
+
+
+class PlaywrightFormLoginPage(PlaywrightLoginPage):
+    """자체 로그인 폼용: 키 입력과 알림창 횟수. 알림창 글자는 읽지 않고 닫기만 한다."""
+
+    def __init__(self, page: Any, context: Any) -> None:
+        super().__init__(page, context)
+        self._dialogs = 0
+        page.on("dialog", self._on_dialog)
+
+    def _on_dialog(self, dialog: Any) -> None:
+        self._dialogs += 1
+        dialog.dismiss()
+
+    @property
+    def dialog_count(self) -> int:
+        return self._dialogs
+
+    def press(self, selector: str, key: str) -> None:
+        self._page.locator(selector).first.press(key, timeout=ACTION_TIMEOUT_MS)
 
 
 class LoginProgress:
@@ -247,6 +269,54 @@ class WikiPasswordAuthenticator:
                 run_wiki_login(
                     PlaywrightLoginPage(page, raw),
                     self._origin,
+                    user_id.decode("utf-8"),
+                    secret.decode("utf-8"),
+                    self._fields,
+                    deadline=deadline,
+                    now=time.monotonic,
+                    sleep=time.sleep,
+                )
+            finally:
+                page.close()
+
+        try:
+            context.call(drive, timeout=self._wait + CALL_MARGIN_SECONDS)
+        except Exception:
+            context.close()
+            raise
+        return context
+
+
+class GroupwarePasswordAuthenticator:
+    """그룹웨어 자체 로그인 화면을 채운다(ID는 '@도메인' 없는 아이디).
+
+    위키처럼 별도 비저장 컨텍스트를 쓴다.
+    """
+
+    supports_sso = False
+
+    def __init__(
+        self,
+        runtime: BrowserRuntime,
+        base_url: str,
+        fields: GroupwareFields,
+        wait_seconds: float = 60.0,
+    ) -> None:
+        self._runtime = runtime
+        self._base_url = base_url
+        self._fields = fields
+        self._wait = wait_seconds
+
+    def authenticate(self, user_id: bytearray, secret: bytearray) -> NativeSession:
+        context = self._runtime.open_context(headless=True)
+        deadline = time.monotonic() + self._wait
+
+        def drive(raw: Any) -> None:
+            page = raw.new_page()
+            try:
+                run_groupware_login(
+                    PlaywrightFormLoginPage(page, raw),
+                    self._base_url,
                     user_id.decode("utf-8"),
                     secret.decode("utf-8"),
                     self._fields,

@@ -143,6 +143,15 @@ def test_auth05_entra_sso_without_credentials() -> None:
         _entra(FakeEntraPage(), "", "")  # 입력 화면이 나오면 입력 요구
 
 
+@pytest.mark.parametrize("selector", [E.email, E.concealed_input])
+def test_auth01_entra_input_selectors_skip_hidden_decoys(selector: str) -> None:
+    """회귀: Entra 이메일 화면에는 화면 밖 암호칸(aria-hidden)이 함께 있다.
+
+    이 칸을 '보임'으로 판정하면 이메일보다 암호를 먼저 제출해 로그인이 실패한다.
+    """
+    assert ":not([aria-hidden='true'])" in selector
+
+
 def test_auth01_entra_timeout() -> None:
     page = FakeEntraPage(mfa_polls=10_000)  # 승인하지 않음
     with pytest.raises(LoginFailedError):
@@ -290,12 +299,17 @@ def test_auth01_login_all_api(tmp_path: Path, clock: FixedClock) -> None:
         pending = client.get("/api/login/pending").json()
         assert pending["need_company"] and pending["need_wiki"]
         assert pending["account_domain"] == "golfzon.com" and pending["dismissed"] is False
-        assert "groupware" not in pending["sites"]
+        assert "groupware" in pending["sites"]  # 그룹웨어도 일괄 로그인 대상(결정기록 0017)
         body = {"user_id": "tester01", "pass" + "word": value}
         done = client.post("/api/login/all", json=body)
         assert value not in done.text and "tester01" not in done.text
         assert all(r["logged_in"] for r in done.json()["results"])
-        assert {r["site"] for r in done.json()["results"]} == {"ai-ground", "g-knowledge", "wiki"}
+        assert {r["site"] for r in done.json()["results"]} == {
+            "ai-ground",
+            "g-knowledge",
+            "wiki",
+            "groupware",
+        }
         # 이미 로그인된 사이트는 다시 묻지 않는다
         assert client.get("/api/login/pending").json()["sites"] == []
         assert client.post("/api/login/all", json={}).json()["results"] == []

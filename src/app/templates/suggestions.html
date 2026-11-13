@@ -1,29 +1,32 @@
 {% extends "base.html" %}
 {% block head %}<link rel="stylesheet" href="{{ asset('css/triage.css') }}">{% endblock %}
+{% block page_title %}<h2>제안된 업무</h2>{% endblock %}
+{% block page_sub %}
+<span class="tr-count" id="tr-count">불러오는 중…</span>
+<span class="tr-progress" id="tr-progress" role="progressbar" aria-label="오늘 정리 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tr-progress-bar"></i></span>
+<button type="button" class="tr-snoozed hidden" id="tr-snoozed" aria-expanded="false"></button>
+{% endblock %}
+{% block page_tools %}
+<div class="page-tools">
+  <div class="filters seg" id="tr-tabs" role="group" aria-label="제안 거르기"></div>
+  <button type="button" class="btn sm tr-quick-btn" id="tr-quick-btn" title="빠른 정리 (Q)">⚡ 빠른 정리 <kbd>Q</kbd></button>
+</div>
+{% endblock %}
 {% block content %}
 {% set ic = asset("img/icons.svg") ~ "#i-" %}
 <!-- 제안된 업무 트리아지(결정기록 0015): 왼쪽 목록 + 오른쪽 근거 메일, 결정 3종(할 일로·나중에·업무 아님) -->
-<div class="tr-head">
-  <h2>제안된 업무</h2>
-  <span class="tr-count" id="tr-count">불러오는 중…</span>
-  <span class="tr-progress" id="tr-progress" role="progressbar" aria-label="오늘 정리 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tr-progress-bar"></i></span>
-  <button type="button" class="tr-snoozed hidden" id="tr-snoozed" aria-expanded="false"></button>
-  <div class="filters seg" id="tr-tabs" role="group" aria-label="제안 거르기"></div>
-  <span class="tr-keys" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>A</kbd> 할 일로 · <kbd>S</kbd> 나중에 · <kbd>D</kbd> 업무 아님 · <kbd>E</kbd> 제목 고치기</span>
-  <button type="button" class="btn sm tr-quick-btn" id="tr-quick-btn" title="빠른 정리 (Q)">⚡ 빠른 정리 <kbd>Q</kbd></button>
-</div>
 <div class="sum-bar" id="sum-bar" aria-live="polite">
   <svg class="ic" aria-hidden="true"><use href="{{ ic }}sparkles"></use></svg>
   <span id="sum-text">요청 요약 상태 확인 중</span>
   <button class="btn sm ai" id="sum-run" type="button">AI로 일괄 요약</button>
 </div>
 <div class="triage">
-  <section class="card tr-list" aria-label="제안 목록">
+  <section class="card tr-list" id="tr-list" aria-label="제안 목록">
     <ul class="tr-items" id="tr-items" role="listbox" aria-label="제안된 업무 (↑↓ 이동)" tabindex="0"></ul>
   </section>
+  <div class="splitter" id="split-list" role="separator" aria-orientation="vertical" tabindex="0" aria-controls="tr-list" aria-label="제안 목록 패널 크기 조절" title="끌어서 크기 조절 · 더블클릭: 기본 폭"></div>
   <section class="card tr-detail" id="tr-detail" aria-label="제안 상세" aria-live="polite"></section>
 </div>
-<div class="scrim tr-scrim" id="tr-scrim" aria-hidden="true"></div>
 <!-- 빠른 정리 모드(B안): 같은 목록을 카드 대기열로. → 할 일로 · ← 업무 아님 · ↓ 나중에 -->
 <section class="quick hidden" id="tr-quick" aria-label="빠른 정리" aria-live="polite">
   <aside class="card q-side">
@@ -34,7 +37,9 @@
   <div class="q-main" id="q-main"></div>
 </section>
 {% endblock %}
+{% block overlays %}<div class="scrim tr-scrim" id="tr-scrim" aria-hidden="true"></div>{% endblock %}
 {% block scripts %}
+<script src="{{ asset('js/splitter.js') }}"></script>
 <script src="{{ asset('js/triage_list.js') }}"></script>
 <script src="{{ asset('js/triage_detail.js') }}"></script>
 <script src="{{ asset('js/triage_quick.js') }}"></script>

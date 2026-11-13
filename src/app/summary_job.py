@@ -2,8 +2,9 @@
 
 - AI-Ground에 로그인돼 있을 때만 실행한다(가짜 AI·데모는 항상).
   로그인 전에는 호출 실패를 쌓지 않는다.
-- 한 번에 몇 묶음만 처리해 AI-Ground 호출 상한(10분당 20회)을 넘지 않게 하고,
-  남은 것은 다음 주기에 한다.
+- 한 번 실행하면 남은 묶음을 호출 상한(10분당 20회)에 닿을 때까지 이어서 처리한다.
+  상한에 닿거나(어댑터가 TOO_MANY_CALLS를 올림) 남은 것이 없으면 멈추고, 다음 주기에 이어서 한다.
+  호출 간격·상한은 어댑터가 지키므로 여기서 2분 간격으로 끊지 않는다(결정기록 0018).
 - 같은 시각에 하나만 실행한다. 진행 상태는 메모리에만 둔다.
 """
 
@@ -20,8 +21,10 @@ from security.sessions import SessionStore
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_INTERVAL_SECONDS: Final = 120  # 주기(2분)
-BATCHES_PER_RUN: Final = 3  # 주기당 최대 3회 호출(= 10분당 15회 이하)
+SUMMARY_INTERVAL_SECONDS: Final = 120  # 남은 것을 이어서 처리하려고 다시 깨어나는 주기(2분)
+# 한 번 실행에서 이어서 처리할 최대 묶음 수. AI-Ground 호출 상한(10분당 20회)에 맞춰,
+# 밀린 요약을 한 번에 연속으로 처리하고 상한에 닿으면 어댑터가 멈춘다(결정기록 0018).
+BATCHES_PER_RUN: Final = 20
 LOGIN_REQUIRED: Final = "AI-Ground에 로그인하면 요청 요약을 만듭니다."
 
 

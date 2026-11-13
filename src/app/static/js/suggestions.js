@@ -32,3 +32,7 @@ document.getElementById("sum-run").addEventListener("click", async () => {
 
 loadSummaryStatus();
 loadTriage();
+
+// 제안 목록 패널 크기 조절(결정기록 0016)
+initSplitter({ handle: document.getElementById("split-list"), panel: document.getElementById("tr-list"), other: document.getElementById("tr-detail"),
+  cssVar: "--tr-list-w", prefKey: "triage_list_w", side: "left", min: 280, max: 560, otherMin: 520 });

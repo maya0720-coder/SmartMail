@@ -1,0 +1,44 @@
+/* 화면 공통 골격(결정기록 0016, 디자인 명세 designMD/06): 제목 영역 · 본문 · 화면 고정형
+   간격 토큰(--page-x 등)은 app.css :root에 있다. 인라인 스타일 금지(CSP) */
+
+/* ---------- 제목 영역: 제목 · 보조 설명(한 줄, 말줄임) · 오른쪽 도구 ---------- */
+.page-head{display:flex;align-items:center;gap:12px;min-height:var(--head-h);margin-bottom:var(--head-gap)}
+.page-head h2{margin:0;white-space:nowrap}
+.page-sub{flex:1;min-width:0;font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.page-tools{display:flex;align-items:center;gap:12px;margin-left:auto;flex:none}
+
+/* ---------- 본문: 카드 사이 간격은 모두 --gap ---------- */
+.page-body{display:flex;flex-direction:column;gap:var(--gap);min-width:0}
+.page-body > *{min-width:0}
+#hist-module{margin-bottom:var(--gap)}
+/* 설정 카드는 읽기 편한 폭으로, 본문 왼쪽 선에 맞춘다 */
+body[data-page="settings"] .page-body > .card{width:100%;max-width:960px}
+
+/* ---------- 화면 고정형(대시보드·제안된 업무): 페이지 스크롤 없이 화면 아래까지 ---------- */
+@media (min-width:1025px) and (min-height:700px){
+  body:is([data-page="dashboard"],[data-page="suggestions"]){height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+  body:is([data-page="dashboard"],[data-page="suggestions"]) .topnav{flex:none}
+  body:is([data-page="dashboard"],[data-page="suggestions"]) main{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;padding-bottom:var(--page-bottom)}
+  body:is([data-page="dashboard"],[data-page="suggestions"]) .page-head{flex:none}
+  body:is([data-page="dashboard"],[data-page="suggestions"]) .page-body{flex:1;min-height:0}
+}
+
+/* ---------- 패널 크기 조절 손잡이(격자의 가운데 칸, 폭 --gap) ---------- */
+.splitter{position:relative;align-self:stretch;min-height:48px;cursor:col-resize;touch-action:none;border-radius:6px;outline-offset:-3px}
+.splitter::before{content:"";position:absolute;top:8px;bottom:8px;left:calc(50% - 1px);width:2px;border-radius:2px;background:var(--accent);opacity:0;transition:opacity .15s}
+.splitter::after{content:"";position:absolute;top:calc(50% - 12px);left:calc(50% - 3px);width:6px;height:24px;border-radius:3px;opacity:0;transition:opacity .15s;
+  background:radial-gradient(circle,var(--card) 1.1px,transparent 1.5px) center/6px 8px repeat-y,var(--accent)}
+.splitter:hover::before,.splitter:hover::after,.splitter:focus-visible::before,.splitter:focus-visible::after,
+.resizing .splitter::before,.resizing .splitter::after{opacity:1}
+/* 끄는 동안: 글자 선택 방지, 커서 고정, 패널 전환 효과 끔 */
+body.resizing{user-select:none;-webkit-user-select:none}
+body.resizing *{cursor:col-resize !important;transition:none !important}
+@media (max-width:1100px){ .grid2 > .splitter{display:none} }
+@media (max-width:900px){ .triage > .splitter{display:none} }
+
+/* ---------- 좁은 화면 ---------- */
+@media (max-width:720px){
+  .page-head{flex-wrap:wrap}
+  .page-sub{flex-basis:100%;order:3}
+  .page-tools{flex-wrap:wrap}
+}

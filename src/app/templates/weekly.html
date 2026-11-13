@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% block page_title %}<h2 id="wk-title">주간보고 초안</h2>{% endblock %}
+{% block page_sub %}{% set wk_desc = "위키 주간보고 양식에 맞춘 초안입니다(한 줄에 한 항목). 내용을 고친 뒤 미리보기·승인하면 위키의 본인 영역만 갱신합니다." %}<span class="page-sub" title="{{ wk_desc }}">{{ wk_desc }}</span>{% endblock %}
+{% block page_tools %}
+<div class="page-tools">
+  <ol class="steps" id="wk-steps" aria-label="게시 단계">
+    <li data-step="1" class="now">편집</li><li data-step="2">미리보기</li><li data-step="3">승인 후 위키 게시</li>
+  </ol>
+</div>
+{% endblock %}
 {% block content %}
-<h2 id="wk-title">주간보고 초안</h2>
-<p class="desc">위키 주간보고 양식에 맞춘 초안입니다(한 줄에 한 항목). 내용을 고친 뒤 미리보기·승인하면 위키의 본인 영역만 갱신합니다.</p>
 <div class="card">
   <div class="weekly">
     <div class="col"><h4><label for="wk-done">금주 실적</label><span class="cnt" id="wk-done-cnt">0건</span></h4><textarea id="wk-done" maxlength="15000"></textarea></div>
@@ -9,9 +16,6 @@
     <div class="col"><h4><label for="wk-issues">이슈·요청 사항</label><span class="cnt" id="wk-issues-cnt">0건</span></h4><textarea id="wk-issues" maxlength="15000"></textarea></div>
   </div>
   <div class="wk-bar">
-    <ol class="steps" id="wk-steps" aria-label="게시 단계">
-      <li data-step="1" class="now">편집</li><li data-step="2">미리보기</li><li data-step="3">승인 후 위키 게시</li>
-    </ol>
     <div class="actions tight">
       <button class="btn" id="btn-redraft">초안 다시 만들기</button>
       <button class="btn" id="btn-preview">미리보기</button>
@@ -20,7 +24,7 @@
   </div>
   <div class="preview-box hidden" id="wk-preview"></div>
 </div>
-<div class="card mt16">
+<div class="card">
   <h3>게시 이력</h3>
   <div id="wk-history"><div class="empty">게시 이력이 없습니다.</div></div>
 </div>

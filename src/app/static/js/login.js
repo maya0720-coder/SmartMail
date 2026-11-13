@@ -134,8 +134,11 @@ async function renderConnections() {
   if (!box) return;
   const result = await api("GET", "/api/connections");
   if (!result.ok) return;
-  box.replaceChildren(...result.data.map((item) => el("span",
-    { class: "chip dot" + (item.logged_in ? " on" : ""), title: item.logged_in ? "로그인됨" : "로그인 안 됨" },
+  // 상태 칩을 누르면 해당 사이트를 새 탭으로 연다(https 주소만: el()이 검사한다)
+  box.replaceChildren(...result.data.map((item) => el(item.url ? "a" : "span",
+    { class: "chip dot" + (item.logged_in ? " on" : ""), href: item.url || null, target: item.url ? "_blank" : null,
+      rel: item.url ? "noopener noreferrer" : null,
+      title: (item.logged_in ? "로그인됨" : "로그인 안 됨") + (item.url ? " · 누르면 사이트 열기" : "") },
     SITE_LABELS[item.site] || item.site)));
   document.dispatchEvent(new CustomEvent("connections", { detail: result.data }));
 }

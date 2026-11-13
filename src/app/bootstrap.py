@@ -63,6 +63,7 @@ from security.sessions import SessionStore
 from security.site_login import (
     EntraLoginGroup,
     EntraPasswordAuthenticator,
+    GroupwarePasswordAuthenticator,
     LoginProgress,
     WikiPasswordAuthenticator,
 )
@@ -142,7 +143,7 @@ def build_container(
     if settings.demo_mode:
         password = {site: FakePasswordAuthenticator() for site in LOGIN_SITES}
     else:
-        # 확인된 사이트는 ID·암호 자동 로그인(결정기록 0011). 그룹웨어는 규격 확인 전(보류).
+        # 확인된 사이트는 ID·암호 자동 로그인(결정기록 0011). 그룹웨어는 로그인만(결정기록 0017).
         fields = login_fields
         entra = EntraLoginGroup(browser, fields, login_progress)
         password[Site.AIGROUND] = EntraPasswordAuthenticator(
@@ -153,6 +154,9 @@ def build_container(
         )
         password[Site.WIKI] = WikiPasswordAuthenticator(
             browser, str(settings.wiki_base_url), fields.wiki
+        )
+        password[Site.GROUPWARE] = GroupwarePasswordAuthenticator(
+            browser, str(settings.groupware_mail_base_url), fields.groupware
         )
         # 자동 로그인이 안 될 때 쓰는 대안: 사이트 로그인 화면 직접 열기
         for site in LOGIN_SITES:

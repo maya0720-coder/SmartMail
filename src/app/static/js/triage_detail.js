@@ -112,7 +112,9 @@ async function renderTriageDetail(task) {
     el("div", { class: "tr-actions" },
       el("button", { type: "button", class: "btn primary", id: "tr-approve", onclick: () => decideTriage("approve") }, icon("check"), "할 일로", el("kbd", {}, "A")),
       el("button", { type: "button", class: "btn", id: "tr-snooze", onclick: () => decideTriage("snooze") }, icon("calendar-range"), "나중에", el("kbd", {}, "S")),
-      el("button", { type: "button", class: "btn ghost", id: "tr-dismiss", onclick: () => decideTriage("dismiss") }, "업무 아님", el("kbd", {}, "D"))));
+      el("button", { type: "button", class: "btn ghost", id: "tr-dismiss", onclick: () => decideTriage("dismiss") }, "업무 아님", el("kbd", {}, "D")),
+      // 단축키 안내: 제목 줄에서 옮김(결정기록 0016)
+      el("span", { class: "tr-keys", "aria-hidden": "true" }, el("kbd", {}, "↑"), el("kbd", {}, "↓"), " 이동 · ", el("kbd", {}, "E"), " 제목 고치기")));
   const [ctx, past] = await Promise.all([
     api("GET", "/api/tasks/" + task.id + "/context"),
     api("GET", "/api/history?days=7&q=" + encodeURIComponent(task.title.slice(0, 40))),

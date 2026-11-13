@@ -1,11 +1,13 @@
 /* 제안된 업무 트리아지 화면 전용 스타일(결정기록 0015). 토큰은 app.css를 따른다. 인라인 스타일 금지(CSP) */
 /* 제안된 업무 트리아지(결정기록 0015): 목록 380px + 상세 */
-.tr-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
-.tr-head h2{margin:0}
-.tr-count{font-size:12.5px;color:var(--sub);font-weight:600}
-.tr-keys{margin-left:auto;font-size:11.5px;color:var(--muted)}
+/* 제목 영역은 공통 골격(layout.css .page-head). 한 줄: 제목 · 건수 · 진행 막대 · 나중에 …… 탭 · 빠른 정리 */
+.tr-count{font-size:12.5px;color:var(--sub);font-weight:600;white-space:nowrap}
+.tr-keys{margin-left:auto;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .tr-keys kbd{margin:0 1px}
-.triage{display:grid;grid-template-columns:380px minmax(0,1fr);gap:12px;align-items:start}
+.sum-bar{flex:none;flex-wrap:nowrap;min-height:36px;padding-block:3px}
+.sum-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:root{--tr-list-w:380px}
+.triage{display:grid;grid-template-columns:var(--tr-list-w) var(--gap) minmax(0,1fr);align-items:start}
 .tr-list{padding:0;overflow:hidden}
 .tr-items{list-style:none;margin:0;padding:0;max-height:calc(100dvh - 230px);overflow:auto}
 .tr-items:focus-visible{outline-offset:-2px}
@@ -67,13 +69,57 @@ mark{background:#fef08a;color:inherit;border-radius:3px;padding:0 2px}
 .tr-progress i{display:block;height:100%;width:0;background:var(--success);transition:width .3s}
 .tr-snoozed{border:0;background:transparent;color:var(--sub);font-size:12px;font-weight:600;padding:2px 4px;border-radius:6px;cursor:pointer}
 .tr-snoozed:hover{background:var(--soft);color:var(--fg)}
-#tr-tabs{flex-basis:100%}
+.tr-snoozed{white-space:nowrap}
+#tr-tabs{flex-wrap:nowrap}
+/* 화면 고정형(결정기록 0016): 목록과 상세가 화면 아래까지 차고 각자 안에서 스크롤 */
+@media (min-width:1025px) and (min-height:700px){
+  .triage,.quick{flex:1;min-height:0}
+  .triage{align-items:stretch}
+  .tr-list{display:flex;flex-direction:column;min-height:0}
+  .tr-items{flex:1;min-height:0;max-height:none}
+  .tr-detail{min-height:0;overflow:auto}
+  .quick{overflow:auto}
+}
+/* 1100px 이하: 탭과 빠른 정리는 둘째 줄 */
+@media (max-width:1100px){
+  body[data-page="suggestions"] .page-head{flex-wrap:wrap}
+  body[data-page="suggestions"] .page-tools{flex-basis:100%;margin-left:0;flex-wrap:wrap}
+  #tr-tabs{flex-wrap:wrap}
+}
 .tr-group{list-style:none;position:sticky;top:0;z-index:1;padding:6px 12px;font-size:11px;font-weight:700;color:var(--muted);background:var(--card);border-bottom:1px solid var(--line-soft)}
 .tr-group-empty{list-style:none;padding:20px 12px;font-size:12px;color:var(--muted);text-align:center}
 .tr-item.snoozed{opacity:.75}
 .tr-close{display:none}
 .tr-fields{grid-template-columns:repeat(4,minmax(0,1fr))}
-@media (max-width:1280px){.tr-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* 폭에 맞춘 재배치(결정기록 0016, 명세 06 4-4·4-5): 화면 폭이 아니라 패널 폭 기준. 기준값은 패널 폭에서 테두리·안쪽 여백을 뺀 값 */
+.tr-list{container:trlist / inline-size}
+.tr-detail{container:trdetail / inline-size}
+.tr-line2 .tm{white-space:nowrap}
+mark{-webkit-box-decoration-break:clone;box-decoration-break:clone}
+/* 목록 좁음(280~339px): 제목 2줄, 구분·기한 칩만, 받은 시각은 날짜만 */
+@container trlist (max-width:337px){
+  .tr-line1{align-items:flex-start}
+  .tr-title{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .tr-line2 .dept,.tr-line2 .thr,.tm.has-date .tm-t{display:none}
+}
+/* 목록 넓음(460px 이상): 한 줄 배치(제목 · 구분 · 기한 · 부서 · 받은 시각 · 확신도), 행 높이 44px */
+@container trlist (min-width:458px){
+  .tr-item{display:flex;align-items:center;gap:8px;min-height:44px;padding-block:6px}
+  .tr-line1,.tr-line2{display:contents}
+  .tr-title{flex:1 1 0}
+  .tr-item .tchip,.tr-item .thr,.tr-item .tm,.tr-item .conf{flex:none}
+  .tr-item .dept{flex:0 1 auto;min-width:0;max-width:96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tr-item .dept,.tr-item .thr,.tr-item .tm{font-size:11.5px;color:var(--sub)}
+  .tr-item .tm{margin-left:0;color:var(--muted)}
+  .tr-item .conf{order:9}
+}
+/* 상세 640~899px: 필드 2×2 / 520~639px: 1열, 버튼 줄바꿈, 단축키 안내 숨김 */
+@container trdetail (max-width:871px){.tr-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container trdetail (max-width:611px){
+  .tr-fields{grid-template-columns:minmax(0,1fr)}
+  .tr-actions{flex-wrap:wrap}
+  .tr-actions .tr-keys{display:none}
+}
 @media (prefers-reduced-motion:reduce){.tr-item,.tr-progress i,.tr-detail{transition:none!important}}
 @media (max-width:900px){
   .triage{grid-template-columns:minmax(0,1fr)}
@@ -90,7 +136,7 @@ mark{background:#fef08a;color:inherit;border-radius:3px;padding:0 2px}
 }
 /* 3단계: 빠른 정리 모드(B안) */
 .tr-quick-btn kbd{margin-left:4px}
-.quick-on .triage,.quick-on .sum-bar,.quick-on #tr-tabs,.quick-on .tr-keys{display:none}
+.quick-on .triage,.quick-on .sum-bar,.quick-on #tr-tabs{display:none}
 .quick{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;align-items:start}
 .q-side{display:flex;flex-direction:column;gap:10px}
 .q-tally-h,.q-queue-h{font-size:11px;font-weight:700;color:var(--muted)}

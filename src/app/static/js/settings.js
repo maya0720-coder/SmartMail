@@ -12,7 +12,9 @@ function renderSiteRows(items) {
         } }, "로그아웃")
       : el("button", { class: "btn sm primary", onclick: () => requireLogin(item.site) }, "로그인");
     return el("div", { class: "set-row" },
-      el("div", {}, el("div", { class: "k" }, label),
+      el("div", {}, el("div", { class: "k" }, item.url
+        ? el("a", { class: "site-link", href: item.url, target: "_blank", rel: "noopener noreferrer", title: label + " 사이트 열기" }, label, icon("chevron-right"))
+        : label),
         el("div", { class: "s" }, item.logged_in ? "로그인됨 (세션은 메모리에만 유지)" : "로그인 안 됨",
           item.browser_login ? " · 사이트 로그인 화면 사용(2단계 인증·SSO)" : "")),
       action);
@@ -32,6 +34,13 @@ document.getElementById("btn-wipe").addEventListener("click", async () => {
   const result = await api("POST", "/api/data/wipe", { confirm: true });
   toast(result.ok ? "로컬 데이터를 모두 지웠습니다" : errorText(result, "삭제하지 못했습니다"));
   loadRuleCount();
+});
+
+// 화면 배치(패널 폭) 초기화(결정기록 0016)
+document.getElementById("btn-ui-reset").addEventListener("click", async () => {
+  const result = await api("DELETE", "/api/ui-prefs");
+  if (result.ok) for (const cssVar of ["--detail-w", "--tr-list-w"]) document.documentElement.style.removeProperty(cssVar);
+  toast(result.ok ? "화면 배치를 기본값으로 되돌렸습니다" : errorText(result, "초기화하지 못했습니다"), { kind: result.ok ? "ok" : "error" });
 });
 
 // '업무 아님' 학습 규칙 수·초기화(결정기록 0015)

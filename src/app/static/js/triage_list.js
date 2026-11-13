@@ -104,8 +104,15 @@ function itemNode(task, snoozedItem) {
     el("div", { class: "tr-line2" }, categoryChip(task), dueChip(task),
       task.requester_dept ? el("span", { class: "dept" }, task.requester_dept) : null,
       task.thread_count >= 2 ? el("span", { class: "thr", title: "대화 " + task.thread_count + "통" }, icon("mail"), String(task.thread_count)) : null,
-      snoozedItem && task.snooze_until ? el("span", { class: "tm" }, "다시 보임 " + receivedLabel(task.snooze_until))
-        : el("span", { class: "tm" }, receivedLabel(task.requested_at))));
+      snoozedItem && task.snooze_until ? receivedNode(task.snooze_until, "다시 보임 ") : receivedNode(task.requested_at, "")));
+}
+
+// 받은 시각: 날짜와 시각을 나눠 둔다(목록이 좁으면 날짜만 보여 줄바꿈을 막는다, triage.css)
+function receivedNode(iso, prefix) {
+  const label = receivedLabel(iso);
+  const hasDate = label.includes(" ");
+  return el("span", { class: "tm" + (hasDate ? " has-date" : "") }, prefix,
+    hasDate ? el("span", { class: "tm-d" }, label.split(" ")[0]) : null, el("span", { class: "tm-t" }, (hasDate ? " " : "") + label.split(" ").pop()));
 }
 
 function renderItems() {

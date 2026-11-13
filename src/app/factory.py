@@ -27,6 +27,7 @@ from app.routes import (
     tasks,
     title_rule,
     triage,
+    ui_prefs,
     weekly,
 )
 from app.scheduler import PeriodicJob
@@ -117,6 +118,7 @@ def create_app(
     app.include_router(gk.router)
     app.include_router(history.router)
     app.include_router(title_rule.router)
+    app.include_router(ui_prefs.router)
     app.include_router(weekly.router)
     app.include_router(metrics.router)
     app.include_router(pages.router)

@@ -4,8 +4,9 @@
 
 let currentGrain = "month";
 let allTasks = [];
-// 기본 필터: 할 일(제안됨·무시 제외). 제안은 '제안된 업무' 화면에서 정리한다(점검 D3)
-let currentFilter = "todo";
+// 기본 필터: 전체(무시만 제외). 사용자 요청으로 기본값을 '전체'로 둔다(결정기록 0018).
+// 제안은 '제안된 업무' 화면에서도 정리할 수 있고, 상단 배너로 안내한다(점검 D3).
+let currentFilter = "all";
 let selectedId = null;
 let searchTerm = "";
 const checked = new Set();  // 일괄 작업 선택(메모리에만)
@@ -75,7 +76,10 @@ function todoRow(task) {
     el("td", { class: "c-title", title: task.title }, el("span", { class: "t-title" }, task.title),
       task.summary_pending
         ? el("span", { class: "t-sub wait", title: "AI 요청 요약 대기 중(지금은 메일 제목)" }, "요약 대기")
-        : el("span", { class: "t-sub" }, task.source === "manual" ? "수동" : "메일")),
+        : el("span", { class: "t-sub" }, task.source === "manual" ? "수동" : "메일"),
+      // 목록이 좁아져 열을 숨길 때만 보이는 보조 줄(reflow.css)
+      el("span", { class: "t-meta" }, task.module_tag ? el("span", { class: "tag m-mod" }, task.module_tag) : null,
+        el("span", { class: "m-dept" }, task.requester_dept || ""))),
     el("td", { class: "c-mod" }, task.module_tag ? el("span", { class: "tag" }, task.module_tag) : "-"),
     el("td", { class: "c-dept" }, task.requester_dept || "-"),
     el("td", { class: "c-due" }, dueText(task)),
@@ -349,3 +353,7 @@ document.getElementById("btn-manual").addEventListener("click", async () => {
 loadSyncStatus();
 renderDetailEmpty();
 refresh();
+
+// 상세 패널 크기 조절(결정기록 0016). 폭이 바뀌면 #todo-wrap의 ResizeObserver가 행 수를 다시 계산한다
+initSplitter({ handle: document.getElementById("split-detail"), panel: document.getElementById("detail"), other: document.querySelector(".todo-card"),
+  cssVar: "--detail-w", prefKey: "detail_w", side: "right", min: 280, max: 640, otherMin: 520 });

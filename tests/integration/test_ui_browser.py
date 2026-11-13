@@ -211,15 +211,55 @@ def test_ui_dashboard_app_shell_layout(server: tuple[str, object]) -> None:
             " return [r.y, r.width, r.height, r.bottom]; }"
         )
         assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight")
-        assert page.evaluate(rect, "#todo-wrap")[3] >= 900 - 60
+        # 아래 여백 16px(--page-bottom, 결정기록 0016) + 페이저 줄
+        assert page.evaluate(rect, "#todo-wrap")[3] >= 900 - 64
         detail, card = page.evaluate(rect, "#detail"), page.evaluate(rect, ".todo-card")
         assert abs(detail[1] - 320) <= 4 and abs(detail[2] - card[2]) <= 1
         heights = page.evaluate(
             "[...document.querySelectorAll('#mk .kpi')].map(e => e.getBoundingClientRect().height)"
         )
         assert len(heights) == 4 and max(heights) <= 100
-        assert page.evaluate(rect, "#todo tr.row")[0] <= 300
+        # 명세 03의 300px에서 완화: 명세 06의 공통 여백(14·36·12·12)으로 머리 영역이 20px 늘었다
+        assert page.evaluate(rect, "#todo tr.row")[0] <= 320
         assert page.locator("#status-donut .lg-item").count() == 6  # 범례 6개 항상 표시
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_mail_original_opens_in_modal(server: tuple[str, object]) -> None:
+    """원본 보기(MAIL-08~10): 메일 업무 상세에서 원본을 넓은 모달로 열고 Esc로 닫는다."""
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page(viewport={"width": 1440, "height": 900})  # type: ignore[attr-defined]
+        errors: list[str] = []
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+        page.goto(base + "/")
+        _dismiss_login(page, base)
+        token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+        headers = {"X-CSRF-Token": token or "", "Content-Type": "application/json"}
+        collected = page.request.post(
+            base + "/api/mail/collect", data={"period": "sync"}, headers=headers
+        )
+        assert collected.ok  # 데모 메일 수집(가상 데이터) → 원본이 있는 업무 생성
+        page.reload()
+        page.wait_for_selector("#todo tr.row")
+        page.locator("#todo tr.row").first.click()
+        page.wait_for_selector("#d-body .d-tools")
+        opener = page.locator(".d-tools button", has_text="원본 보기")
+        assert opener.count() >= 1
+        opener.first.click()
+        # 넓은 줌 모달로 열리고 본문이 보인다
+        page.wait_for_selector("#dlg-mail.show #mail-body .mail-full")
+        assert page.inner_text("#mail-head").strip() != ""
+        # Esc로 닫힌다
+        page.keyboard.press("Escape")
+        page.wait_for_function(
+            "() => !document.getElementById('dlg-mail').classList.contains('show')"
+        )
+        assert errors == []
     finally:
         browser.close()  # type: ignore[attr-defined]
         playwright.stop()  # type: ignore[attr-defined]
@@ -312,13 +352,19 @@ def test_ui_startup_login_modal(server: tuple[str, object]) -> None:
         page.goto(base + "/")
         page.wait_for_selector("#dlg-start.show")
         assert page.inner_text("#st-suffix") == "@golfzon.com"
-        assert page.locator("#st-sites li").count() == 3  # AI-Ground·G-Knowledge·위키
+        # AI-Ground·G-Knowledge·위키·그룹웨어(결정기록 0017)
+        assert page.locator("#st-sites li").count() == 4
         page.fill("#st-id", "tester01")
         page.fill("#st-pw", "x" * 12)  # 합성 값(데모: 가짜 로그인)
         page.click("#st-submit")
         page.wait_for_selector("#dlg-start.show", state="hidden")
         assert page.input_value("#st-pw") == "" and page.input_value("#st-id") == ""
-        assert page.locator("#conn .chip.on").count() == 3
+        assert page.locator("#conn .chip.on").count() == 4
+        # 상태 칩을 누르면 사이트를 새 탭으로 연다(https 주소, 결정기록 0017)
+        chip = page.locator("#conn a.chip").first
+        assert (chip.get_attribute("href") or "").startswith("https://")
+        assert chip.get_attribute("target") == "_blank"
+        assert chip.get_attribute("rel") == "noopener noreferrer"
         # 설정 화면에는 로그인 입력 칸이 없다(시작 로그인 창으로 통일)
         page.goto(base + "/settings")
         assert page.locator("#login-all-form").count() == 0

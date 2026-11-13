@@ -84,8 +84,8 @@ def test_todo02_triage_keyboard_decisions_undo_and_highlight(tmp_path: Path) -> 
 
 
 @pytest.mark.slow
-def test_todo02_dashboard_hides_suggested_by_default(tmp_path: Path) -> None:
-    """⑨ 대시보드 기본 필터는 제안됨 제외, 정리할 제안 배너에 건수 표시."""
+def test_todo02_dashboard_default_filter_all(tmp_path: Path) -> None:
+    """⑨ 대시보드 기본 필터는 '전체'(무시만 제외), 제안됨도 보이고 배너도 표시(결정기록 0018)."""
     with demo_server(tmp_path) as (base, _container), chromium() as browser:
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         page.goto(base + "/")
@@ -94,15 +94,15 @@ def test_todo02_dashboard_hides_suggested_by_default(tmp_path: Path) -> None:
         csrf_post(page, base, "/api/tasks", {"title": "수동으로 넣은 할 일"})
         page.reload()
         page.wait_for_selector("#todo tr.row")
-        assert page.locator("#filters button.on").get_attribute("data-f") == "todo"
+        assert page.locator("#filters button.on").get_attribute("data-f") == "all"
         statuses = page.locator("#todo tr.row .badge").all_inner_texts()
-        assert statuses and "제안됨" not in statuses
+        assert "제안됨" in statuses  # 전체에는 제안됨도 보인다
         banner = page.locator("#sugg-banner")
         assert banner.is_visible()
         suggested = len([t for t in page.request.get(base + "/api/tasks?status=suggested").json()])
         assert f"정리할 제안 {suggested}건" in banner.inner_text()
-        page.click('#filters button[data-f="suggested"]')  # 제안됨 필터는 그대로 쓸 수 있음
-        assert "제안됨" in page.locator("#todo tr.row .badge").all_inner_texts()
+        page.click('#filters button[data-f="todo"]')  # '할 일' 필터로 바꾸면 제안됨은 숨는다
+        assert "제안됨" not in page.locator("#todo tr.row .badge").all_inner_texts()
 
 
 @pytest.mark.slow

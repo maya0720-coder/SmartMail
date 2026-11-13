@@ -1,7 +1,7 @@
 {% extends "base.html" %}
+{% block page_title %}<h2>설정·연결</h2>{% endblock %}
+{% block page_sub %}{% set set_desc = "사이트 로그인은 앱을 열 때 뜨는 로그인 창에서 합니다. 로그인 정보(ID·암호)는 어디에도 저장하지 않고, 앱을 종료하면 모든 세션이 삭제됩니다." %}<span class="page-sub" title="{{ set_desc }}">{{ set_desc }}</span>{% endblock %}
 {% block content %}
-<h2>설정·연결</h2>
-<p class="desc">사이트 로그인은 앱을 열 때 뜨는 로그인 창에서 합니다. 로그인 정보(ID·암호)는 어디에도 저장하지 않고, 앱을 종료하면 모든 세션이 삭제됩니다.</p>
 <div class="card">
   <div class="set-row"><div><div class="k">메일 수집 경로</div><div class="s" id="collect-desc">{{ collector_label }}</div></div>
     <button class="btn sm" id="btn-detect">경로 다시 확인</button></div>
@@ -20,6 +20,7 @@
         <input type="text" id="cat-input" maxlength="180" required aria-label="업무 구분 목록">
         <button class="btn sm primary" type="submit">저장</button>
       </form></div></div>
+  <div class="set-row"><div><div class="k">화면 배치 초기화</div><div class="s">대시보드 상세·제안 목록 패널의 조절한 폭을 기본값으로 되돌립니다</div></div><button class="btn sm" id="btn-ui-reset" type="button">배치 초기화</button></div>
   <div id="setconn"></div>
   <div class="set-row"><div><div class="k">업무 아님 학습 초기화(규칙 <span id="rules-count">-</span>개)</div><div class="s">'업무 아님'으로 고른 보낸 사람·말머리의 키 해시(원문 아님)를 지웁니다. 학습은 제안 확신도만 낮춥니다</div></div><button class="btn sm" id="btn-rules-reset" type="button">학습 초기화</button></div>
   <div class="set-row"><div><div class="k">일괄 로그아웃</div><div class="s">모든 사이트 세션을 지금 폐기합니다</div></div><button class="btn sm" id="btn-logout-all">일괄 로그아웃</button></div>

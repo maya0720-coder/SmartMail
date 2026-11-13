@@ -1,6 +1,12 @@
 // 공통 화면 도우미. 업무 내용·자격증명을 브라우저 저장소에 넣지 않는다.
 "use strict";
 
+// 저장된 패널 폭(서버가 <body data-*>로 내려준 숫자)을 CSS 변수로 옮긴다(결정기록 0016)
+for (const [key, cssVar] of [["detailW", "--detail-w"], ["trListW", "--tr-list-w"]]) {
+  const px = Number(document.body.dataset[key]);
+  if (Number.isInteger(px) && px > 0) document.documentElement.style.setProperty(cssVar, px + "px");
+}
+
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
 // 상태 변경 요청은 항상 JSON + CSRF 헤더로 보낸다.

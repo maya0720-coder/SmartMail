@@ -158,7 +158,16 @@ class SqliteSyncState:
 class SqliteAppSettings:
     """화면에서 바꾼 앱 설정. 허용된 이름만 저장한다(자격증명·개인정보 저장 방지)."""
 
-    ALLOWED = frozenset({"wiki_title_format", "wiki_title_offset_days", "task_categories"})
+    ALLOWED = frozenset(
+        {
+            "wiki_title_format",
+            "wiki_title_offset_days",
+            "task_categories",
+            # 화면 패널 폭(px 숫자만, 결정기록 0016)
+            "ui_detail_w",
+            "ui_triage_list_w",
+        }
+    )
 
     def __init__(self, db: Database) -> None:
         self._db = db
@@ -176,6 +185,12 @@ class SqliteAppSettings:
                 " ON CONFLICT(name) DO UPDATE SET value = excluded.value",
                 (name, value),
             )
+
+    def delete(self, name: str) -> None:
+        if name not in self.ALLOWED:
+            raise ValueError("허용되지 않은 설정 이름입니다")
+        with self._db.transaction() as conn:
+            conn.execute("DELETE FROM app_setting WHERE name = ?", (name,))
 
 
 class SqliteMailRefRepository:

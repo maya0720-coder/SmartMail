@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import Final
 
 from fastapi import APIRouter, Request
@@ -31,10 +32,10 @@ from security.logging_policy import Site
 
 router = APIRouter(prefix="/api/login")
 
-# 일괄 로그인 대상(그룹웨어는 연동 규격 확인 전이라 제외)
+# 일괄 로그인 대상. 그룹웨어는 자체 로그인(아이디만, 공통 암호) — 결정기록 0017
 COMPANY_SITES: Final = (Site.AIGROUND, Site.GKNOWLEDGE)
 COMPANY_LIMIT_KEY: Final = "company-account"  # 회사 계정 시도 횟수 공용 키
-ALL_SITES: Final = (*COMPANY_SITES, Site.WIKI)
+ALL_SITES: Final = (*COMPANY_SITES, Site.WIKI, Site.GROUPWARE)
 
 FAILED: Final = "로그인하지 못했습니다. 입력 내용을 확인해 주세요."
 NEEDS_INPUT: Final = "로그인 정보가 필요합니다."
@@ -147,15 +148,23 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
         finally:
             del body  # 불변 문자열 참조를 바로 끊는다(결정기록 0005)
         company, wiki = (buffers[0], buffers[1]), (buffers[2], buffers[3])
+        # 그룹웨어: '@도메인' 없는 아이디 + 공통 암호(위키 전용 암호를 쓰지 않는다)
+        own_login = {Site.WIKI: wiki, Site.GROUPWARE: (buffers[2], buffers[1])}
+        # 공통 암호를 그대로 쓰는 사이트(위키는 전용 암호를 따로 넣지 않았을 때)
+        uses_common = {
+            Site.GROUPWARE: True,
+            Site.WIKI: hmac.compare_digest(buffers[3], buffers[1]),
+        }
         company_failed = False
         for site in pending_sites(container):
             if only is not None and site is not only:
                 continue
             is_company = site in COMPANY_SITES
-            if is_company and company_failed:
-                error: str | None = FAILED  # 같은 계정으로 다시 시도하지 않음(M4)
+            if company_failed and (is_company or uses_common[site]):
+                # 회사 계정에서 틀린 암호를 다른 사이트에 다시 제출하지 않는다(계정 잠금 방지, M4)
+                error: str | None = FAILED
             else:
-                user_id, secret = company if is_company else wiki
+                user_id, secret = company if is_company else own_login[site]
                 error = _login_one(container, site, user_id, secret)
                 company_failed = company_failed or (is_company and error == FAILED)
             results.append({"site": site.value, "logged_in": error is None, "error": error})

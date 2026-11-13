@@ -46,20 +46,52 @@ async function runTaskSearch(task, startFrom, box) {
       el("button", { class: "btn sm", onclick: async () => { await api("POST", "/api/search/feedback", { task_id: task.id, helpful: false }); toast("평가를 남겼습니다"); } }, "도움 안 됨")));
 }
 
-async function showMail(refId, box) {
-  box.replaceChildren(el("div", { class: "empty" }, "원본을 읽는 중…"));
+// 메일 원본: 넓은 줌 모달로 보여준다(MAIL-08~10). 원문은 저장하지 않고 열 때마다 원본에서 다시 읽는다.
+let mailReturnFocus = null;
+async function showMail(refId) {
+  mailReturnFocus = document.activeElement;
+  const head = document.getElementById("mail-head");
+  const body = document.getElementById("mail-body");
+  const foot = document.getElementById("mail-foot");
+  head.textContent = "원본 메일";
+  foot.replaceChildren();
+  body.replaceChildren(el("div", { class: "empty" }, "원본을 읽는 중…"));
+  openDlg("dlg-mail");
+  document.getElementById("mail-close").focus();
   const result = await api("GET", "/api/mail/" + refId);
-  if (!result.ok) { box.replaceChildren(el("div", { class: "empty" }, errorText(result, "원본을 읽지 못했습니다"))); return; }
+  if (!result.ok) { body.replaceChildren(el("div", { class: "empty" }, errorText(result, "원본을 읽지 못했습니다"))); return; }
   const m = result.data;
-  if (m.missing) { box.replaceChildren(el("div", { class: "empty" }, m.notice)); return; }
-  fill(box, el("div", { class: "mail" },
-    el("div", { class: "h" }, el("span", {}, m.subject), el("span", {}, m.sender_name)),
-    el("div", { class: "mail-body" }, m.body),
-    m.attachments.length ? el("div", { class: "t-sub" }, "첨부(열지 않음): " + m.attachments.join(", ")) : null,
-    m.can_open ? el("button", { class: "btn sm mt8", onclick: async () => {
+  if (m.missing) { body.replaceChildren(el("div", { class: "empty" }, m.notice)); return; }
+  head.textContent = m.subject || "원본 메일";
+  const received = (m.received_at || "").slice(0, 16).replace("T", " ");
+  fill(body,
+    el("div", { class: "mail-meta" },
+      el("div", {}, el("span", { class: "k" }, "보낸 사람"), el("span", {}, m.sender_name || "-")),
+      el("div", {}, el("span", { class: "k" }, "수신"), el("span", { class: "mono" }, received))),
+    el("div", { class: "mail-full" }, m.body || ""),
+    m.attachments.length ? el("div", { class: "t-sub mt8" }, "첨부(열지 않음): " + m.attachments.join(", ")) : null);
+  fill(foot,
+    m.can_open ? el("button", { type: "button", class: "btn", onclick: async () => {
       const r = await api("POST", "/api/mail/" + refId + "/open"); if (!r.ok) toast(errorText(r, "열지 못했습니다"), { kind: "error" });
-    } }, "아웃룩에서 열기") : null));
+    } }, "아웃룩에서 열기") : null,
+    el("button", { type: "button", class: "btn primary", onclick: closeMailModal }, "닫기"));
 }
+
+function closeMailModal() {
+  closeDlg("dlg-mail");
+  if (mailReturnFocus && document.body.contains(mailReturnFocus)) mailReturnFocus.focus();
+}
+// 닫기: ✕ 버튼, 바깥(배경) 클릭, Esc
+document.getElementById("mail-close").addEventListener("click", closeMailModal);
+document.getElementById("dlg-mail").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) closeMailModal();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.getElementById("dlg-mail").classList.contains("show")) {
+    event.preventDefault();
+    closeMailModal();
+  }
+});
 
 async function cardEditor(task, box) {
   const draft = await api("POST", "/api/history/" + task.id + "/draft");
@@ -115,7 +147,7 @@ async function renderDetail(taskId, onChanged) {
   const refs = task.mail_refs || [];
   const received = refs.length ? (refs[0].received_at || "").slice(5, 16).replace("T", " ") : "-";
   const tools = el("div", { class: "actions tight d-tools" },
-    refs.length ? el("button", { type: "button", class: "btn sm", onclick: () => showMail(refs[0].id, resultBox) }, icon("mail"), "원본 보기") : null,
+    refs.length ? el("button", { type: "button", class: "btn sm", onclick: () => showMail(refs[0].id) }, icon("mail"), "원본 보기") : null,
     el("button", { type: "button", class: "btn sm", onclick: () => runTaskSearch(task, "app", resultBox) }, icon("search"), "유사 이력"),
     el("button", { type: "button", class: "btn sm ai", onclick: () => runTaskSearch(task, "ai", resultBox) }, icon("sparkles"), "AI 지식 요청"));
   fill(body,
@@ -125,11 +157,11 @@ async function renderDetail(taskId, onChanged) {
       el("div", {}, "요청 부서"), el("div", {}, task.requester_dept || "-"),
       el("div", {}, "기한"), el("div", {}, dueText(task)),
       el("div", {}, "수신"), el("div", { class: "mono" }, received),
-      el("div", {}, "근거"), el("div", {}, task.evidence ? "“" + task.evidence + "”" : "-"),
+      el("div", { class: "ev" }, "근거"), el("div", { class: "ev" }, task.evidence ? "“" + task.evidence + "”" : "-"),
       el("div", {}, "지식 등록"), el("div", {}, task.gk_link ? el("a", { class: "link", href: task.gk_link, target: "_blank", rel: "noopener noreferrer" }, "등록됨") : "미등록")),
     tools,
     refs.length > 1 ? el("details", { class: "d-refs" }, el("summary", {}, "원본 " + refs.length + "건"),
-      ...refs.slice(1).map((ref) => el("button", { type: "button", class: "btn sm", onclick: () => showMail(ref.id, resultBox) },
+      ...refs.slice(1).map((ref) => el("button", { type: "button", class: "btn sm", onclick: () => showMail(ref.id) },
         icon("mail"), (ref.received_at || "").slice(5, 16).replace("T", " ")))) : null,
     resultBox);
   fill(foot, el("div", { class: "d-btns" }, ...footButtons(task, resultBox, onChanged)),
