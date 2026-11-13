@@ -57,6 +57,23 @@ document.getElementById("title-form").addEventListener("submit", async (event) =
 });
 loadTitleRule();
 
+// 업무 구분 목록(사용자 정의, 결정기록 0014)
+async function loadCategories() {
+  const result = await api("GET", "/api/task-categories");
+  if (!result.ok) return;
+  document.getElementById("cat-input").value = result.data.categories.join(", ");
+  document.getElementById("cat-approval").textContent = result.data.approval_category;
+}
+document.getElementById("cat-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const names = document.getElementById("cat-input").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const result = await api("PUT", "/api/task-categories", { categories: names });
+  if (!result.ok) { toast(errorText(result, "저장하지 못했습니다"), { kind: "error" }); return; }
+  document.getElementById("cat-input").value = result.data.categories.join(", ");
+  toast("업무 구분을 저장했습니다" + (result.data.recategorized ? " · " + result.data.recategorized + "건 다시 구분" : ""));
+});
+loadCategories();
+
 document.getElementById("btn-detect").addEventListener("click", async () => {
   const result = await api("POST", "/api/mail/detect");
   if (result.ok) document.getElementById("collect-desc").textContent = result.data.message;

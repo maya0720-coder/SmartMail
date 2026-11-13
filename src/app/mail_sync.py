@@ -31,6 +31,8 @@ def collect_and_ingest(
             raise
         log_event(EventType.MAIL_COLLECT, _site(container), success=True)
         ingest = container.tasks.ingest(result.threads)
+    if ingest.suggested:
+        container.summary_job.kick()  # 새 제안 업무의 제목을 AI 요청 요약으로 바꾼다
     return {
         "suggested": len(ingest.suggested),
         "linked": ingest.linked,

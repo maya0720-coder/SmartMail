@@ -53,6 +53,38 @@ _CONFIDENCE_LINE: Final = re.compile(
 _HTTPS_LINK: Final = re.compile(r"https://[^\s<>\"')\]]{1,500}")
 
 
+SUMMARIZE_TEMPLATE: Final = (
+    "다음은 업무 담당자가 받은 메일 {count}건입니다(민감정보는 [마스킹]으로 가림).\n"
+    "각 메일에서 '보낸 사람이 요청한 일'을 업무 목록 제목으로 쓸 "
+    "한 문장(40자 이내, 명사형)으로 요약해 주세요.\n"
+    "인사말·서명·회신 기록은 무시하고, 사람 이름은 쓰지 마세요.\n"
+    "반드시 아래 형식으로 메일 번호마다 한 줄씩만 답하세요.\n"
+    "1. 요약\n"
+    "2. 요약\n"
+    "---\n"
+    "{items}"
+)
+MAX_SUMMARY_LINE: Final = 120
+_SUMMARY_LINE: Final = re.compile(r"^[ \t*]{0,4}(\d{1,2})[.)][ \t]{0,3}(.{1,200})$", re.MULTILINE)
+
+
+def summarize_prompt(items: Sequence[MaskedText]) -> str:
+    body = "\n\n".join(f"[메일 {index}]\n{item.value}" for index, item in enumerate(items, 1))
+    return SUMMARIZE_TEMPLATE.format(count=len(items), items=body)
+
+
+def parse_summaries(text: str, count: int) -> list[str | None]:
+    """'번호. 요약' 줄만 해석한다. 빠진 번호는 None(추측 금지)."""
+    found: dict[int, str] = {}
+    for match in _SUMMARY_LINE.finditer(text[:MAX_ANSWER_CHARS]):
+        number, line = int(match.group(1)), match.group(2).strip().strip("*\"'“”").strip()
+        if 1 <= number <= count and line and number not in found:
+            found[number] = line[:MAX_SUMMARY_LINE]
+    if not found:
+        raise AiUnavailableError(PARSE_FAILED)
+    return [found.get(index) for index in range(1, count + 1)]
+
+
 def classify_prompt(summary: MaskedText) -> str:
     return CLASSIFY_TEMPLATE.format(modules=_MODULES_TEXT, summary=summary.value)
 

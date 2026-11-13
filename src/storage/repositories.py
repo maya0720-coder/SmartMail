@@ -148,7 +148,7 @@ class SqliteSyncState:
 class SqliteAppSettings:
     """화면에서 바꾼 앱 설정. 허용된 이름만 저장한다(자격증명·개인정보 저장 방지)."""
 
-    ALLOWED = frozenset({"wiki_title_format", "wiki_title_offset_days"})
+    ALLOWED = frozenset({"wiki_title_format", "wiki_title_offset_days", "task_categories"})
 
     def __init__(self, db: Database) -> None:
         self._db = db

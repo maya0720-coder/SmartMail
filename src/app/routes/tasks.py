@@ -19,7 +19,8 @@ from security.links import safe_link
 
 router = APIRouter(prefix="/api/tasks")
 
-ModuleTag = Literal["FI", "CO", "MM", "SD", "PP", "HR", "Basis", "ABAP"]
+# 구분(사용자 정의 목록). 목록에 있는지는 서비스가 검사한다(결정기록 0014).
+ModuleTag = Annotated[str, Field(min_length=1, max_length=20)]
 StatusName = Literal[
     "suggested", "waiting", "in_progress", "done_candidate", "done", "on_hold", "dismissed"
 ]
@@ -92,8 +93,13 @@ def list_tasks(
     request: Request, status: Annotated[list[StatusName] | None, Query()] = None
 ) -> JSONResponse:
     statuses = [TaskStatus(s) for s in status] if status else None
-    tasks = get_container(request).tasks.list_tasks(statuses)
-    return JSONResponse([task_json(request, t) for t in tasks])
+    container = get_container(request)
+    tasks = container.tasks.list_tasks(statuses)
+    # 아직 AI 요청 요약을 만들지 않은 업무(제목이 메일 제목에서 온 임시 제목)
+    pending = container.summary_job.pending_ids()
+    return JSONResponse(
+        [{**task_json(request, t), "summary_pending": t.id in pending} for t in tasks]
+    )
 
 
 @router.get("/{task_id}")

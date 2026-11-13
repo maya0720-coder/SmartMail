@@ -103,6 +103,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             response.headers[name] = value
         if request.url.path.startswith("/api/") or request.method in UNSAFE_METHODS:
             response.headers["cache-control"] = "no-store"
+        elif request.url.path.startswith("/static/"):
+            # 브라우저가 예전 JS·CSS를 확인 없이 다시 쓰지 않도록 매번 재검증(바뀌지 않았으면 304)
+            response.headers["cache-control"] = "no-cache"
         if "server" in response.headers:
             del response.headers["server"]
         return response

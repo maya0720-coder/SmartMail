@@ -56,6 +56,17 @@ def server(tmp_path: Path) -> Iterator[tuple[str, object]]:
     thread.join(timeout=10)
 
 
+def _dismiss_login(page: object, base: str) -> None:
+    """시작 로그인 창을 '나중에'로 닫은 상태로 만든다(이번 실행 동안 자동으로 뜨지 않음)."""
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")  # type: ignore[attr-defined]
+    response = page.request.post(  # type: ignore[attr-defined]
+        base + "/api/login/later",
+        data={},
+        headers={"X-CSRF-Token": token or "", "Content-Type": "application/json"},
+    )
+    assert response.ok
+
+
 @pytest.mark.slow
 def test_dashboard_grain_switch_and_xss(server: tuple[str, object], tmp_path: Path) -> None:
     base, _container = server
@@ -75,6 +86,7 @@ def test_dashboard_grain_switch_and_xss(server: tuple[str, object], tmp_path: Pa
         page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
 
         page.goto(base + "/")
+        _dismiss_login(page, base)
         token = page.locator('meta[name="csrf-token"]').get_attribute("content")
         xss = '<img src=x onerror="window.__xss=1"> 테스트 업무'
         response = page.request.post(
@@ -100,3 +112,234 @@ def test_dashboard_grain_switch_and_xss(server: tuple[str, object], tmp_path: Pa
         assert errors == []
     finally:
         playwright.stop()
+
+
+# ---- 디자인 명세 01(ui-ux-pro-max) 7장 추가 검증: 페이징·정렬·외부 리소스 ----
+
+
+def _browser_or_skip() -> tuple[object, object]:
+    try:
+        playwright = sync_api.sync_playwright().start()
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        pytest.skip(f"Playwright 시작 불가: {type(exc).__name__}")
+    try:
+        browser = playwright.chromium.launch(headless=True)
+    except Exception as exc:  # pragma: no cover - 브라우저 미설치
+        playwright.stop()
+        pytest.skip(f"Chromium 실행 불가: {type(exc).__name__}")
+    return playwright, browser
+
+
+def _seed_tasks(page: object, base: str, count: int) -> None:
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")  # type: ignore[attr-defined]
+    headers = {"X-CSRF-Token": token or "", "Content-Type": "application/json"}
+    for index in range(count):
+        response = page.request.post(  # type: ignore[attr-defined]
+            base + "/api/tasks", data={"title": f"합성 업무 {index:02d}"}, headers=headers
+        )
+        assert response.ok
+
+
+def _info(page: object) -> tuple[int, int, int]:
+    """'1–7 / 40건 · 페이지당 7건' → (시작, 끝, 전체)"""
+    text = page.inner_text("#todo-info").split(" · ")[0]  # type: ignore[attr-defined]
+    span, total = text.replace("건", "").split(" / ")
+    start, end = span.split("–")
+    return int(start), int(end), int(total)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("viewport", [(1440, 900), (1024, 768), (390, 844)])
+def test_ui_todo_paging_fits_viewport(
+    server: tuple[str, object], viewport: tuple[int, int]
+) -> None:
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        context = browser.new_context(viewport={"width": viewport[0], "height": viewport[1]})  # type: ignore[attr-defined]
+        page = context.new_page()
+        external: list[str] = []
+        page.on("request", lambda r: external.append(r.url) if not r.url.startswith(base) else None)
+        page.goto(base + "/")
+        _dismiss_login(page, base)
+        _seed_tasks(page, base, 40)
+        page.reload()
+        page.wait_for_selector("#todo tr.row")
+        page.wait_for_timeout(300)
+        start, end, total = _info(page)
+        rows = page.locator("#todo tr.row").count()
+        assert start == 1 and rows == end and total >= 40
+        assert 5 <= rows < total  # 화면 높이에 맞춘 페이지 크기(최소 5행)
+        # 표 아래쪽이 창 높이를 넘지 않는다(모바일은 카드형이라 제외)
+        if viewport[0] > 720:
+            bottom = page.evaluate("document.querySelector('#todo').getBoundingClientRect().bottom")
+            top = page.evaluate("document.querySelector('#todo').getBoundingClientRect().top")
+            assert bottom - top <= viewport[1]
+        # 다음·이전·번호
+        page.click('#todo-pager button[aria-label="다음 페이지"]')
+        assert _info(page)[0] == rows + 1
+        page.click('#todo-pager button[aria-label="이전 페이지"]')
+        assert _info(page)[0] == 1
+        page.click('#todo-pager button[aria-label="2페이지"]')
+        assert page.locator('#todo-pager [aria-current="page"]').inner_text() == "2"
+        # 필터를 바꾸면 1페이지
+        page.click('#filters button[data-f="all"]')
+        assert _info(page)[0] == 1
+        # 폰트·아이콘을 포함한 모든 요청이 같은 출처
+        assert external == []
+        context.close()
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_dashboard_app_shell_layout(server: tuple[str, object]) -> None:
+    """디자인 명세 03, 6장: 1440×900 한 화면 고정형, 상세 320px·목록과 같은 높이, KPI ≤ 100px."""
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page(viewport={"width": 1440, "height": 900})  # type: ignore[attr-defined]
+        page.goto(base + "/")
+        _dismiss_login(page, base)
+        _seed_tasks(page, base, 30)
+        page.reload()
+        page.wait_for_selector("#todo tr.row")
+        page.wait_for_timeout(300)
+        rect = (
+            "(s) => { const r = document.querySelector(s).getBoundingClientRect();"
+            " return [r.y, r.width, r.height, r.bottom]; }"
+        )
+        assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight")
+        assert page.evaluate(rect, "#todo-wrap")[3] >= 900 - 60
+        detail, card = page.evaluate(rect, "#detail"), page.evaluate(rect, ".todo-card")
+        assert abs(detail[1] - 320) <= 4 and abs(detail[2] - card[2]) <= 1
+        heights = page.evaluate(
+            "[...document.querySelectorAll('#mk .kpi')].map(e => e.getBoundingClientRect().height)"
+        )
+        assert len(heights) == 4 and max(heights) <= 100
+        assert page.evaluate(rect, "#todo tr.row")[0] <= 300
+        assert page.locator("#status-donut .lg-item").count() == 6  # 범례 6개 항상 표시
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_drawer_bulk_undo_and_search(server: tuple[str, object]) -> None:
+    """서랍(1024px)·일괄 작업·되돌리기·검색 거르기(디자인 명세 03, 4장)."""
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page(viewport={"width": 1024, "height": 768})  # type: ignore[attr-defined]
+        page.goto(base + "/")
+        _dismiss_login(page, base)
+        _seed_tasks(page, base, 6)
+        page.reload()
+        page.wait_for_selector("#todo tr.row")
+        # 행을 누르면 서랍이 열리고, Esc로 닫으면 포커스가 행으로 돌아온다
+        page.locator("#todo tr.row").first.click()
+        page.wait_for_selector("body.det-open")
+        assert page.get_attribute("#detail", "aria-modal") == "true"
+        page.keyboard.press("Escape")
+        assert not page.evaluate("document.body.classList.contains('det-open')")
+        assert page.evaluate("document.activeElement.matches('#todo tr.row')")
+        # 2건 체크 → 진행 시작 → 성공 집계
+        boxes = page.locator("#todo tr.row .cb")
+        boxes.nth(0).check()
+        boxes.nth(1).check()
+        page.locator("#bulk button", has_text="진행 시작").click()
+        # CSP가 eval을 막으므로 문자열 식 대신 로케이터로 기다린다
+        page.locator("#toast", has_text="성공 2건").wait_for()
+        # 단건 변경 후 되돌리기
+        page.locator("#todo tr.row").first.click()
+        page.wait_for_selector("body.det-open")
+        page.locator("#d-foot button", has_text="보류").click()
+        page.wait_for_selector("#toast .toast-act")
+        page.click("#toast .toast-act")
+        page.locator("#toast", has_text="되돌렸습니다").wait_for()
+        page.keyboard.press("Escape")
+        # 상단 검색은 대시보드 목록을 바로 거르고, Esc로 지운다
+        page.fill("#search-form input", "없는검색어zz")
+        page.locator("#todo", has_text="검색 결과가 없습니다").wait_for()
+        page.keyboard.press("Escape")
+        page.wait_for_selector("#todo tr.row")
+        assert page.input_value("#search-form input") == ""
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_todo_sort_cycle_and_keyboard(server: tuple[str, object]) -> None:
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page(viewport={"width": 1440, "height": 900})  # type: ignore[attr-defined]
+        page.goto(base + "/")
+        _dismiss_login(page, base)
+        _seed_tasks(page, base, 12)
+        page.reload()
+        page.wait_for_selector("#todo tr.row")
+        head = '#todo-head th[data-sort="title"]'
+        # 기본 정렬은 최근 생성순: 마지막에 만든 업무가 맨 위
+        assert "합성 업무 11" in page.locator("#todo tr.row").first.inner_text()
+        assert page.get_attribute(head, "aria-sort") == "none"
+        page.click(head + " button")
+        assert page.get_attribute(head, "aria-sort") == "ascending"
+        page.click(head + " button")
+        assert page.get_attribute(head, "aria-sort") == "descending"
+        page.focus(head + " button")
+        page.keyboard.press("Enter")  # 키보드로도 정렬 해제
+        assert page.get_attribute(head, "aria-sort") == "none"
+        # 목록에 포커스가 있을 때 → 키로 다음 페이지
+        if page.locator('#todo-pager button[aria-label="다음 페이지"]').count():
+            page.focus("#todo-wrap")
+            page.keyboard.press("ArrowRight")
+            assert page.locator('#todo-pager [aria-current="page"]').inner_text() == "2"
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_startup_login_modal(server: tuple[str, object]) -> None:
+    """앱을 열면 시작 로그인 창이 자동으로 뜨고, ID 1개 + 암호로 로그인한다(결정기록 0014)."""
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page(viewport={"width": 1440, "height": 900})  # type: ignore[attr-defined]
+        page.goto(base + "/")
+        page.wait_for_selector("#dlg-start.show")
+        assert page.inner_text("#st-suffix") == "@golfzon.com"
+        assert page.locator("#st-sites li").count() == 3  # AI-Ground·G-Knowledge·위키
+        page.fill("#st-id", "tester01")
+        page.fill("#st-pw", "x" * 12)  # 합성 값(데모: 가짜 로그인)
+        page.click("#st-submit")
+        page.wait_for_selector("#dlg-start.show", state="hidden")
+        assert page.input_value("#st-pw") == "" and page.input_value("#st-id") == ""
+        assert page.locator("#conn .chip.on").count() == 3
+        # 설정 화면에는 로그인 입력 칸이 없다(시작 로그인 창으로 통일)
+        page.goto(base + "/settings")
+        assert page.locator("#login-all-form").count() == 0
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_startup_login_later(server: tuple[str, object]) -> None:
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page()  # type: ignore[attr-defined]
+        page.goto(base + "/")
+        page.wait_for_selector("#dlg-start.show")
+        page.click("#st-later")
+        page.wait_for_selector("#dlg-start.show", state="hidden")
+        page.goto(base + "/suggestions")  # 이번 실행 동안 다시 뜨지 않음
+        page.wait_for_timeout(500)
+        assert page.locator("#dlg-start.show").count() == 0
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Sequence
+from typing import Final
 
 from domain.ai import AiAnswer, AiUnavailableError, Classification
 from domain.tasks.modules import guess_module
 from security.masking import MaskedText
+
+_REQUEST: Final = re.compile(r"요청|부탁|확인|처리|검토|바랍니다|주세요")
 
 
 class FakeKnowledgeAI:
@@ -30,6 +34,21 @@ class FakeKnowledgeAI:
         text = summary.value
         is_task = any(word in text for word in ("요청", "부탁", "확인", "처리", "필요"))
         return Classification(is_task, guess_module(text), 0.6 if is_task else 0.3)
+
+    def summarize_requests(self, items: Sequence[MaskedText]) -> list[str | None]:
+        """본문에서 요청 표현이 있는 첫 문장을 40자로 줄여 요약으로 쓴다(외부 전송 없음)."""
+        self.received.extend(items)
+        self._maybe_fail()
+        result: list[str | None] = []
+        for item in items:
+            text = item.value
+            body = text.split("본문:", 1)[1] if "본문:" in text else text
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?。])\s+|\n+", body) if s.strip()]
+            pick = next(
+                (s for s in sentences if _REQUEST.search(s)), sentences[0] if sentences else ""
+            )
+            result.append(pick[:40] or None)
+        return result
 
     def suggest_solution(
         self, summary: MaskedText, similar_cases: Sequence[MaskedText]

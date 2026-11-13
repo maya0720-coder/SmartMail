@@ -15,7 +15,6 @@ from typing import Final, Protocol
 from domain.ai import AiUnavailableError, Classification
 from domain.clock import KST
 from domain.mail import MailMessage, MailThread
-from domain.tasks.modules import guess_module
 from security.masking import MaskedText, mask
 
 REQUEST_PATTERNS: Final = re.compile(
@@ -61,8 +60,17 @@ class TaskCandidate:
     confidence: float
 
 
-def clean_title(subject: str) -> str:
-    title = REPLY_PREFIX.sub("", subject).strip()
+def clean_title(subject: str, noise_prefixes: tuple[str, ...] = ()) -> str:
+    """메일 제목에서 회신·전달 표시와 말머리([외부메일] 등)를 반복해서 지운다."""
+    title = subject.strip()
+    while True:
+        before = title
+        title = REPLY_PREFIX.sub("", title).strip()
+        for prefix in noise_prefixes:
+            if title.casefold().startswith(prefix.casefold()):
+                title = title[len(prefix) :].strip()
+        if title == before:
+            break
     return (title or "(제목 없음)")[:MAX_TITLE_CHARS]
 
 
@@ -113,9 +121,23 @@ def _evidence(message: MailMessage) -> tuple[str, int]:
     return "", 0
 
 
+class Categorizer(Protocol):
+    def categorize(self, subject: str, sender_address: str) -> str: ...
+
+
 class TaskExtractor:
-    def __init__(self, classifier: TaskClassifier | None = None) -> None:
+    def __init__(
+        self,
+        classifier: TaskClassifier | None = None,
+        categorizer: Categorizer | None = None,
+        noise_prefixes: tuple[str, ...] = (),
+    ) -> None:
         self._classifier = classifier
+        self._categorizer = categorizer
+        self._noise = noise_prefixes
+
+    def title_of(self, subject: str) -> str:
+        return clean_title(subject, self._noise)
 
     def score(self, message: MailMessage) -> tuple[int, str]:
         evidence, body_hit = _evidence(message)
@@ -130,7 +152,7 @@ class TaskExtractor:
         if self._classifier is None:
             return None
         # 마스킹한 뒤 자르고 다시 마스킹 타입으로 만든다(경계 노출 방지)
-        summary = mask(mask(f"{clean_title(message.subject)} / {evidence}").value[:500])
+        summary = mask(mask(f"{self.title_of(message.subject)} / {evidence}").value[:500])
         try:
             return self._classifier.classify_task(summary)
         except (AiUnavailableError, ValueError):
@@ -143,7 +165,12 @@ class TaskExtractor:
         first = received[0]
         points, evidence = self.score(first)
         confidence = min(1.0, 0.4 + 0.2 * points)
-        module = guess_module(f"{first.subject} {first.body}")
+        # 구분(일반업무·전자결재 등, 사용자 정의 목록). SAP 모듈 추정은 하지 않는다(결정기록 0014).
+        category = (
+            self._categorizer.categorize(first.subject, first.sender_address)
+            if self._categorizer is not None
+            else None
+        )
         if points < SCORE_TASK:
             if points < SCORE_AMBIGUOUS:
                 return None
@@ -151,16 +178,15 @@ class TaskExtractor:
             if verdict is None or not verdict.is_task:
                 return None
             confidence = verdict.confidence
-            module = module or verdict.module_tag
         # 기한 탐색은 앞부분만(긴 본문으로 인한 처리 지연 방지)
         text_for_due = f"{first.subject}\n{first.body[:MAX_DUE_SCAN]}"
         return TaskCandidate(
-            title=clean_title(first.subject),
+            title=self.title_of(first.subject),
             thread_id=thread.thread_id,
             requested_at=first.received_at,
             requester_dept=requester_dept(first.sender_name),
             due_at=parse_due(text_for_due, first.received_at),
-            module_tag=module,
-            evidence=evidence or clean_title(first.subject),
+            module_tag=category,
+            evidence=evidence or self.title_of(first.subject),
             confidence=confidence,
         )

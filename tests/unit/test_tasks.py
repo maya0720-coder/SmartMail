@@ -63,7 +63,7 @@ def test_todo01_extracts_fields() -> None:
     assert candidate is not None
     assert candidate.title == "전표 오류 확인"
     assert candidate.requester_dept == "재무팀"
-    assert candidate.module_tag == "FI"
+    assert candidate.module_tag is None  # 구분기 없으면 비움(SAP 모듈 추정 안 함, 결정기록 0014)
     assert candidate.due_at == datetime(2026, 11, 13, 23, 59, 59, tzinfo=KST)
     assert "부탁" in candidate.evidence
 

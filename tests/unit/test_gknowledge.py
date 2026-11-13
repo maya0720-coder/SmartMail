@@ -52,7 +52,9 @@ def _setup(db: Database, clock: FixedClock, store: Any) -> tuple[KnowledgeServic
         TaskExtractor(None),
         "김가상",
     )
-    task = tasks.add_manual("전표 역분개 오류", TaskEdit(requester_dept="재무팀", module_tag="FI"))
+    task = tasks.add_manual(
+        "전표 역분개 오류", TaskEdit(requester_dept="재무팀", module_tag="일반업무")
+    )
     assert task.id is not None
     tasks.change_status(task.id, TaskStatus.DONE)
     SqliteHistoryRepository(db).add(
@@ -72,11 +74,11 @@ def test_gk02_ret03_draft_contains_rnr(db: Database, clock: FixedClock) -> None:
         "담당자: 김가상",
         "요청 부서: 재무팀",
         "처리일:",
-        "FI",
+        "일반업무",
         "OB52",
     ):
         assert item in body
-    assert [t.value for t in draft.tags][0] == "FI"
+    assert [t.value for t in draft.tags][0] == "일반업무"
 
 
 def test_gk07_draft_masks_sensitive_values(db: Database, clock: FixedClock) -> None:

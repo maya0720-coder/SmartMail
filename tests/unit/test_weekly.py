@@ -57,7 +57,7 @@ def _services(db: Database, clock: FixedClock, wiki: FakeWiki) -> tuple[TaskServ
 def test_wiki01_week_boundaries_and_classification(db: Database, clock: FixedClock) -> None:
     tasks, _ = _services(db, clock, FakeWiki())
     start, end = week_range(clock.now())
-    inside = tasks.add_manual("금주 완료", TaskEdit(module_tag="FI"))
+    inside = tasks.add_manual("금주 완료", TaskEdit(module_tag="일반업무"))
     before = tasks.add_manual("지난주 완료")
     planned = tasks.add_manual("진행 업무")
     hold = tasks.add_manual("보류 업무")
@@ -68,7 +68,7 @@ def test_wiki01_week_boundaries_and_classification(db: Database, clock: FixedClo
     tasks.change_status(before.id, TaskStatus.DONE)
     tasks.change_status(hold.id, TaskStatus.ON_HOLD)
     draft = classify_week(tasks.list_tasks(), start + timedelta(days=1), TEMPLATE)
-    assert draft.done == ["[FI] 금주 완료 (요청: -)"]
+    assert draft.done == ["[일반업무] 금주 완료 (요청: -)"]
     assert draft.planned == ["[기타] 진행 업무 (요청: -)"]
     assert draft.issues == ["[기타] 보류 업무 (요청: -)"]
     assert draft.week_start == start and end - start == timedelta(days=7)

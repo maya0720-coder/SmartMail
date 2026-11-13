@@ -6,6 +6,7 @@
 # 회사 계정(Microsoft Entra ID) — AI-Ground·G-Knowledge 공통. 2026-11-12 화면 확인
 [entra]
 host = "login.microsoftonline.com"
+account_domain = "golfzon.com"                         # 로그인 창에 입력한 ID 뒤에 붙인다(ID@golfzon.com)
 email = "input[name='loginfmt']"
 concealed_input = "input[name='passwd']"
 next = "#idSIButton9"                                  # '다음'·'로그인' 공통 버튼

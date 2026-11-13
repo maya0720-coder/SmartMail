@@ -1,0 +1,42 @@
+<!-- 시작 로그인 창(AUTH-01·04·09, 결정기록 0014): ID 1개 + 공통 암호로 연결 사이트에 한 번에 로그인.
+     자동완성·암호 저장 제안 끔, '로그인 상태 유지' 없음. 입력값은 전송 직후 비운다. -->
+<div class="dim" id="dlg-start" role="dialog" aria-modal="true" aria-labelledby="st-title" aria-describedby="st-sub">
+  <div class="modal login-modal">
+    <div class="lm-head">
+      <span class="lm-logo"><svg class="ic" aria-hidden="true"><use href="{{ ic }}layout-grid"></use></svg></span>
+      <div>
+        <h3 id="st-title">업무 처리 현황 시작하기</h3>
+        <p class="s" id="st-sub">회사 계정으로 연결 사이트에 한 번에 로그인합니다.</p>
+      </div>
+    </div>
+    <ul class="lm-sites" id="st-sites" aria-label="로그인할 사이트"></ul>
+    <form id="st-form" autocomplete="off">
+      <div class="field">
+        <label for="st-id">아이디</label>
+        <div class="id-wrap">
+          <input id="st-id" name="x-id" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="100" required aria-describedby="st-id-hint">
+          <span class="id-suffix" id="st-suffix">@golfzon.com</span>
+        </div>
+        <p class="hint" id="st-id-hint">AI-Ground·G-Knowledge는 <b>아이디<span id="st-domain">@golfzon.com</span></b>, 위키는 <b>아이디</b>로 로그인합니다.</p>
+      </div>
+      <div class="field">
+        <label for="st-pw">암호</label>
+        <input id="st-pw" type="password" name="x-pw" autocomplete="new-password" maxlength="256" required>
+      </div>
+      <details class="lm-more" id="st-more">
+        <summary>위키 암호가 다른가요?</summary>
+        <div class="field">
+          <label for="st-wpw">위키 암호</label>
+          <input id="st-wpw" type="password" name="x-wpw" autocomplete="new-password" maxlength="256">
+        </div>
+      </details>
+      <p class="mfa" id="st-mfa" aria-live="polite"></p>
+      <p class="err" id="st-err" role="alert"></p>
+      <div class="m-actions">
+        <button type="button" class="btn" id="st-later">나중에</button>
+        <button class="btn primary" id="st-submit"><svg class="ic" aria-hidden="true"><use href="{{ ic }}log-out"></use></svg><span>로그인</span></button>
+      </div>
+      <p class="lm-note">입력한 아이디·암호는 로그인에 한 번만 쓰고 바로 지웁니다. 파일·로그·브라우저 어디에도 저장하지 않으며, '로그인 상태 유지'는 쓰지 않습니다.</p>
+    </form>
+  </div>
+</div>

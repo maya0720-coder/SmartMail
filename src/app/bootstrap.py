@@ -8,6 +8,7 @@ from typing import Final
 
 from app.container import Container
 from app.ratelimit import RateLimiter
+from app.summary_job import SummaryJob
 from app.title_rule import apply_saved_rule
 from app.web_security import new_csrf_token
 from collectors.demo_data import demo_messages
@@ -15,7 +16,12 @@ from collectors.detect import CollectorKind, DetectionResult, detect_collector
 from collectors.fake import FakeMailCollector
 from collectors.groupware import GroupwareMailCollector
 from collectors.outlook_com import OutlookComCollector
-from config.rules import DEFAULT_MAIL_RULES, load_mail_rules, load_wiki_template
+from config.rules import (
+    DEFAULT_MAIL_RULES,
+    load_category_rules,
+    load_mail_rules,
+    load_wiki_template,
+)
 from config.settings import PROJECT_ROOT, Settings
 from domain.ai import KnowledgeAI
 from domain.clock import SystemClock
@@ -26,8 +32,10 @@ from domain.mail import MailCollector
 from domain.mail_service import MailService
 from domain.ports import Clock
 from domain.search.pipeline import SearchPipeline
+from domain.tasks.categories import CategoryCatalog
 from domain.tasks.extract import TaskExtractor
 from domain.tasks.service import TaskService
+from domain.tasks.summarize import SummaryService
 from domain.weekly.service import WeeklyService, WikiApi
 from integrations.ai.fake import FakeKnowledgeAI
 from integrations.ai.gateway import AiGateway
@@ -124,11 +132,12 @@ def build_container(
     password: dict[Site, PasswordAuthenticator] = {}
     interactive: dict[Site, InteractiveAuthenticator] = {}
     login_progress = LoginProgress()
+    login_fields = load_login_fields()
     if settings.demo_mode:
         password = {site: FakePasswordAuthenticator() for site in LOGIN_SITES}
     else:
         # 확인된 사이트는 ID·암호 자동 로그인(결정기록 0011). 그룹웨어는 규격 확인 전(보류).
-        fields = load_login_fields()
+        fields = login_fields
         entra = EntraLoginGroup(browser, fields, login_progress)
         password[Site.AIGROUND] = EntraPasswordAuthenticator(
             entra, "ai-ground", str(settings.aiground_base_url)
@@ -186,15 +195,22 @@ def build_container(
         ),
     )
 
+    # 업무 구분(사용자 정의 목록 + 전자결재 판별 규칙, 결정기록 0014)
+    app_settings = SqliteAppSettings(db)
+    category_rules, title_noise = load_category_rules()
+    catalog = CategoryCatalog(app_settings, category_rules)
     tasks = TaskService(
         SqliteTaskRepository(db),
         SqliteMailRefRepository(db),
         events,
         SqliteLedgerRepository(db),
         clock,
-        TaskExtractor(ai),
+        TaskExtractor(ai, categorizer=catalog, noise_prefixes=title_noise),
         settings.user_display_name,
+        catalog=catalog,
     )
+    # 예전 SAP 모듈 태그처럼 목록에 없는 구분은 시작할 때 규칙으로 다시 구분한다
+    tasks.recategorize_unknown()
 
     store: KnowledgeStore
     if settings.demo_mode:
@@ -207,9 +223,14 @@ def build_container(
     history = SqliteHistoryRepository(db)
     knowledge = KnowledgeService(store, tasks, history, settings.user_display_name)
     history_service = HistoryService(history, tasks, mail, clock)
+    # 업무 제목 = AI 요청 요약(결정기록 0014). 가짜 AI(데모·fake 설정)는 로그인 없이 동작
+    summary_job = SummaryJob(
+        SummaryService(tasks, SqliteMailRefRepository(db), mail, ai),
+        sessions,
+        always_ready=isinstance(ai_adapter, FakeKnowledgeAI),
+    )
     search = SearchPipeline(history_service, knowledge, ai, events, SqliteLedgerRepository(db))
 
-    app_settings = SqliteAppSettings(db)
     template = apply_saved_rule(load_wiki_template(), app_settings)
     wiki: WikiApi
     if settings.demo_mode:
@@ -252,4 +273,7 @@ def build_container(
         ledger=SqliteLedgerRepository(db),
         app_settings=app_settings,
         login_progress=login_progress,
+        catalog=catalog,
+        account_domain=login_fields.entra.account_domain,
+        summary_job=summary_job,
     )

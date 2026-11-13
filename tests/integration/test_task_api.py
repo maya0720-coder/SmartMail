@@ -24,7 +24,7 @@ def test_collect_suggest_approve_flow(tmp_path: Path, clock: FixedClock) -> None
         assert mail["missing"] is False and mail["body"]
 
         approved = client.post(
-            f"/api/tasks/{first['id']}/approve", json={"module_tag": "FI"}
+            f"/api/tasks/{first['id']}/approve", json={"module_tag": "전자결재"}
         ).json()
         assert approved["status"] == "waiting"
         done = client.post(f"/api/tasks/{first['id']}/status", json={"status": "done"}).json()
@@ -32,8 +32,9 @@ def test_collect_suggest_approve_flow(tmp_path: Path, clock: FixedClock) -> None
 
         bad = client.post(f"/api/tasks/{first['id']}/status", json={"status": "suggested"})
         assert bad.status_code == 409
+        # 설정 목록에 없는 구분은 서비스가 거부한다(결정기록 0014)
         invalid = client.post(f"/api/tasks/{first['id']}/edit", json={"module_tag": "<x>"})
-        assert invalid.status_code == 422
+        assert invalid.status_code == 400 and "구분" in invalid.json()["error"]
         mass = client.post(f"/api/tasks/{first['id']}/edit", json={"status": "done"})
         assert mass.status_code == 422  # 대량 할당 차단
 

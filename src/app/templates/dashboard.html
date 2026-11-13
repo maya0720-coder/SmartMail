@@ -1,43 +1,79 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="mhead">
-  <div><h2>대시보드</h2><p class="desc m0">수집 경로: {{ collector_label }} · <span id="sync-status">메일 자동 수집 확인 중</span> · 완료 업무는 {{ retention_days }}일 후 자동 삭제</p></div>
-  <div class="seg" id="seg">
+{% set ic = asset("img/icons.svg") ~ "#i-" %}
+<div class="mhead" title="수집 경로: {{ collector_label }} · 완료 업무는 {{ retention_days }}일 후 자동 삭제">
+  <h2>대시보드</h2>
+  <span class="sync" id="sync-status">메일 자동 수집 확인 중</span>
+  <a href="#" class="mlink" id="toggle-table" role="button"><svg class="ic" aria-hidden="true"><use href="{{ ic }}info"></use></svg>기준 · 표로 보기</a>
+  <div class="seg" id="seg" role="group" aria-label="지표 기간">
     <button data-g="year">연간</button><button data-g="half">반기</button><button data-g="quarter">분기</button><button data-g="month" class="on">월</button><button data-g="week">주</button>
   </div>
 </div>
-<div class="mk" id="mk"></div>
-<div class="mnote"><span id="m-desc"></span> · <a href="#" id="toggle-table">표로 보기</a></div>
-<div class="card tbl-wrap mb16 hidden" id="m-tbl"></div>
-<div class="ret hidden mb16" id="alerts"></div>
+<div class="kpi-row">
+  <div class="mk" id="mk"></div>
+  <div class="kpi donut-card" id="status-donut" aria-label="상태 분포"></div>
+</div>
+<div class="ret hidden" id="alerts"></div>
 <div class="grid2">
-  <div class="card">
-    <h3>내 할 일
-      <span class="filters" id="filters">
+  <section class="card todo-card" aria-label="내 할 일">
+    <div class="card-head">
+      <h3>내 할 일</h3>
+      <div class="filters seg" id="filters" role="group" aria-label="업무 상태 필터">
         <button class="on" data-f="all">전체</button><button data-f="suggested">제안됨</button><button data-f="in_progress">진행 중</button><button data-f="done_candidate">완료 후보</button><button data-f="soon">기한 임박</button><button data-f="done">완료</button>
-      </span>
-    </h3>
-    <table>
-      <thead><tr><th>업무</th><th>요청 부서</th><th>기한</th><th>상태</th></tr></thead>
-      <tbody id="todo"></tbody>
-    </table>
-    <div class="actions">
-      <button class="btn sm" id="btn-collect">메일 새로고침</button>
-      <button class="btn sm" id="btn-range-toggle">기간 지정 수집</button>
-      <button class="btn sm" id="btn-manual">+ 수동 업무 추가</button>
+      </div>
+      <div class="head-tools">
+        <button class="icon-btn" id="btn-collect" type="button" aria-label="메일 새로고침" title="메일 새로고침"><svg class="ic" aria-hidden="true"><use href="{{ ic }}refresh-cw"></use></svg></button>
+        <button class="icon-btn" id="btn-range-toggle" type="button" aria-label="기간 지정 수집" title="기간 지정 수집" aria-expanded="false" aria-controls="range-form"><svg class="ic" aria-hidden="true"><use href="{{ ic }}calendar-range"></use></svg></button>
+        <button class="icon-btn" id="btn-manual" type="button" aria-label="수동 업무 추가" title="수동 업무 추가"><svg class="ic" aria-hidden="true"><use href="{{ ic }}plus"></use></svg></button>
+        <form class="popover hidden" id="range-form">
+          <label class="t-sub">시작일 <input type="date" id="range-start" required></label>
+          <label class="t-sub">종료일 <input type="date" id="range-end" required></label>
+          <button class="btn sm primary" type="submit">이 기간 수집</button>
+        </form>
+      </div>
     </div>
-    <form class="actions hidden" id="range-form">
-      <label class="t-sub">시작일 <input type="date" id="range-start" required></label>
-      <label class="t-sub">종료일 <input type="date" id="range-end" required></label>
-      <button class="btn sm primary" type="submit">이 기간 수집</button>
-    </form>
+    <div class="table-wrap" id="todo-wrap" tabindex="0" aria-label="내 할 일 목록 (↑↓ 선택 · ←→ 페이지)">
+      <table class="dense">
+        <colgroup><col class="w-cb"><col><col class="w-mod"><col class="w-dept"><col class="w-due"><col class="w-st"></colgroup>
+        <thead id="todo-head"><tr>
+          <th class="c-cb"><input type="checkbox" class="cb" id="todo-all" aria-label="이 페이지 전체 선택"></th>
+          <th data-sort="title" aria-sort="none"><button type="button" class="th-sort">업무<svg class="ic" aria-hidden="true"><use href="{{ ic }}arrow-up-down"></use></svg></button></th>
+          <th class="c-mod">구분</th>
+          <th class="c-dept">요청 부서</th>
+          <th data-sort="due" aria-sort="none" class="c-due"><button type="button" class="th-sort">기한<svg class="ic" aria-hidden="true"><use href="{{ ic }}arrow-up-down"></use></svg></button></th>
+          <th class="c-st">상태</th>
+        </tr></thead>
+        <tbody id="todo"></tbody>
+      </table>
+    </div>
+    <div class="bulk" id="bulk" role="toolbar" aria-label="선택한 업무 일괄 작업"></div>
+    <div class="pg"><span id="todo-info" class="pg-info"></span><nav class="pager" id="todo-pager" aria-label="내 할 일 페이지"></nav></div>
+  </section>
+  <aside class="card detail" id="detail" aria-label="업무 상세">
+    <button type="button" class="d-close" id="d-close" aria-label="상세 닫기"><svg class="ic" aria-hidden="true"><use href="{{ ic }}x"></use></svg></button>
+    <div class="d-body" id="d-body"></div>
+    <div class="d-foot" id="d-foot"></div>
+  </aside>
+</div>
+<div class="scrim" id="scrim" aria-hidden="true"></div>
+{% endblock %}
+{% block modals %}
+{% include "partials/gk_modal.html" %}
+<!-- 지표 표로 보기(화면을 밀어내지 않도록 모달) -->
+<div class="dim" id="dlg-mtbl" role="dialog" aria-modal="true" aria-labelledby="mtbl-head">
+  <div class="modal wide">
+    <h3 id="mtbl-head">성과 지표 표로 보기</h3>
+    <p class="s" id="m-desc"></p>
+    <div class="tbl-wrap" id="m-tbl"></div>
+    <div class="m-actions"><button type="button" class="btn" id="mtbl-close">닫기</button></div>
   </div>
-  <div class="card detail" id="detail"><div class="empty">업무를 선택하세요.</div></div>
 </div>
 {% endblock %}
-{% block modals %}{% include "partials/gk_modal.html" %}{% endblock %}
 {% block scripts %}
-<script src="/static/js/charts.js"></script>
-<script src="/static/js/gk.js"></script>
-<script src="/static/js/dashboard.js"></script>
+<script src="{{ asset('js/charts.js') }}"></script>
+<script src="{{ asset('js/gk.js') }}"></script>
+<script src="{{ asset('js/todo_list.js') }}"></script>
+<script src="{{ asset('js/todo_actions.js') }}"></script>
+<script src="{{ asset('js/dashboard_detail.js') }}"></script>
+<script src="{{ asset('js/dashboard.js') }}"></script>
 {% endblock %}

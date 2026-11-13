@@ -154,7 +154,7 @@ def test_security_headers_present(tmp_path: Path, clock: FixedClock) -> None:
 def test_auth04_login_form_disables_autocomplete(tmp_path: Path, clock: FixedClock) -> None:
     with app_client(make_container(tmp_path, clock)) as client:
         html = client.get("/settings").text
-    assert '<form id="lg-form" autocomplete="off">' in html
+    assert '<form id="st-form" autocomplete="off">' in html  # 시작 로그인 창
     assert 'type="password" name="x-pw" autocomplete="new-password"' in html
     assert "저장하지 않으며" in html
     assert "remember" not in html.lower() and "기억하기" not in html

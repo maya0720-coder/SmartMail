@@ -1,0 +1,140 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>제안된 업무 · B 포커스 카드</title><style>
+:root{--bg:#f8fafc;--card:#fff;--soft:#f1f5f9;--line:#e2e8f0;--fg:#0f172a;--sub:#475569;--muted:#94a3b8;
+--accent:#2563eb;--accent-soft:#eff6ff;--cta:#f97316;--warn:#d97706;--warn-soft:#fffbeb;--danger:#dc2626;--danger-soft:#fef2f2;
+--ok:#16a34a;--ok-soft:#f0fdf4;--ai:#7c5cfa;--ai-soft:#f2eeff;--appr:#0aa2a8;--appr-soft:#e6f7f8;
+--font:"Pretendard","Pretendard Variable","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;--mono:"Fira Code",Consolas,monospace;
+--e:cubic-bezier(.23,1,.32,1)}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#111827;--soft:#1e293b;--line:#273449;--fg:#e2e8f0;--sub:#94a3b8;--muted:#64748b;
+--accent:#3b82f6;--accent-soft:#172554;--warn:#f59e0b;--warn-soft:#2a1f0a;--danger:#f87171;--danger-soft:#2c1215;--ok:#4ade80;--ok-soft:#0f2a1a;--ai-soft:#2a2340;--appr-soft:#13302f;color-scheme:dark}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font-family:var(--font);font-size:13px;line-height:1.5;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}button{cursor:pointer}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+.top{display:flex;align-items:center;gap:12px;margin:12px 12px 0;padding:8px 12px;background:rgba(255,255,255,.85);border:1px solid var(--line);border-radius:14px}
+@media (prefers-color-scheme:dark){.top{background:rgba(17,24,39,.85)}}
+.top b{font-size:14px}.top nav{display:flex;gap:2px;margin-left:8px}.top nav a{padding:6px 10px;border-radius:8px;color:var(--sub);text-decoration:none;font-weight:600}
+.top nav a.on{background:var(--accent-soft);color:var(--accent)}.top .demo{margin-left:auto;font-size:11px;color:var(--warn);background:var(--warn-soft);padding:3px 8px;border-radius:999px;font-weight:700}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 12px;font-weight:600;transition:background-color .2s,transform .12s var(--e)}
+.btn:hover{background:var(--soft)}.btn:active{transform:scale(.97)}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}.btn.p:hover{filter:brightness(1.06)}
+.btn.ghost{border-color:transparent;background:transparent}
+.kbd{font-family:var(--mono);font-size:10.5px;padding:0 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;color:var(--muted);background:var(--card)}
+.btn.p .kbd{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--sub);white-space:nowrap}
+.chip.appr{background:var(--appr-soft);color:var(--appr)}.chip.due{background:var(--warn-soft);color:var(--warn)}.chip.late{background:var(--danger-soft);color:var(--danger)}
+.chip.ai{background:var(--ai-soft);color:var(--ai)}.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.conf{display:inline-flex;gap:2px;align-items:center}.conf i{width:5px;height:10px;border-radius:2px;background:var(--line)}.conf i.on{background:var(--accent)}
+mark{background:#fde68a;color:inherit;border-radius:3px;padding:0 2px}
+@media (prefers-color-scheme:dark){mark{background:#854d0e;color:#fff}}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,12px);opacity:0;background:#0f172a;color:#fff;border-radius:10px;padding:10px 14px;font-weight:600;display:flex;gap:12px;align-items:center;transition:all .3s var(--e);pointer-events:none;z-index:50}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}.toast button{border:0;background:none;color:#93c5fd;font-weight:700;padding:0}
+.hint{font-size:11.5px;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:40px 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.wrap{min-height:calc(100vh - 66px);display:grid;grid-template-columns:240px minmax(0,1fr) 240px;gap:20px;padding:20px 24px}
+.side{display:flex;flex-direction:column;gap:12px}.side h2{margin:0;font-size:20px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:12.5px}
+.stat b{font-family:var(--mono)}
+.queue{display:flex;flex-direction:column;gap:4px}.queue div{font-size:12px;color:var(--sub);padding:6px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.queue div.now{background:var(--accent-soft);color:var(--accent);font-weight:700}.queue div.gone{text-decoration:line-through;color:var(--muted)}
+.stage{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+.deck{position:relative;width:min(620px,100%);height:470px}
+.card{position:absolute;inset:0;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 18px 40px -18px rgba(15,23,42,.25);padding:26px 28px;display:flex;flex-direction:column;gap:14px;transition:transform .35s var(--e),opacity .35s var(--e);touch-action:none;user-select:none}
+.card.back1{transform:translateY(12px) scale(.96);opacity:.7;z-index:0}.card.back2{transform:translateY(24px) scale(.92);opacity:.4;z-index:-1}
+.card.top{z-index:1;cursor:grab}.card.drag{transition:none;cursor:grabbing}
+.card .n{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.card h3{margin:0;font-size:24px;line-height:1.3;letter-spacing:-.02em}
+.card .meta{display:flex;gap:6px;flex-wrap:wrap}
+.card .q{flex:1;overflow:auto;background:var(--soft);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.8}
+.card .why{display:flex;gap:6px;flex-wrap:wrap}
+.stampx{position:absolute;top:26px;padding:4px 12px;border:3px solid;border-radius:8px;font-weight:800;font-size:18px;opacity:0;transform:rotate(-10deg)}
+.stampx.ok{right:26px;color:var(--ok)}.stampx.no{left:26px;color:var(--danger);transform:rotate(10deg)}.stampx.later{left:50%;margin-left:-40px;color:var(--warn);transform:none}
+.btns{display:flex;gap:14px}.btns .btn{min-width:140px;height:48px;font-size:14px;border-radius:999px}
+.btns .no{color:var(--danger)}.btns .later{color:var(--warn)}
+.done{text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}.done h3{font-size:22px;margin:0}
+.tip{font-size:12px;color:var(--muted)}
+@media (max-width:1000px){.wrap{grid-template-columns:1fr}.side.r{display:none}}
+</style></head><body><header class="top"><b>업무 처리 현황</b><nav><a>대시보드</a><a class="on">제안된 업무</a><a>주간보고</a><a>업무 히스토리</a><a>설정</a></nav><span class="demo">시안 · 가상 데이터</span></header>
+<div class="wrap">
+ <aside class="side"><h2>빠른 정리</h2><div class="tip">오늘 받은 요청을 한 장씩 결정합니다. 끌어서 넘기거나 키보드 ←↓→를 쓰세요.</div>
+  <div class="stat" id="stat"></div><div class="queue" id="queue" aria-label="대기열"></div></aside>
+ <main class="stage"><div class="deck" id="deck"></div>
+  <div class="btns" id="btns"><button class="btn no" data-a="no">${'×'} 업무 아님 <span class="kbd">←</span></button><button class="btn later" data-a="later">나중에 <span class="kbd">↓</span></button><button class="btn p" data-a="ok">할 일로 <span class="kbd">→</span></button></div></main>
+ <aside class="side r"><div class="stat"><span>오늘 정리 목표</span><b>9건</b><span>평균 결정 시간</span><b id="avg">-</b></div>
+  <div class="tip">‘업무 아님’으로 고른 메일의 보낸 사람·제목 패턴은 다음 수집 때 확신도를 낮추는 데 씁니다(학습 규칙은 로컬에만 저장).</div></aside>
+</div><div class="toast" id="toast" role="status"></div>
+<script>
+const IC={check:'<path d="M20 6 9 17l-5-5"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',spark:'<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/>',
+cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',link:'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+stamp:'<path d="M5 22h14M19 15H5a2 2 0 0 0-2 2v1h18v-1a2 2 0 0 0-2-2z"/><path d="M14 15V9a4 4 0 1 0-4 0v6"/>',
+undo:'<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',edit:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+chevr:'<path d="m9 18 6-6-6-6"/>',chevl:'<path d="m15 18-6-6 6-6"/>',down:'<path d="m6 9 6 6 6-6"/>',report:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+thread:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',hist:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'};
+const ic=(n,c='')=>`<svg class="ic ${c}" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg,undo){const t=document.getElementById('toast');t.innerHTML=`<span>${esc(msg)}</span>`+(undo?`<button type="button">되돌리기</button>`:'');
+ if(undo)t.querySelector('button').onclick=()=>{undo();t.classList.remove('on')};t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),3200);}
+
+const TODAY='11/13';
+const SUGG=[
+ {id:1,title:'KSB1 원가 보고서 조회 권한 부여',subject:'[골프존] CO 원가 보고서 조회 권한 요청',from:'원가팀 김가상',dept:'원가팀',recv:'11/13 09:12',group:'오늘',due:'11/13',dueText:'금일 중',cat:'일반업무',conf:.92,thread:1,
+  reasons:['요청 표현 “부여 부탁드립니다”','기한 표현 “금일 중”','받는 사람: 나(단독)'],week:'금주 실적',
+  body:['안녕하세요, 원가팀 김가상입니다.','월말 마감 검토를 위해 CO 원가 보고서(KSB1) 조회 권한이 필요합니다.','==금일 중 권한 부여 부탁드립니다.==','감사합니다.'],similar:['KSB1 조회 권한 부여(10/21, 처리 1일)']},
+ {id:2,title:'PO 하단 결제 조건 문구 변경',subject:'RE: PO 출력물 문구 변경 건',from:'구매팀 이가상',dept:'구매팀',recv:'11/13 08:40',group:'오늘',due:'11/14',dueText:'내일까지',cat:'일반업무',conf:.86,thread:3,
+  reasons:['스레드 3통 · 내 회신 대기','요청 표현 “변경을 요청드립니다”'],week:'차주 계획',
+  body:['지난번 말씀드린 건 관련입니다.','==PO 하단 결제 조건 문구 변경을 요청드립니다.== 변경 문안은 첨부와 같습니다.','내일까지 반영 가능할지 회신 부탁드립니다.'],similar:['PO 출력 양식 Smartform 수정(09/30)']},
+ {id:3,title:'[전자결재] 자산명세서 수정 프로그램 반영 품의',subject:'[결재 요청] 자산명세서 수정 프로그램 반영 품의',from:'전자결재 알림',dept:'재무팀',recv:'11/13 08:05',group:'오늘',due:null,dueText:'',cat:'전자결재',conf:.99,thread:1,
+  reasons:['제목 키워드 “결재 요청”','결재 알림 발신'],week:'금주 실적',
+  body:['결재 요청이 도착했습니다.','문서 제목: ==자산명세서 수정 프로그램 반영 품의==','기안 부서: 재무팀'],similar:[]},
+ {id:4,title:'전표 역분개 오류 원인 확인',subject:'전표 역분개 시 오류 발생 문의',from:'재무팀 박가상',dept:'재무팀',recv:'11/12 17:30',group:'어제',due:'11/12',dueText:'',cat:'일반업무',conf:.81,thread:2,
+  reasons:['질문 표현 “원인 확인 부탁”','기한 지남(11/12)'],week:'이슈',
+  body:['FB08로 역분개 시 오류 메시지가 발생합니다.','==원인 확인 부탁드립니다.==','오류 번호는 F5 702입니다.'],similar:['FB08 역분개 F5 702 오류(10/02, G-Knowledge)']},
+ {id:5,title:'야간 배치 지연 현상 원인 분석',subject:'[외부메일] 야간 배치 지연 현상',from:'IT운영팀 최가상',dept:'IT운영팀',recv:'11/12 15:02',group:'어제',due:null,dueText:'',cat:'일반업무',conf:.64,thread:1,
+  reasons:['요청 표현 “확인 요청드립니다”','참조(CC)로 받음 → 확신도 낮음'],week:'이슈',
+  body:['어제 야간 배치가 평소보다 40분 늦게 끝났습니다.','==원인 확인 요청드립니다.==','관련 잡: Z_FI_DAILY'],similar:[]},
+ {id:6,title:'출하 I/F 실패 건 재전송',subject:'출하 I/F 실패 건 확인 부탁',from:'물류팀 홍길동',dept:'물류팀',recv:'11/12 11:20',group:'어제',due:'11/15',dueText:'금요일까지',cat:'일반업무',conf:.88,thread:1,
+  reasons:['요청 표현 “확인 부탁”','기한 표현 “금요일까지”'],week:'차주 계획',
+  body:['출하 인터페이스 3건이 실패로 남아 있습니다.','==금요일까지 확인 후 재전송 부탁드립니다.=='],similar:['출하 I/F 재처리(10/28)']},
+ {id:7,title:'[전자결재] 예산 과목 신설 기안',subject:'[결재] 예산 과목 신설 기안',from:'전자결재 알림',dept:'경영기획팀',recv:'11/11 10:10',group:'이번 주',due:null,dueText:'',cat:'전자결재',conf:.99,thread:1,
+  reasons:['제목 키워드 “[결재]”'],week:'금주 실적',body:['결재 요청이 도착했습니다.','문서 제목: ==예산 과목 신설 기안=='],similar:[]},
+ {id:8,title:'Fiori 타일 권한 추가',subject:'Fiori 타일 권한 요청',from:'영업지원팀 정가상',dept:'영업지원팀',recv:'11/11 09:00',group:'이번 주',due:null,dueText:'',cat:'일반업무',conf:.77,thread:1,
+  reasons:['요청 표현 “추가 부탁드립니다”'],week:'차주 계획',body:['매출 조회 Fiori 앱이 런치패드에 보이지 않습니다.','==타일 권한 추가 부탁드립니다.=='],similar:['Fiori 카탈로그 권한 추가(10/15)']},
+ {id:9,title:'신규 입사자 공유(참고)',subject:'[골프존] 신규 입사자 공유의 건',from:'인사팀 윤가상',dept:'인사팀',recv:'11/10 16:44',group:'이번 주',due:null,dueText:'',cat:'일반업무',conf:.31,thread:1,
+  reasons:['공지성 메일 · 요청 표현 약함'],week:null,body:['신규 입사자 정보를 공유드리오니 ==업무에 참고 부탁드립니다.=='],similar:[]},
+];
+const hl=s=>esc(s).replace(/==(.+?)==/g,'<mark>$1</mark>');
+const conf=v=>`<span class="conf" title="AI 확신도 ${Math.round(v*100)}%">${[.2,.45,.7,.9].map(t=>`<i class="${v>=t?'on':''}"></i>`).join('')}</span>`;
+const dueChip=t=>!t.due?'':`<span class="chip ${t.due<=TODAY&&t.due<'11/13'?'late':'due'}">${ic('cal')}${t.due}${t.dueText?' · '+t.dueText:''}${t.due<'11/13'?' 지남':''}</span>`;
+const catChip=t=>`<span class="chip ${t.cat==='전자결재'?'appr':''}">${t.cat==='전자결재'?ic('stamp'):''}${t.cat}</span>`;
+
+const q=SUGG.map(x=>({...x}));let pos=0;const res={ok:0,later:0,no:0};let t0=Date.now(),times=[];
+document.querySelector('#btns .no').innerHTML=ic('x')+' 업무 아님 <span class="kbd">←</span>';
+document.querySelector('#btns .later').innerHTML=ic('clock')+' 나중에 <span class="kbd">↓</span>';
+document.querySelector('#btns .p').innerHTML=ic('check')+' 할 일로 <span class="kbd">→</span>';
+function cardHTML(t,cls,i){return `<article class="card ${cls}" data-i="${i}"><span class="stampx ok">할 일</span><span class="stampx no">아님</span><span class="stampx later">나중에</span>
+ <div class="n"><span>${i+1} / ${q.length} · ${t.group} ${t.recv.split(' ')[1]}</span>${conf(t.conf)}</div><h3>${esc(t.title)}</h3>
+ <div class="meta">${catChip(t)}${dueChip(t)}<span class="chip">${esc(t.from)}</span>${t.thread>1?`<span class="chip">${ic('thread')} 대화 ${t.thread}통</span>`:''}</div>
+ <div class="q">${t.body.map(hl).join('<br>')}</div><div class="why">${t.reasons.map(r=>`<span class="chip ai">${ic('spark')}${esc(r)}</span>`).join('')}</div></article>`;}
+function render(){const d=document.getElementById('deck');
+ if(pos>=q.length){d.innerHTML=`<div class="done card top" style="justify-content:center"><h3>오늘 제안을 모두 정리했어요</h3><div>할 일 ${res.ok} · 나중에 ${res.later} · 업무 아님 ${res.no}</div><button class="btn p">대시보드로 가기</button></div>`;document.getElementById('btns').style.visibility='hidden';}
+ else d.innerHTML=[2,1,0].map(k=>q[pos+k]?cardHTML(q[pos+k],k===0?'top':'back'+k,pos+k):'').join('');
+ document.getElementById('stat').innerHTML=`<span>${ic('check')} 할 일로</span><b>${res.ok}</b><span>${ic('clock')} 나중에</span><b>${res.later}</b><span>${ic('x')} 업무 아님</span><b>${res.no}</b><span>남음</span><b>${q.length-pos}</b>`;
+ document.getElementById('queue').innerHTML=q.map((t,i)=>`<div class="${i===pos?'now':i<pos?'gone':''}">${esc(t.title)}</div>`).join('');
+ document.getElementById('avg').textContent=times.length?(times.reduce((a,b)=>a+b,0)/times.length/1000).toFixed(1)+'초':'-';
+ bindDrag();}
+function decide(a){if(pos>=q.length)return;const c=document.querySelector('.card.top');const t=q[pos];
+ const tx={ok:'translateX(130%) rotate(12deg)',no:'translateX(-130%) rotate(-12deg)',later:'translateY(120%)'}[a];
+ c.style.transform=tx;c.style.opacity=0;times.push(Date.now()-t0);t0=Date.now();
+ setTimeout(()=>{res[a]++;pos++;render();toast(`‘${t.title}’ · ${{ok:'할 일로',later:'나중에',no:'업무 아님'}[a]}`,()=>{pos--;res[a]--;render();});},260);}
+function bindDrag(){const c=document.querySelector('.card.top[data-i]');if(!c)return;let sx,sy,dx=0,dy=0;
+ c.onpointerdown=e=>{sx=e.clientX;sy=e.clientY;c.setPointerCapture(e.pointerId);c.classList.add('drag');};
+ c.onpointermove=e=>{if(sx==null)return;dx=e.clientX-sx;dy=e.clientY-sy;c.style.transform=`translate(${dx}px,${Math.max(0,dy)}px) rotate(${dx/20}deg)`;
+  c.querySelector('.stampx.ok').style.opacity=Math.max(0,dx/120);c.querySelector('.stampx.no').style.opacity=Math.max(0,-dx/120);c.querySelector('.stampx.later').style.opacity=Math.max(0,(dy-Math.abs(dx))/120);};
+ c.onpointerup=()=>{c.classList.remove('drag');const a=dx>110?'ok':dx<-110?'no':dy>110?'later':null;sx=null;
+  if(a)decide(a);else{c.style.transform='';c.querySelectorAll('.stampx').forEach(s=>s.style.opacity=0);}dx=dy=0;};}
+document.getElementById('btns').onclick=e=>{const b=e.target.closest('[data-a]');if(b)decide(b.dataset.a);};
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')decide('ok');else if(e.key==='ArrowLeft')decide('no');else if(e.key==='ArrowDown'){e.preventDefault();decide('later');}});
+render();
+</script></body></html>

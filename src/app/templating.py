@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Final
 
@@ -36,6 +37,27 @@ NAV_ITEMS: Final = (
     ("history", "/history", "업무 히스토리"),
     ("settings", "/settings", "설정·연결"),
 )
+
+
+_ASSET_HASHES: dict[tuple[str, float], str] = {}
+
+
+def asset(path: str) -> str:
+    """정적 파일 주소에 내용 해시를 붙인다(`/static/js/a.js?v=…`).
+
+    파일이 바뀌면 주소도 바뀌므로, 브라우저에 남은 예전 JS·CSS가 새 화면과 섞이지 않는다.
+    템플릿에서 상수 경로로만 부르며, 정적 폴더 밖 경로는 거부한다.
+    """
+    target = (STATIC_DIR / path).resolve()
+    if STATIC_DIR.resolve() not in target.parents or not target.is_file():
+        raise ValueError("정적 파일 경로가 올바르지 않습니다")
+    key = (path, target.stat().st_mtime)
+    if key not in _ASSET_HASHES:
+        _ASSET_HASHES[key] = hashlib.sha256(target.read_bytes()).hexdigest()[:12]
+    return f"/static/{path}?v={_ASSET_HASHES[key]}"
+
+
+_env.globals["asset"] = asset
 
 
 def render(request: Request, template: str, active: str, **context: Any) -> HTMLResponse:

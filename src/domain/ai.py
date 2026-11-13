@@ -43,3 +43,10 @@ class KnowledgeAI(Protocol):
     def suggest_solution(
         self, summary: MaskedText, similar_cases: Sequence[MaskedText]
     ) -> AiAnswer: ...
+
+    def summarize_requests(self, items: Sequence[MaskedText]) -> list[str | None]:
+        """메일 여러 건(마스킹된 제목·본문 발췌)의 요청 사항을 한 줄씩 요약한다(결정기록 0014).
+
+        입력 순서대로 돌려준다. 해석하지 못한 항목은 None.
+        """
+        ...

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>설정·연결</h2>
-<p class="desc">로그인 정보(ID·암호)는 어디에도 저장하지 않습니다. 앱을 종료하면 모든 세션이 삭제됩니다.</p>
+<p class="desc">사이트 로그인은 앱을 열 때 뜨는 로그인 창에서 합니다. 로그인 정보(ID·암호)는 어디에도 저장하지 않고, 앱을 종료하면 모든 세션이 삭제됩니다.</p>
 <div class="card">
   <div class="set-row"><div><div class="k">메일 수집 경로</div><div class="s" id="collect-desc">{{ collector_label }}</div></div>
     <button class="btn sm" id="btn-detect">경로 다시 확인</button></div>
@@ -14,10 +14,15 @@
         <label class="t-sub">날짜 기준 <select id="title-offset" aria-label="날짜 기준 요일"></select>요일</label>
         <button class="btn sm primary" type="submit">저장</button>
       </form></div></div>
-  <div id="login-all"></div>
+  <div class="set-row"><div><div class="k">업무 구분</div>
+      <div class="s">쉼표로 구분해 최대 8개 · 첫 항목이 기본 구분 · 제목·발신자에 결재 키워드가 있으면 '<span id="cat-approval">전자결재</span>'로 자동 구분</div>
+      <form class="actions tight" id="cat-form">
+        <input type="text" id="cat-input" maxlength="180" required aria-label="업무 구분 목록">
+        <button class="btn sm primary" type="submit">저장</button>
+      </form></div></div>
   <div id="setconn"></div>
   <div class="set-row"><div><div class="k">일괄 로그아웃</div><div class="s">모든 사이트 세션을 지금 폐기합니다</div></div><button class="btn sm" id="btn-logout-all">일괄 로그아웃</button></div>
   <div class="set-row"><div><div class="k">로컬 데이터 전체 삭제</div><div class="s">업무·요약·이력·지표를 모두 지웁니다 (메일 원본은 그대로)</div></div><button class="btn sm due-crit" id="btn-wipe">전체 삭제</button></div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/login_all.js"></script><script src="/static/js/settings.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/settings.js') }}"></script>{% endblock %}

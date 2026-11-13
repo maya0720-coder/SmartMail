@@ -30,6 +30,10 @@ T = TypeVar("T")
 MAX_SUMMARY_CHARS: Final = 2000
 MAX_SIMILAR_CASES: Final = 5
 MAX_CASE_CHARS: Final = 1000
+# 요청 요약: 한 번에 6건, 건당 마스킹된 제목·본문 발췌 900자(메일 원문 전체 전송 금지, AI-02)
+MAX_SUMMARY_BATCH: Final = 6
+MAX_SUMMARY_ITEM_CHARS: Final = 900
+MAX_TITLE_CHARS: Final = 200
 TIMEOUT_MESSAGE: Final = "AI 응답이 늦어 중단했습니다. 잠시 후 다시 시도해 주세요."
 FAILURE_MESSAGE: Final = "AI 호출에 실패했습니다. 잠시 후 다시 시도해 주세요."
 
@@ -113,6 +117,21 @@ class AiGateway:
         answer = self._call(checked, lambda: self.adapter.suggest_solution(checked, cases), task_id)
         links = tuple(link for r in answer.references if (link := safe_link(r, self._link_bases)))
         return replace(answer, references=links)
+
+    def summarize_requests(self, items: Sequence[MaskedText]) -> list[str | None]:
+        """메일 요청 사항 일괄 요약(결정기록 0014). 항목마다 마스킹·길이를 다시 검사하고,
+        답변도 다시 마스킹해 업무 제목 길이로 자른다."""
+        if not 1 <= len(items) <= MAX_SUMMARY_BATCH:
+            raise PayloadRejectedError("요약 묶음 크기가 올바르지 않습니다")
+        checked = [check_payload(item, MAX_SUMMARY_ITEM_CHARS) for item in items]
+        head = mask(f"요청 요약 {len(checked)}건 · " + checked[0].value[:200])
+        answers = self._call(head, lambda: self.adapter.summarize_requests(checked), None)
+        result: list[str | None] = []
+        for index in range(len(checked)):
+            raw = answers[index] if index < len(answers) else None
+            text = mask(raw).value.strip()[:MAX_TITLE_CHARS] if raw else ""
+            result.append(text or None)
+        return result
 
     def close(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)

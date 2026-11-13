@@ -8,7 +8,7 @@
     <button>검색</button>
   </form>
   <div class="filters mb16" id="hist-module">
-    <button class="on" data-m="">전체 모듈</button><button data-m="FI">FI</button><button data-m="CO">CO</button><button data-m="MM">MM</button><button data-m="SD">SD</button><button data-m="Basis">Basis</button><button data-m="ABAP">ABAP</button>
+    <button class="on" data-m="">전체</button>
   </div>
   <div id="hres"><div class="empty">검색어를 입력하세요.</div></div>
 </div>
@@ -17,4 +17,4 @@
   <div id="hcards"><div class="empty">카드가 없습니다.</div></div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/history.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/history.js') }}"></script>{% endblock %}

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from app.routes.login_all import account_ids
 from domain.clock import FixedClock
 from fixtures.app_factory import app_client, make_container
 from security.credentials import FakePasswordAuthenticator, LoginFailedError, LoginService
@@ -282,27 +283,76 @@ def test_auth05_try_sso_and_password_preferred(clock: FixedClock) -> None:
 
 
 def test_auth01_login_all_api(tmp_path: Path, clock: FixedClock) -> None:
+    """시작 로그인 창: ID 1개 + 공통 암호로 회사 계정·위키를 한 번에(결정기록 0014)."""
     container = make_container(tmp_path, clock)  # 데모: 가짜 어댑터
     value = secrets.token_urlsafe(12)
     with app_client(container) as client:
         pending = client.get("/api/login/pending").json()
         assert pending["need_company"] and pending["need_wiki"]
+        assert pending["account_domain"] == "golfzon.com" and pending["dismissed"] is False
         assert "groupware" not in pending["sites"]
-        body = {"company_id": "u@x.invalid", "company_" + "password": value}
-        partial = client.post("/api/login/all", json=body)
-        assert value not in partial.text and "u@x.invalid" not in partial.text
-        by_site = {r["site"]: r for r in partial.json()["results"]}
-        assert by_site["ai-ground"]["logged_in"] and by_site["g-knowledge"]["logged_in"]
-        assert not by_site["wiki"]["logged_in"] and by_site["wiki"]["error"]
-        # 이미 로그인된 회사 계정은 다시 묻지 않는다
-        pending = client.get("/api/login/pending").json()
-        assert pending["sites"] == ["wiki"] and not pending["need_company"]
-        wiki_body = {"wiki_id": "wiki-user", "wiki_same_password": True, **body}
-        done = client.post("/api/login/all", json=wiki_body).json()
-        assert done["results"] == [{"site": "wiki", "logged_in": True, "error": None}]
-        assert client.post("/api/login/all", json={}).json()["results"] == []  # 모두 로그인됨
+        body = {"user_id": "tester01", "pass" + "word": value}
+        done = client.post("/api/login/all", json=body)
+        assert value not in done.text and "tester01" not in done.text
+        assert all(r["logged_in"] for r in done.json()["results"])
+        assert {r["site"] for r in done.json()["results"]} == {"ai-ground", "g-knowledge", "wiki"}
+        # 이미 로그인된 사이트는 다시 묻지 않는다
+        assert client.get("/api/login/pending").json()["sites"] == []
+        assert client.post("/api/login/all", json={}).json()["results"] == []
         assert client.post("/api/login/all?u=x", json={}).status_code == 400
         assert client.post("/api/login/all", json={"remember": True}).status_code == 422
+        assert client.post("/api/login/all", json={"company_id": "x"}).status_code == 422
+
+
+def test_auth01_later_suppresses_auto_prompt(tmp_path: Path, clock: FixedClock) -> None:
+    with app_client(make_container(tmp_path, clock)) as client:
+        assert client.post("/api/login/later", json={}).json() == {"dismissed": True}
+        assert client.get("/api/login/pending").json()["dismissed"] is True
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("hong", ("hong@golfzon.com", "hong")),
+        (" hong ", ("hong@golfzon.com", "hong")),
+        ("hong@golfzon.com", ("hong@golfzon.com", "hong")),
+        ("", ("", "")),
+    ],
+)
+def test_auth01_account_ids_from_single_id(raw: str, expected: tuple[str, str]) -> None:
+    assert account_ids(raw, "golfzon.com") == expected
+
+
+@pytest.mark.parametrize("raw", ["ho ng", "hong\x00", "ho\tng"])
+def test_auth01_account_ids_reject_whitespace(raw: str) -> None:
+    with pytest.raises(ValueError):
+        account_ids(raw, "golfzon.com")
+
+
+def test_auth01_wiki_password_override(tmp_path: Path, clock: FixedClock) -> None:
+    """위키 암호가 다르면 그 값만 위키에 쓴다(회사 계정은 공통 암호)."""
+    container = make_container(tmp_path, clock)
+    seen: dict[str, tuple[bytes, bytes]] = {}
+
+    class Spy(FakePasswordAuthenticator):
+        def __init__(self, name: str) -> None:
+            super().__init__()
+            self.name = name
+
+        def authenticate(self, user_id: bytearray, secret: bytearray) -> Any:
+            seen[self.name] = (bytes(user_id), bytes(secret))
+            return super().authenticate(user_id, secret)
+
+    for site, name in ((Site.AIGROUND, "ai"), (Site.WIKI, "wiki")):
+        container.login.password_authenticators[site] = Spy(name)  # type: ignore[index]
+    common, wiki_only = secrets.token_urlsafe(8), secrets.token_urlsafe(8)
+    with app_client(container) as client:
+        client.post(
+            "/api/login/all",
+            json={"user_id": "kim", "pass" + "word": common, "wiki_pass" + "word": wiki_only},
+        )
+    assert seen["ai"] == (b"kim@golfzon.com", common.encode())
+    assert seen["wiki"] == (b"kim", wiki_only.encode())
 
 
 class CountingFailure(FakePasswordAuthenticator):
@@ -319,11 +369,12 @@ def test_auth01_wrong_company_input_not_retried_on_second_site(
     ai, gk = CountingFailure(), CountingFailure()
     container.login.password_authenticators[Site.AIGROUND] = ai  # type: ignore[index]
     container.login.password_authenticators[Site.GKNOWLEDGE] = gk  # type: ignore[index]
-    body = {"company_id": "u@x.invalid", "company_" + "password": secrets.token_urlsafe(8)}
+    body = {"user_id": "u", "pass" + "word": secrets.token_urlsafe(8)}
     with app_client(container) as client:
         results = client.post("/api/login/all", json=body).json()["results"]
     assert ai.calls + gk.calls == 1
-    assert all(not r["logged_in"] for r in results)
+    company = [r for r in results if r["site"] in ("ai-ground", "g-knowledge")]
+    assert company and all(not r["logged_in"] for r in company)
 
 
 def test_auth01_login_all_only_and_bad_unicode(tmp_path: Path, clock: FixedClock) -> None:
@@ -331,7 +382,7 @@ def test_auth01_login_all_only_and_bad_unicode(tmp_path: Path, clock: FixedClock
     with app_client(container) as client:
         only = client.post("/api/login/all", json={"only": "wiki"}).json()["results"]
         assert [r["site"] for r in only] == ["wiki"]  # 요청한 사이트만
-        raw = '{"company_id": "\\ud800", "company_' + 'password": "x"}'
+        raw = '{"user_id": "\\ud800", "pass' + 'word": "x"}'
         bad = client.post(
             "/api/login/all", content=raw, headers={"Content-Type": "application/json"}
         )

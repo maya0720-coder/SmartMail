@@ -1,20 +1,17 @@
-// 성과 지표 그래프(SVG). 완료 건수는 막대, 나머지는 선(기한 준수율은 목표 점선). 진행 중 기간은 흐리게.
+// 성과 지표 작은 추이 그래프(SVG, 120×28). 완료 건수는 막대, 나머지는 선(기한 준수율은 목표 점선). 진행 중 기간은 흐리게.
+// 표본이 모두 0이면 평평한 선 대신 "데이터 없음"을 보여 준다(디자인 명세 03, 3-3). 툴팁 첫 줄은 지표 정의.
+// svgEl은 common.js의 공용 함수를 쓴다.
 "use strict";
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-function svgEl(tag, attrs) {
-  const node = document.createElementNS(SVG_NS, tag);
-  for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, String(value));
-  return node;
-}
-
 let chartTip = null;
-function showTip(event, title, rows) {
+function showTip(event, title, rows, definition) {
   if (!chartTip) { chartTip = el("div", { class: "tip" }); document.body.append(chartTip); }
-  chartTip.replaceChildren(el("b", {}, title), ...rows.map(([k, v]) => el("div", { class: "r" }, el("span", {}, k), el("span", {}, v))));
+  chartTip.replaceChildren(
+    ...(definition ? [el("div", { class: "tip-def" }, definition)] : []),
+    el("b", {}, title),
+    ...rows.map(([k, v]) => el("div", { class: "r" }, el("span", {}, k), el("span", {}, v))));
   chartTip.style.display = "block";
-  chartTip.style.left = (event.clientX + 12) + "px";
+  chartTip.style.left = Math.min(event.clientX + 12, window.innerWidth - 220) + "px";
   chartTip.style.top = (event.clientY + 12) + "px";
 }
 function hideTip() { if (chartTip) chartTip.style.display = "none"; }
@@ -25,9 +22,12 @@ function formatMetric(metric, value) {
 }
 
 // buckets: [{label, partial, values: {metric: {value, sample, reference_only}}}]
-function drawChart(metric, buckets, target) {
-  const width = 240, height = 70, pad = 6;
-  // 카드 폭에 맞춰 늘어나도 높이는 CSS로 고정(preserveAspectRatio=none). 날짜 글자는 SVG 밖 HTML로 둔다.
+function drawChart(metric, buckets, target, definition) {
+  if (!buckets.some((b) => b.values[metric].sample > 0)) {
+    return el("span", { class: "nodata", title: definition || "" }, "데이터 없음");
+  }
+  const width = 120, height = 28, pad = 2;
+  // 높이는 CSS로 고정(preserveAspectRatio=none). 날짜는 툴팁에 있다.
   const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none", role: "img", "aria-label": metric + " 추이" });
   const values = buckets.map((b) => b.values[metric].value);
   const isCount = metric === "MET-01";
@@ -51,10 +51,10 @@ function drawChart(metric, buckets, target) {
       mark = svgEl("rect", { class: "chart-bar" + (bucket.partial ? " partial" : ""), x: cx - step * 0.3, y: height - pad - h, width: step * 0.6, height: Math.max(h, 0.5) });
     } else if (value !== null) {
       points.push([cx, y(value)]);
-      mark = svgEl("circle", { class: "chart-dot" + (bucket.partial ? " partial" : ""), cx, cy: y(value), r: 2.5 });
+      mark = svgEl("circle", { class: "chart-dot" + (bucket.partial ? " partial" : ""), cx, cy: y(value), r: 1.6 });
     }
     const hit = svgEl("rect", { x: cx - step / 2, y: 0, width: step, height, fill: "transparent" });
-    hit.addEventListener("mousemove", (event) => showTip(event, bucket.label, rows));
+    hit.addEventListener("mousemove", (event) => showTip(event, bucket.label, rows, definition));
     hit.addEventListener("mouseleave", hideTip);
     if (mark) svg.append(mark);
     svg.append(hit);
@@ -62,9 +62,5 @@ function drawChart(metric, buckets, target) {
   if (points.length > 1) {
     svg.insertBefore(svgEl("polyline", { class: "chart-line", points: points.map((p) => p.join(",")).join(" ") }), svg.firstChild.nextSibling);
   }
-  const first = buckets.length ? buckets[0].label : "";
-  const last = buckets.length ? buckets[buckets.length - 1].label : "";
-  const box = document.createDocumentFragment();
-  box.append(svg, el("div", { class: "chart-range" }, el("span", {}, first), el("span", {}, last)));
-  return box;
+  return svg;
 }

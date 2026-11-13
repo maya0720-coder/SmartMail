@@ -15,6 +15,7 @@ from app.errors import register_error_handlers
 from app.mail_sync import background_sync
 from app.routes import (
     auth,
+    categories,
     data,
     gk,
     history,
@@ -22,11 +23,13 @@ from app.routes import (
     mail,
     metrics,
     pages,
+    summaries,
     tasks,
     title_rule,
     weekly,
 )
 from app.scheduler import PeriodicJob
+from app.summary_job import SUMMARY_INTERVAL_SECONDS
 from app.templating import STATIC_DIR
 from app.web_security import ALLOWED_HOSTS, LOOPBACK_CLIENTS, SecurityMiddleware
 from security.logging_policy import EventType, Site, log_event
@@ -58,13 +61,19 @@ def create_app(
             lambda: background_sync(container),
             sync_minutes * 60 if sync_minutes > 0 else MAIL_SYNC_ONCE_SECONDS,
         )
+        # 업무 제목 AI 요청 요약(결정기록 0014): AI-Ground 로그인 상태에서 2분마다 조금씩
+        summary_job = PeriodicJob(
+            "summary", container.summary_job.run_once, SUMMARY_INTERVAL_SECONDS
+        )
         if run_background_jobs:
             job.start()
             sweeper.start()
             mail_job.start()
+            summary_job.start()
         try:
             yield
         finally:
+            await summary_job.stop()
             await mail_job.stop()
             await job.stop()
             await sweeper.stop()
@@ -85,6 +94,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.container = container
+    container.summary_job.auto = run_background_jobs
     register_error_handlers(app, debug=container.settings.debug)
     app.add_middleware(
         SecurityMiddleware,
@@ -98,6 +108,8 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(data.router)
     app.include_router(mail.router)
+    app.include_router(categories.router)
+    app.include_router(summaries.router)
     app.include_router(tasks.router)
     app.include_router(gk.router)
     app.include_router(history.router)

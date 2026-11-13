@@ -9,12 +9,14 @@ from typing import Final
 from config.settings import ConfigError
 from domain.errors import UserInputError
 from domain.mail_rules import ExclusionRules
+from domain.tasks.categories import CategoryRules
 from domain.weekly.report import WikiTemplate
 from domain.weekly.title_rule import validate_title_rule
 
 RULES_DIR: Final = Path(__file__).resolve().parent / "rules"
 DEFAULT_MAIL_RULES: Final = RULES_DIR / "mail_exclusions.toml"
 DEFAULT_WIKI_TEMPLATE: Final = RULES_DIR / "wiki_template.toml"
+DEFAULT_CATEGORY_RULES: Final = RULES_DIR / "task_categories.toml"
 MAX_RULE_ITEMS: Final = 500
 
 
@@ -59,6 +61,31 @@ def load_mail_rules(path: Path = DEFAULT_MAIL_RULES) -> ExclusionRules:
         excluded_folders=str_list(data, "excluded_folders", path.name),
         exclude_auto=exclude_auto,
     )
+
+
+def load_category_rules(
+    path: Path = DEFAULT_CATEGORY_RULES,
+) -> tuple[CategoryRules, tuple[str, ...]]:
+    """전자결재 판별 규칙과 제목 말머리 목록. 형식 오류는 시작 시 실패."""
+    data = read_toml(path)
+    known = {
+        "approval_category",
+        "approval_subject_keywords",
+        "approval_sender_patterns",
+        "title_noise_prefixes",
+    }
+    unknown = set(data) - known
+    if unknown:
+        raise ConfigError(f"{path.name}: 알 수 없는 키 {sorted(unknown)}")
+    category = data.get("approval_category", "전자결재")
+    if not isinstance(category, str) or not 1 <= len(category.strip()) <= 20:
+        raise ConfigError(f"{path.name}: approval_category는 1~20자 문자열이어야 합니다")
+    rules = CategoryRules(
+        approval_category=category.strip(),
+        subject_keywords=str_list(data, "approval_subject_keywords", path.name),
+        sender_patterns=str_list(data, "approval_sender_patterns", path.name),
+    )
+    return rules, str_list(data, "title_noise_prefixes", path.name)
 
 
 def load_wiki_template(path: Path = DEFAULT_WIKI_TEMPLATE) -> WikiTemplate:

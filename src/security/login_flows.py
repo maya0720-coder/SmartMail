@@ -54,6 +54,7 @@ class LoginPage(Protocol):
 @dataclass(frozen=True, slots=True)
 class EntraFields:
     host: str
+    account_domain: str
     email: str
     concealed_input: str
     next: str

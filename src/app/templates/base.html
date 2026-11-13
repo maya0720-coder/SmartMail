@@ -5,47 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="csrf-token" content="{{ csrf_token }}">
+{% set ic = asset("img/icons.svg") ~ "#i-" %}
+<meta name="icon-sprite" content="{{ asset('img/icons.svg') }}">
 <title>업무 처리 현황</title>
-<link rel="stylesheet" href="/static/css/app.css">
+<link rel="preload" href="/static/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ asset('css/app.css') }}">
 </head>
+{% set nav_icons = {"dashboard": "layout-grid", "suggestions": "inbox", "weekly": "file-text", "history": "history", "settings": "settings"} %}
+{% set short_labels = {"dashboard": "홈", "suggestions": "제안", "weekly": "주간보고", "history": "히스토리", "settings": "설정"} %}
 <body data-page="{{ active }}">
 {% if demo_mode %}
 <div class="demo">데모 모드입니다 · 실제 메일·사이트와 연동되지 않으며 모든 데이터는 가상입니다</div>
 {% endif %}
-<header>
-  <h1>업무 처리 현황</h1>
+<header class="topnav">
+  <a class="brand" href="/"><svg class="ic" aria-hidden="true"><use href="{{ ic }}layout-grid"></use></svg><span>업무 처리 현황</span></a>
+  <nav class="menu" aria-label="주 메뉴">
+    {% for key, href, label in nav_items %}
+    <a href="{{ href }}" title="{{ label }}"{% if key == active %} class="active" aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="{{ ic }}{{ nav_icons.get(key, 'layout-grid') }}"></use></svg><span>{{ label }}</span></a>
+    {% endfor %}
+  </nav>
   <form class="search" id="search-form" action="/history" method="get" role="search">
-    <input name="q" placeholder="유사 업무 검색 (예: 전표 역분개)" autocomplete="off" maxlength="200" aria-label="유사 업무 검색">
-    <button>검색</button>
+    <svg class="ic" aria-hidden="true"><use href="{{ ic }}search"></use></svg>
+    {% if active == "dashboard" %}
+    <input name="q" placeholder="업무·부서·모듈 검색" autocomplete="off" maxlength="200" aria-label="내 할 일 거르기, Enter는 히스토리 검색 (Ctrl+K)">
+    {% else %}
+    <input name="q" placeholder="유사 업무 검색" autocomplete="off" maxlength="200" aria-label="유사 업무 검색 (Ctrl+K)">
+    {% endif %}
+    <kbd>Ctrl K</kbd>
+    <span class="search-hint" aria-hidden="true">Enter: 히스토리에서 찾기 · Esc: 지우기</span>
   </form>
   <div class="hdr-right">
     <div class="conn" id="conn"></div>
-    <a class="btn primary" href="/weekly">주간보고 초안</a>
+    <a class="btn cta" href="/weekly"><svg class="ic" aria-hidden="true"><use href="{{ ic }}pen-line"></use></svg><span>주간보고 초안</span></a>
   </div>
 </header>
 
-<div class="layout">
-<nav class="side" aria-label="주 메뉴">
-  {% for key, href, label in nav_items %}
-  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
-  {% endfor %}
-</nav>
 <main>
 {% block content %}{% endblock %}
 </main>
-</div>
-{% set short_labels = {"dashboard": "홈", "suggestions": "제안", "weekly": "주간보고", "history": "히스토리", "settings": "설정"} %}
+
 <nav class="tabbar" aria-label="하단 메뉴">
   {% for key, href, label in nav_items %}
-  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ short_labels.get(key, label) }}</a>
+  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}><svg class="ic" aria-hidden="true"><use href="{{ ic }}{{ nav_icons.get(key, 'layout-grid') }}"></use></svg>{{ short_labels.get(key, label) }}</a>
   {% endfor %}
 </nav>
 
-{% include "partials/login_modal.html" %}
+{% include "partials/login_start.html" %}
 {% block modals %}{% endblock %}
-<div class="toast" id="toast" role="status"></div>
-<script src="/static/js/common.js"></script>
-<script src="/static/js/login.js"></script>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="{{ asset('js/common.js') }}"></script>
+<script src="{{ asset('js/login.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

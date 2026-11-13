@@ -43,14 +43,25 @@ UNAVAILABLE: Final = "이 사이트의 자동 로그인을 쓸 수 없습니다.
 
 
 class LoginAllRequest(BaseModel):
+    """시작 로그인 창 입력. ID 1개 + 공통 암호 1개(위키 암호가 다르면 wiki_password)."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
 
-    company_id: str = Field(default="", max_length=MAX_USER_ID_BYTES)
-    company_password: str = Field(default="", max_length=MAX_SECRET_BYTES)
-    wiki_id: str = Field(default="", max_length=MAX_USER_ID_BYTES)
-    wiki_password: str = Field(default="", max_length=MAX_SECRET_BYTES)
-    wiki_same_password: bool = False  # 위키 암호가 회사 계정 암호와 같음
+    user_id: str = Field(default="", max_length=MAX_USER_ID_BYTES)
+    password: str = Field(default="", max_length=MAX_SECRET_BYTES)
+    wiki_password: str = Field(default="", max_length=MAX_SECRET_BYTES)  # 비우면 공통 암호
     only: SiteName | None = None  # 이 사이트만 로그인(다른 화면에서 필요할 때)
+
+
+def account_ids(user_id: str, domain: str) -> tuple[str, str]:
+    """입력 ID → (회사 계정 ID@도메인, 위키·그룹웨어 ID). '@'까지 입력했으면 그대로 쓴다."""
+    plain = user_id.strip()
+    if any(ch.isspace() or ord(ch) < 0x20 for ch in plain):
+        raise ValueError("ID에 공백이나 제어 문자를 쓸 수 없습니다")
+    if not plain:
+        return "", ""
+    local = plain.split("@", 1)[0]
+    return (plain if "@" in plain else f"{plain}@{domain}"), local
 
 
 def pending_sites(container: Container) -> list[Site]:
@@ -103,8 +114,17 @@ def pending(request: Request) -> JSONResponse:
             "sites": [s.value for s in sites],
             "need_company": any(s in COMPANY_SITES for s in sites) and not company_live,
             "need_wiki": Site.WIKI in sites,
+            "account_domain": container.account_domain,
+            # '나중에'를 누르면 이번 실행 동안 시작 로그인 창을 자동으로 띄우지 않는다
+            "dismissed": container.login_prompt_dismissed,
         }
     )
+
+
+@router.post("/later")
+def later(request: Request) -> JSONResponse:
+    get_container(request).login_prompt_dismissed = True
+    return JSONResponse({"dismissed": True})
 
 
 @router.post("/all")
@@ -118,13 +138,11 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
     try:
         try:
             # 변환 실패(잘못된 유니코드 등)도 이미 만든 버퍼를 지우도록 try 안에서 만든다(L2)
-            for value in (body.company_id, body.company_password, body.wiki_id):
+            company_id, wiki_id = account_ids(body.user_id, container.account_domain)
+            for value in (company_id, body.password, wiki_id):
                 buffers.append(bytearray(value, "utf-8"))
-            same = body.wiki_same_password
-            buffers.append(
-                bytearray(body.company_password if same else body.wiki_password, "utf-8")
-            )
-        except UnicodeError:
+            buffers.append(bytearray(body.wiki_password or body.password, "utf-8"))
+        except (UnicodeError, ValueError):
             return JSONResponse({"error": FAILED}, status_code=400)
         finally:
             del body  # 불변 문자열 참조를 바로 끊는다(결정기록 0005)
@@ -145,6 +163,9 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
         for buffer in buffers:
             wipe(buffer)
         container.login_progress.update("")
+    # AI-Ground에 로그인됐으면 밀린 업무 제목 요약을 바로 시작한다(결정기록 0014)
+    if any(r["logged_in"] and r["site"] == Site.AIGROUND.value for r in results):
+        container.summary_job.kick()
     return JSONResponse({"results": results})
 
 

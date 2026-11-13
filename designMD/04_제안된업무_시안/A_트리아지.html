@@ -1,0 +1,160 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>제안된 업무 · A 트리아지</title><style>
+:root{--bg:#f8fafc;--card:#fff;--soft:#f1f5f9;--line:#e2e8f0;--fg:#0f172a;--sub:#475569;--muted:#94a3b8;
+--accent:#2563eb;--accent-soft:#eff6ff;--cta:#f97316;--warn:#d97706;--warn-soft:#fffbeb;--danger:#dc2626;--danger-soft:#fef2f2;
+--ok:#16a34a;--ok-soft:#f0fdf4;--ai:#7c5cfa;--ai-soft:#f2eeff;--appr:#0aa2a8;--appr-soft:#e6f7f8;
+--font:"Pretendard","Pretendard Variable","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;--mono:"Fira Code",Consolas,monospace;
+--e:cubic-bezier(.23,1,.32,1)}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#111827;--soft:#1e293b;--line:#273449;--fg:#e2e8f0;--sub:#94a3b8;--muted:#64748b;
+--accent:#3b82f6;--accent-soft:#172554;--warn:#f59e0b;--warn-soft:#2a1f0a;--danger:#f87171;--danger-soft:#2c1215;--ok:#4ade80;--ok-soft:#0f2a1a;--ai-soft:#2a2340;--appr-soft:#13302f;color-scheme:dark}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font-family:var(--font);font-size:13px;line-height:1.5;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}button{cursor:pointer}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+.top{display:flex;align-items:center;gap:12px;margin:12px 12px 0;padding:8px 12px;background:rgba(255,255,255,.85);border:1px solid var(--line);border-radius:14px}
+@media (prefers-color-scheme:dark){.top{background:rgba(17,24,39,.85)}}
+.top b{font-size:14px}.top nav{display:flex;gap:2px;margin-left:8px}.top nav a{padding:6px 10px;border-radius:8px;color:var(--sub);text-decoration:none;font-weight:600}
+.top nav a.on{background:var(--accent-soft);color:var(--accent)}.top .demo{margin-left:auto;font-size:11px;color:var(--warn);background:var(--warn-soft);padding:3px 8px;border-radius:999px;font-weight:700}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 12px;font-weight:600;transition:background-color .2s,transform .12s var(--e)}
+.btn:hover{background:var(--soft)}.btn:active{transform:scale(.97)}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}.btn.p:hover{filter:brightness(1.06)}
+.btn.ghost{border-color:transparent;background:transparent}
+.kbd{font-family:var(--mono);font-size:10.5px;padding:0 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;color:var(--muted);background:var(--card)}
+.btn.p .kbd{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--sub);white-space:nowrap}
+.chip.appr{background:var(--appr-soft);color:var(--appr)}.chip.due{background:var(--warn-soft);color:var(--warn)}.chip.late{background:var(--danger-soft);color:var(--danger)}
+.chip.ai{background:var(--ai-soft);color:var(--ai)}.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.conf{display:inline-flex;gap:2px;align-items:center}.conf i{width:5px;height:10px;border-radius:2px;background:var(--line)}.conf i.on{background:var(--accent)}
+mark{background:#fde68a;color:inherit;border-radius:3px;padding:0 2px}
+@media (prefers-color-scheme:dark){mark{background:#854d0e;color:#fff}}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,12px);opacity:0;background:#0f172a;color:#fff;border-radius:10px;padding:10px 14px;font-weight:600;display:flex;gap:12px;align-items:center;transition:all .3s var(--e);pointer-events:none;z-index:50}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}.toast button{border:0;background:none;color:#93c5fd;font-weight:700;padding:0}
+.hint{font-size:11.5px;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:40px 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.wrap{height:calc(100vh - 66px);display:flex;flex-direction:column;padding:14px 12px 12px;gap:12px}
+.head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.head h2{margin:0;font-size:20px}
+.prog{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}.prog .bar{width:160px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.prog .bar i{display:block;height:100%;background:var(--ok);transition:width .4s var(--e)}
+.tabs{display:inline-flex;gap:2px;padding:3px;background:var(--soft);border-radius:8px;margin-left:auto}.tabs button{border:0;background:none;padding:5px 10px;border-radius:6px;font-weight:600;color:var(--sub)}.tabs button.on{background:var(--card);color:var(--fg);box-shadow:0 1px 2px rgba(15,23,42,.12)}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:380px minmax(0,1fr);gap:12px}
+.list{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto}
+.grp{position:sticky;top:0;background:var(--card);font-size:11.5px;font-weight:700;color:var(--muted);padding:10px 14px 4px;z-index:1}
+.it{display:grid;grid-template-columns:4px 1fr auto;gap:10px;padding:10px 14px 10px 0;border-top:1px solid var(--line);cursor:pointer;transition:background-color .15s, opacity .3s var(--e), transform .3s var(--e)}
+.it:hover{background:var(--soft)}.it.sel{background:var(--accent-soft)}.it.sel .bar{background:var(--accent)}.it .bar{border-radius:0 3px 3px 0}
+.it .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.it .m{font-size:11.5px;color:var(--sub);display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:3px}
+.it .r{display:flex;flex-direction:column;align-items:flex-end;gap:6px;font-size:11px;color:var(--muted)}
+.it.out{opacity:0;transform:translateX(-24px)}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0}
+.pane .b{flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:16px}
+.ttl{display:flex;gap:8px;align-items:center}.ttl input{flex:1;font-size:19px;font-weight:800;border:1px solid transparent;border-radius:8px;padding:4px 8px;margin-left:-8px;background:transparent}
+.ttl input:hover{border-color:var(--line)}.ttl input:focus{border-color:var(--accent);outline:none;background:var(--card)}
+.orig{font-size:12px;color:var(--muted)}
+.fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.f{border:1px solid var(--line);border-radius:10px;padding:8px 10px}.f label{display:block;font-size:11px;color:var(--muted);font-weight:600}.f select,.f input{width:100%;border:0;background:transparent;font-weight:700;padding:2px 0;outline:none}
+.sec{font-size:12px;font-weight:700;color:var(--sub);display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.why{display:flex;gap:6px;flex-wrap:wrap}
+.mailbox{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--soft);font-size:13px;line-height:1.75}
+.mailbox .h{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.sim{display:flex;flex-direction:column;gap:6px}.sim div{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;font-size:12.5px}
+.act{display:flex;gap:8px;align-items:center;padding:12px 22px;border-top:1px solid var(--line)}
+.act .sp{margin-left:auto}
+.wk{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--sub)}
+.wk select{border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:var(--card)}
+@media (max-width:900px){.main{grid-template-columns:1fr}.pane{display:none}.fields{grid-template-columns:repeat(2,1fr)}}
+</style></head><body><header class="top"><b>업무 처리 현황</b><nav><a>대시보드</a><a class="on">제안된 업무</a><a>주간보고</a><a>업무 히스토리</a><a>설정</a></nav><span class="demo">시안 · 가상 데이터</span></header>
+<div class="wrap">
+ <div class="head"><h2>제안된 업무</h2>
+  <div class="prog"><span id="pt">오늘 정리 0 / 9</span><span class="bar"><i id="pb"></i></span></div>
+  <div class="tabs" id="tabs"><button class="on" data-f="all">전체</button><button data-f="일반업무">일반업무</button><button data-f="전자결재">전자결재</button><button data-f="low">확신도 낮음</button></div>
+ </div>
+ <div class="main"><div class="list" id="list" role="listbox" aria-label="제안 목록"></div><section class="pane" id="pane" aria-label="제안 상세"></section></div>
+ <div class="hint">키보드: ↑↓ 이동 · <span class="kbd">A</span> 할 일로 · <span class="kbd">S</span> 나중에 · <span class="kbd">D</span> 업무 아님 · <span class="kbd">E</span> 제목 고치기</div>
+</div><div class="toast" id="toast" role="status"></div>
+<script>
+const IC={check:'<path d="M20 6 9 17l-5-5"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',spark:'<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/>',
+cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',link:'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+stamp:'<path d="M5 22h14M19 15H5a2 2 0 0 0-2 2v1h18v-1a2 2 0 0 0-2-2z"/><path d="M14 15V9a4 4 0 1 0-4 0v6"/>',
+undo:'<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',edit:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+chevr:'<path d="m9 18 6-6-6-6"/>',chevl:'<path d="m15 18-6-6 6-6"/>',down:'<path d="m6 9 6 6 6-6"/>',report:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+thread:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',hist:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'};
+const ic=(n,c='')=>`<svg class="ic ${c}" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg,undo){const t=document.getElementById('toast');t.innerHTML=`<span>${esc(msg)}</span>`+(undo?`<button type="button">되돌리기</button>`:'');
+ if(undo)t.querySelector('button').onclick=()=>{undo();t.classList.remove('on')};t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),3200);}
+
+const TODAY='11/13';
+const SUGG=[
+ {id:1,title:'KSB1 원가 보고서 조회 권한 부여',subject:'[골프존] CO 원가 보고서 조회 권한 요청',from:'원가팀 김가상',dept:'원가팀',recv:'11/13 09:12',group:'오늘',due:'11/13',dueText:'금일 중',cat:'일반업무',conf:.92,thread:1,
+  reasons:['요청 표현 “부여 부탁드립니다”','기한 표현 “금일 중”','받는 사람: 나(단독)'],week:'금주 실적',
+  body:['안녕하세요, 원가팀 김가상입니다.','월말 마감 검토를 위해 CO 원가 보고서(KSB1) 조회 권한이 필요합니다.','==금일 중 권한 부여 부탁드립니다.==','감사합니다.'],similar:['KSB1 조회 권한 부여(10/21, 처리 1일)']},
+ {id:2,title:'PO 하단 결제 조건 문구 변경',subject:'RE: PO 출력물 문구 변경 건',from:'구매팀 이가상',dept:'구매팀',recv:'11/13 08:40',group:'오늘',due:'11/14',dueText:'내일까지',cat:'일반업무',conf:.86,thread:3,
+  reasons:['스레드 3통 · 내 회신 대기','요청 표현 “변경을 요청드립니다”'],week:'차주 계획',
+  body:['지난번 말씀드린 건 관련입니다.','==PO 하단 결제 조건 문구 변경을 요청드립니다.== 변경 문안은 첨부와 같습니다.','내일까지 반영 가능할지 회신 부탁드립니다.'],similar:['PO 출력 양식 Smartform 수정(09/30)']},
+ {id:3,title:'[전자결재] 자산명세서 수정 프로그램 반영 품의',subject:'[결재 요청] 자산명세서 수정 프로그램 반영 품의',from:'전자결재 알림',dept:'재무팀',recv:'11/13 08:05',group:'오늘',due:null,dueText:'',cat:'전자결재',conf:.99,thread:1,
+  reasons:['제목 키워드 “결재 요청”','결재 알림 발신'],week:'금주 실적',
+  body:['결재 요청이 도착했습니다.','문서 제목: ==자산명세서 수정 프로그램 반영 품의==','기안 부서: 재무팀'],similar:[]},
+ {id:4,title:'전표 역분개 오류 원인 확인',subject:'전표 역분개 시 오류 발생 문의',from:'재무팀 박가상',dept:'재무팀',recv:'11/12 17:30',group:'어제',due:'11/12',dueText:'',cat:'일반업무',conf:.81,thread:2,
+  reasons:['질문 표현 “원인 확인 부탁”','기한 지남(11/12)'],week:'이슈',
+  body:['FB08로 역분개 시 오류 메시지가 발생합니다.','==원인 확인 부탁드립니다.==','오류 번호는 F5 702입니다.'],similar:['FB08 역분개 F5 702 오류(10/02, G-Knowledge)']},
+ {id:5,title:'야간 배치 지연 현상 원인 분석',subject:'[외부메일] 야간 배치 지연 현상',from:'IT운영팀 최가상',dept:'IT운영팀',recv:'11/12 15:02',group:'어제',due:null,dueText:'',cat:'일반업무',conf:.64,thread:1,
+  reasons:['요청 표현 “확인 요청드립니다”','참조(CC)로 받음 → 확신도 낮음'],week:'이슈',
+  body:['어제 야간 배치가 평소보다 40분 늦게 끝났습니다.','==원인 확인 요청드립니다.==','관련 잡: Z_FI_DAILY'],similar:[]},
+ {id:6,title:'출하 I/F 실패 건 재전송',subject:'출하 I/F 실패 건 확인 부탁',from:'물류팀 홍길동',dept:'물류팀',recv:'11/12 11:20',group:'어제',due:'11/15',dueText:'금요일까지',cat:'일반업무',conf:.88,thread:1,
+  reasons:['요청 표현 “확인 부탁”','기한 표현 “금요일까지”'],week:'차주 계획',
+  body:['출하 인터페이스 3건이 실패로 남아 있습니다.','==금요일까지 확인 후 재전송 부탁드립니다.=='],similar:['출하 I/F 재처리(10/28)']},
+ {id:7,title:'[전자결재] 예산 과목 신설 기안',subject:'[결재] 예산 과목 신설 기안',from:'전자결재 알림',dept:'경영기획팀',recv:'11/11 10:10',group:'이번 주',due:null,dueText:'',cat:'전자결재',conf:.99,thread:1,
+  reasons:['제목 키워드 “[결재]”'],week:'금주 실적',body:['결재 요청이 도착했습니다.','문서 제목: ==예산 과목 신설 기안=='],similar:[]},
+ {id:8,title:'Fiori 타일 권한 추가',subject:'Fiori 타일 권한 요청',from:'영업지원팀 정가상',dept:'영업지원팀',recv:'11/11 09:00',group:'이번 주',due:null,dueText:'',cat:'일반업무',conf:.77,thread:1,
+  reasons:['요청 표현 “추가 부탁드립니다”'],week:'차주 계획',body:['매출 조회 Fiori 앱이 런치패드에 보이지 않습니다.','==타일 권한 추가 부탁드립니다.=='],similar:['Fiori 카탈로그 권한 추가(10/15)']},
+ {id:9,title:'신규 입사자 공유(참고)',subject:'[골프존] 신규 입사자 공유의 건',from:'인사팀 윤가상',dept:'인사팀',recv:'11/10 16:44',group:'이번 주',due:null,dueText:'',cat:'일반업무',conf:.31,thread:1,
+  reasons:['공지성 메일 · 요청 표현 약함'],week:null,body:['신규 입사자 정보를 공유드리오니 ==업무에 참고 부탁드립니다.=='],similar:[]},
+];
+const hl=s=>esc(s).replace(/==(.+?)==/g,'<mark>$1</mark>');
+const conf=v=>`<span class="conf" title="AI 확신도 ${Math.round(v*100)}%">${[.2,.45,.7,.9].map(t=>`<i class="${v>=t?'on':''}"></i>`).join('')}</span>`;
+const dueChip=t=>!t.due?'':`<span class="chip ${t.due<=TODAY&&t.due<'11/13'?'late':'due'}">${ic('cal')}${t.due}${t.dueText?' · '+t.dueText:''}${t.due<'11/13'?' 지남':''}</span>`;
+const catChip=t=>`<span class="chip ${t.cat==='전자결재'?'appr':''}">${t.cat==='전자결재'?ic('stamp'):''}${t.cat}</span>`;
+
+let items=SUGG.map(x=>({...x})),filter='all',sel=items[0].id,done=0;const total=items.length;
+const vis=()=>items.filter(t=>filter==='all'||(filter==='low'?t.conf<.7:t.cat===filter));
+function renderList(){const L=vis();let h='',g='';
+ for(const t of L){if(t.group!==g){g=t.group;h+=`<div class="grp">${g}</div>`;}
+  h+=`<div class="it ${t.id===sel?'sel':''}" data-id="${t.id}" role="option" aria-selected="${t.id===sel}"><i class="bar"></i><div style="min-width:0"><div class="t">${esc(t.title)}</div>
+  <div class="m">${catChip(t)}${dueChip(t)}<span>${esc(t.dept)}</span>${t.thread>1?`<span>${ic('thread')} ${t.thread}</span>`:''}</div></div>
+  <div class="r"><span>${t.recv.split(' ')[1]}</span>${conf(t.conf)}</div></div>`;}
+ document.getElementById('list').innerHTML=h||'<div class="empty">모두 정리했어요 🙌</div>'.replace(' 🙌','');
+ document.getElementById('pt').textContent=`오늘 정리 ${done} / ${total}`;document.getElementById('pb').style.width=(done/total*100)+'%';
+ document.querySelectorAll('#tabs button').forEach(b=>{const k=b.dataset.f,n=items.filter(t=>k==='all'||(k==='low'?t.conf<.7:t.cat===k)).length;b.textContent=b.textContent.replace(/\s\d+$/,'')+' '+n;});}
+function renderPane(){const t=items.find(x=>x.id===sel),p=document.getElementById('pane');
+ if(!t){p.innerHTML='<div class="empty">제안을 선택하세요</div>';return;}
+ p.innerHTML=`<div class="b">
+  <div><div class="ttl"><input id="ti" value="${esc(t.title)}" aria-label="업무 제목">${conf(t.conf)}</div><div class="orig">${ic('mail')} 원래 메일 제목: ${esc(t.subject)}</div></div>
+  <div class="fields"><div class="f"><label>구분</label><select><option ${t.cat==='일반업무'?'selected':''}>일반업무</option><option ${t.cat==='전자결재'?'selected':''}>전자결재</option></select></div>
+   <div class="f"><label>기한</label><input value="${t.due||''}" placeholder="없음"></div><div class="f"><label>요청자</label><input value="${esc(t.from)}"></div>
+   <div class="f"><label>주간보고 예상 위치</label><select><option>${t.week||'넣지 않음'}</option><option>금주 실적</option><option>차주 계획</option><option>이슈</option></select></div></div>
+  <div><div class="sec">${ic('spark')} 왜 제안됐나요</div><div class="why">${t.reasons.map(r=>`<span class="chip ai">${esc(r)}</span>`).join('')}</div></div>
+  <div><div class="sec">${ic('mail')} 메일에서 찾은 요청 문장</div><div class="mailbox"><div class="h"><span>${esc(t.from)} · ${t.recv}</span><span>원본은 아웃룩에서 다시 읽어 표시(저장 안 함)</span></div>${t.body.map(hl).join('<br>')}</div></div>
+  ${t.similar.length?`<div><div class="sec">${ic('hist')} 비슷한 지난 업무</div><div class="sim">${t.similar.map(s=>`<div>${ic('link')}${esc(s)}</div>`).join('')}</div></div>`:''}
+ </div>
+ <div class="act">
+  <button class="btn p" data-a="ok">${ic('check')}할 일로 <span class="kbd">A</span></button>
+  <button class="btn" data-a="later">${ic('clock')}나중에 <span class="kbd">S</span></button>
+  <button class="btn ghost" data-a="no">${ic('x')}업무 아님 <span class="kbd">D</span></button>
+  ${t.cat==='전자결재'?`<button class="btn ghost">${ic('stamp')}결재함 열기</button>`:''}
+  <span class="sp hint">${items.length-1>0?'처리하면 다음 제안으로 넘어갑니다':''}</span></div>`;
+ p.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>act(b.dataset.a));}
+function act(a){const L=vis(),i=L.findIndex(x=>x.id===sel),t=L[i];if(!t)return;
+ const row=document.querySelector(`.it[data-id="${t.id}"]`);if(row)row.classList.add('out');
+ setTimeout(()=>{const idx=items.indexOf(t);items.splice(idx,1);done++;const nx=vis()[Math.min(i,vis().length-1)];sel=nx?nx.id:null;renderList();renderPane();
+  const msg={ok:'할 일 목록에 넣었어요',later:'내일 아침 다시 보여드릴게요',no:'업무 아님으로 분류했어요 · 비슷한 메일은 다음부터 덜 제안해요'}[a];
+  toast(`‘${t.title}’ · ${msg}`,()=>{items.splice(idx,0,t);done--;sel=t.id;renderList();renderPane();});},220);}
+document.getElementById('list').onclick=e=>{const r=e.target.closest('.it');if(!r)return;sel=+r.dataset.id;renderList();renderPane();};
+document.getElementById('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;filter=b.dataset.f;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));const L=vis();sel=L[0]?L[0].id:null;renderList();renderPane();};
+document.addEventListener('keydown',e=>{if(e.target.closest('input,select'))return;const L=vis(),i=L.findIndex(x=>x.id===sel);
+ if(e.key==='ArrowDown'&&i<L.length-1){sel=L[i+1].id;renderList();renderPane();e.preventDefault();}
+ else if(e.key==='ArrowUp'&&i>0){sel=L[i-1].id;renderList();renderPane();e.preventDefault();}
+ else if(e.key==='a'||e.key==='A')act('ok');else if(e.key==='s'||e.key==='S')act('later');else if(e.key==='d'||e.key==='D')act('no');
+ else if(e.key==='e'||e.key==='E'){e.preventDefault();document.getElementById('ti')?.select();}});
+renderList();renderPane();
+</script></body></html>

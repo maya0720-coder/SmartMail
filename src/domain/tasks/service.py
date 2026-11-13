@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
@@ -19,8 +20,8 @@ from domain.ports import (
     MailRefRepository,
     TaskRepository,
 )
+from domain.tasks.categories import DEFAULT_CATEGORIES, CategoryCatalog
 from domain.tasks.extract import TaskCandidate, TaskExtractor
-from domain.tasks.modules import MODULE_TAGS
 from security.masking import mask
 
 S = TaskStatus
@@ -56,18 +57,18 @@ class TaskEdit:
     module_tag: str | None = None
     clear_due: bool = False
 
-    def validate(self) -> None:
+    def validate(self, categories: Sequence[str] = DEFAULT_CATEGORIES) -> None:
         if self.title is not None and not 1 <= len(self.title.strip()) <= 200:
             raise UserInputError("제목은 1~200자여야 합니다")
         if self.requester_dept is not None and len(self.requester_dept) > 100:
             raise UserInputError("요청 부서는 100자 이하여야 합니다")
-        if self.module_tag is not None and self.module_tag not in MODULE_TAGS:
-            raise UserInputError("허용되지 않은 모듈 태그입니다")
+        if self.module_tag is not None and self.module_tag not in categories:
+            raise UserInputError("설정에 없는 구분입니다")
         if self.due_at is not None and self.due_at.tzinfo is None:
             raise UserInputError("기한에는 시간대가 필요합니다")
 
-    def apply(self, task: Task) -> Task:
-        self.validate()
+    def apply(self, task: Task, categories: Sequence[str] = DEFAULT_CATEGORIES) -> Task:
+        self.validate(categories)
         return replace(
             task,
             title=mask(self.title.strip()).value if self.title is not None else task.title,
@@ -109,7 +110,10 @@ class TaskService:
         clock: Clock,
         extractor: TaskExtractor,
         assignee: str,
+        *,
+        catalog: CategoryCatalog | None = None,
     ) -> None:
+        self._catalog = catalog
         self._tasks = tasks
         self._refs = mail_refs
         self._events = events
@@ -120,6 +124,39 @@ class TaskService:
         # 추출 근거 문장(화면 표시용). 메모리에만 두고 저장하지 않는다(MAIL-08).
         # 키: 업무 ID, 값: (업무 생성 시각, 근거). 생성 시각이 다르면(삭제 후 ID 재사용) 무효.
         self._evidence: dict[int, tuple[datetime, str]] = {}
+
+    def categories(self) -> tuple[str, ...]:
+        return self._catalog.categories() if self._catalog is not None else DEFAULT_CATEGORIES
+
+    def title_of(self, subject: str) -> str:
+        """메일 제목 → 임시 업무 제목(회신 표시·말머리 제거)."""
+        return self._extractor.title_of(subject)
+
+    def set_summary_title(self, task_id: int, title: str) -> None:
+        """AI 요청 요약으로 업무 제목을 바꾼다(마스킹, 200자).
+
+        사용자 수정이 아니므로 이벤트는 남기지 않는다.
+        """
+        task = self.get(task_id)
+        cleaned = mask(title.strip()).value[:200]
+        if cleaned:
+            self._save(replace(task, title=cleaned))
+
+    def recategorize_unknown(self) -> int:
+        """구분 목록에 없는 값(예: 예전 SAP 모듈 태그)을 가진 업무를 규칙으로 다시 구분한다.
+
+        메일 원문은 저장하지 않으므로 업무 제목으로 판별한다. 바꾼 건수를 돌려준다.
+        """
+        if self._catalog is None:
+            return 0
+        allowed = self.categories()
+        changed = 0
+        for task in self._tasks.list_tasks(None):
+            if task.status is S.DISMISSED or task.module_tag in allowed:
+                continue
+            self._save(replace(task, module_tag=self._catalog.categorize(task.title, "")))
+            changed += 1
+        return changed
 
     # ---- 조회 ----
     def get(self, task_id: int) -> Task:
@@ -208,7 +245,7 @@ class TaskService:
     def approve(self, task_id: int, edit: TaskEdit | None = None) -> Task:
         task = self.get(task_id)
         self._check(task, S.WAITING)
-        updated = edit.apply(task) if edit else task
+        updated = edit.apply(task, self.categories()) if edit else task
         changed = updated != task
         saved = self._save(replace(updated, status=S.WAITING))
         kind = TaskEventType.APPROVED_EDITED if changed else TaskEventType.APPROVED
@@ -226,7 +263,7 @@ class TaskService:
         task = self.get(task_id)
         if task.status is S.DISMISSED:
             raise TransitionError("무시한 업무는 수정할 수 없습니다")
-        saved = self._save(edit.apply(task))
+        saved = self._save(edit.apply(task, self.categories()))
         self._events.record(TaskEventType.EDITED, task_id=task_id)
         return saved
 

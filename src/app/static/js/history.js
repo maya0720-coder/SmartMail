@@ -21,7 +21,7 @@ function renderStages(data, query) {
     return el("div", { class: "result-group" }, el("div", { class: "sec" }, badge(stage.stage, stage.badge)), content);
   });
   const next = { app: "gk", gk: "ai" }[data.resolved];
-  document.getElementById("hres").replaceChildren(...groups,
+  fill(document.getElementById("hres"), ...groups,
     data.message ? el("div", { class: "empty" }, data.message) : null,
     next ? el("button", { class: "btn sm", onclick: () => runSearch(query, next) }, "다음 단계 강제 검색") : null);
 }
@@ -52,12 +52,19 @@ document.getElementById("hist-form").addEventListener("submit", (event) => {
   event.preventDefault();
   runSearch(document.getElementById("hq").value);
 });
-for (const button of document.querySelectorAll("#hist-module button")) {
-  button.addEventListener("click", () => {
-    for (const other of document.querySelectorAll("#hist-module button")) other.classList.toggle("on", other === button);
-    historyModule = button.dataset.m;
+// 구분 필터: 사용자가 정한 구분 목록으로 버튼을 만든다(결정기록 0014)
+async function renderCategoryFilter() {
+  const box = document.getElementById("hist-module");
+  const result = await api("GET", "/api/task-categories");
+  const names = result.ok ? result.data.categories : [];
+  const pick = (value) => () => {
+    historyModule = value;
+    for (const other of box.querySelectorAll("button")) other.classList.toggle("on", other.dataset.m === value);
     loadCards();
-  });
+  };
+  box.replaceChildren(el("button", { class: "on", dataset: { m: "" }, onclick: pick("") }, "전체"),
+    ...names.map((name) => el("button", { dataset: { m: name }, onclick: pick(name) }, name)));
 }
+renderCategoryFilter();
 loadCards();
 if (document.getElementById("hq").value) runSearch(document.getElementById("hq").value);

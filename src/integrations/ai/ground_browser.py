@@ -31,7 +31,9 @@ from integrations.ai.prompts import (
     classify_prompt,
     parse_answer,
     parse_classification,
+    parse_summaries,
     suggest_prompt,
+    summarize_prompt,
 )
 from security.browser import EphemeralContext
 from security.links import safe_link
@@ -148,6 +150,9 @@ class BrowserGllmAdapter:
         self, summary: MaskedText, similar_cases: Sequence[MaskedText]
     ) -> AiAnswer:
         return parse_answer(self._ask(suggest_prompt(summary, similar_cases)))
+
+    def summarize_requests(self, items: Sequence[MaskedText]) -> list[str | None]:
+        return parse_summaries(self._ask(summarize_prompt(items)), len(items))
 
     def _context(self) -> EphemeralContext:
         handle = self._sessions.current(Site.AIGROUND)

@@ -26,7 +26,7 @@ def test_end_to_end_with_fakes(tmp_path: Path, clock: FixedClock) -> None:
 
         # 2) 승인(수정 없이 / 수정 후)
         assert client.post(f"/api/tasks/{fi['id']}/approve", json={}).json()["status"] == "waiting"
-        client.post(f"/api/tasks/{po['id']}/approve", json={"module_tag": "ABAP"})
+        client.post(f"/api/tasks/{po['id']}/approve", json={"module_tag": "일반업무"})
 
         # 3) 같은 기간 재수집 → 회신 감지로 완료 후보(자동 완료 아님)
         again = client.post("/api/mail/collect", json={"period": "recent7"}).json()

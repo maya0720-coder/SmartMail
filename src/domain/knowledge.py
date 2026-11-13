@@ -107,7 +107,7 @@ def build_draft(
         f"- 담당자: {assignee}",
         f"- 요청 부서: {task.requester_dept or '-'}",
         f"- 처리일: {processed_label}",
-        f"- 관련 시스템·모듈: {task.module_tag or '-'}",
+        f"- 업무 구분: {task.module_tag or '-'}",
     ]
     if card and card.tcode:
         lines.append(f"- T-code/프로그램: {card.tcode}")

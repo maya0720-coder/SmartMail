@@ -7,9 +7,25 @@ let lastPreview = null;
 const lines = (id) => document.getElementById(id).value.split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 50);
 const currentDraft = () => ({ week_start: weekStart, done: lines("wk-done"), planned: lines("wk-planned"), issues: lines("wk-issues") });
 
+// 각 열 머리의 항목 수(줄 수)와 ①②③ 단계 표시줄을 갱신한다.
+function updateCounts() {
+  for (const id of ["wk-done", "wk-planned", "wk-issues"]) {
+    document.getElementById(id + "-cnt").textContent = lines(id).length + "건";
+  }
+}
+function setStep(step) {
+  for (const item of document.querySelectorAll("#wk-steps li")) {
+    const n = Number(item.dataset.step);
+    item.classList.toggle("done", n < step);
+    item.classList.toggle("now", n === step);
+  }
+}
+
 function invalidatePreview() {
   lastPreview = null;
   document.getElementById("btn-publish").disabled = true;
+  setStep(1);
+  updateCounts();
 }
 
 async function loadDraft() {
@@ -41,11 +57,12 @@ async function preview() {
   if (!result.ok) { toast(errorText(result, "미리보기를 만들지 못했습니다")); return; }
   lastPreview = result.data;
   const box = document.getElementById("wk-preview");
-  box.replaceChildren(el("div", { class: "t-sub" }, "페이지: " + lastPreview.title + (lastPreview.base_version ? " (현재 버전 " + lastPreview.base_version + ")" : " (새 페이지 또는 위키 미연결)")),
+  fill(box, el("div", { class: "t-sub" }, "페이지: " + lastPreview.title + (lastPreview.base_version ? " (현재 버전 " + lastPreview.base_version + ")" : " (새 페이지 또는 위키 미연결)")),
     lastPreview.current_section ? el("div", { class: "notice" }, "지금 바뀔 기존 본인 영역: " + lastPreview.current_section) : null,
     ...renderPreview(lastPreview.section_html));
   box.classList.remove("hidden");
   document.getElementById("btn-publish").disabled = false;
+  setStep(3);  // 미리보기 완료 → 승인·게시 단계
 }
 
 async function publish() {
