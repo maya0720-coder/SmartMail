@@ -43,6 +43,18 @@ function fill(node, ...children) {
   return node;
 }
 
+// 글자 일부를 <mark>로 표시한다(텍스트 노드 + mark 요소, HTML 해석 없음). 범위가 틀리면 그대로 둔다.
+function markText(text, start, end) {
+  const frag = document.createDocumentFragment();
+  const s = Math.max(0, Math.min(start, text.length));
+  const e = Math.max(s, Math.min(end, text.length));
+  if (e <= s) { frag.append(document.createTextNode(text)); return frag; }
+  if (s > 0) frag.append(document.createTextNode(text.slice(0, s)));
+  frag.append(el("mark", {}, text.slice(s, e)));
+  if (e < text.length) frag.append(document.createTextNode(text.slice(e)));
+  return frag;
+}
+
 // SVG 요소 생성기(아이콘·그래프 공용). 속성 값은 문자열로만 넣는다.
 const SVG_NS = "http://www.w3.org/2000/svg";
 function svgEl(tag, attrs) {

@@ -94,3 +94,23 @@ class LedgerRepository(Protocol):
     def list_entries(
         self, since: datetime | None = None, until: datetime | None = None
     ) -> list[LedgerEntry]: ...
+
+
+class TriageRuleStore(Protocol):
+    """'업무 아님' 학습 규칙 저장소(결정기록 0015). 키 해시와 횟수만 다룬다."""
+
+    def counts(self, key_hashes: Sequence[str]) -> dict[str, int]: ...
+
+    def bump(self, kind: str, key_hash: str, delta: int) -> None: ...
+
+    def total(self) -> int: ...
+
+    def clear(self) -> int: ...
+
+
+class KeyHasher(Protocol):
+    """원문 대신 저장할 키 해시를 만든다(키는 security/가 관리)."""
+
+    def digest(self, kind: str, value: str) -> str: ...
+
+    def wipe(self) -> None: ...

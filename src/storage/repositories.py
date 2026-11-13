@@ -36,6 +36,10 @@ def _task_from_row(row: sqlite3.Row) -> Task:
         gk_link=row["gk_link"],
         gk_registered_at=from_db_time(row["gk_registered_at"]),
         shared=bool(row["shared"]),
+        snooze_until=from_db_time(row["snooze_until"]),
+        confidence=row["confidence"],
+        reasons=tuple(code for code in (row["reasons"] or "").split(",") if code),
+        weekly_section=row["weekly_section"],
     )
 
 
@@ -60,6 +64,10 @@ def _task_params(task: Task) -> tuple[object, ...]:
         task.gk_link,
         to_db_time(task.gk_registered_at),
         int(task.shared),
+        to_db_time(task.snooze_until),
+        task.confidence,
+        ",".join(task.reasons) or None,
+        task.weekly_section,
     )
 
 
@@ -72,7 +80,8 @@ class SqliteTaskRepository:
             cursor = conn.execute(
                 "INSERT INTO task (title, requester_dept, requested_at, due_at, status,"
                 " module_tag, source, thread_id, created_at, closed_at, gk_link,"
-                " gk_registered_at, shared) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " gk_registered_at, shared, snooze_until, confidence, reasons, weekly_section)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 _task_params(task),
             )
         return replace(task, id=cursor.lastrowid)
@@ -88,7 +97,8 @@ class SqliteTaskRepository:
             cursor = conn.execute(
                 "UPDATE task SET title=?, requester_dept=?, requested_at=?, due_at=?, status=?,"
                 " module_tag=?, source=?, thread_id=?, created_at=?, closed_at=?, gk_link=?,"
-                " gk_registered_at=?, shared=? WHERE id=?",
+                " gk_registered_at=?, shared=?, snooze_until=?, confidence=?, reasons=?,"
+                " weekly_section=? WHERE id=?",
                 (*_task_params(task), task.id),
             )
         if cursor.rowcount != 1:

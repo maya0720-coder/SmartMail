@@ -297,7 +297,7 @@ th[aria-sort="descending"] .ic{transform:rotate(180deg)}
   body[data-page="dashboard"] .vrow{min-height:26px}
   body[data-page="dashboard"] .todo-card .card-head{padding:6px 12px}
   body[data-page="dashboard"] table.dense th{height:30px}
-  body[data-page="dashboard"] .mhead,body[data-page="dashboard"] .kpi-row,body[data-page="dashboard"] #alerts{flex:none}
+  body[data-page="dashboard"] .mhead,body[data-page="dashboard"] .kpi-row,body[data-page="dashboard"] #alerts,body[data-page="dashboard"] .sugg-banner{flex:none}
   body[data-page="dashboard"] .grid2{flex:1;min-height:0;align-items:stretch}
   body[data-page="dashboard"] .table-wrap{flex:1;min-height:0;overflow:hidden}
 }
@@ -341,6 +341,10 @@ th[aria-sort="descending"] .ic{transform:rotate(180deg)}
 .sugg-meta select.inline-input{width:auto;padding:3px 8px;font-size:12px}
 .chip.sum-wait{background:var(--warn-soft);color:var(--warn)}
 td .t-sub.wait{color:var(--warn)}
+/* 대시보드: 제안 배너(점검 D3) */
+.sugg-banner{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;border-radius:var(--r-card);border:1px solid var(--line);background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;text-decoration:none}
+.sugg-banner:hover{border-color:var(--accent)}
+.sugg-banner .ic{width:15px;height:15px}
 /* 시작 로그인 창(결정기록 0014) */
 .login-modal{max-width:420px;padding:0 22px}
 .lm-head{display:flex;align-items:center;gap:12px;margin:0 -22px 14px;padding:20px 22px 14px;border-bottom:1px solid var(--line)}

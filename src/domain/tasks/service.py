@@ -5,14 +5,24 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from domain.calendar import next_business_morning
 from domain.errors import UserInputError
 from domain.mail import MailThread
-from domain.models import LedgerEntry, Task, TaskEventType, TaskSource, TaskStatus
+from domain.models import (
+    MAX_REASONS,
+    WEEKLY_SECTIONS,
+    LedgerEntry,
+    Task,
+    TaskEventType,
+    TaskSource,
+    TaskStatus,
+)
 from domain.ports import (
     Clock,
     EventRecorder,
@@ -22,7 +32,10 @@ from domain.ports import (
 )
 from domain.tasks.categories import DEFAULT_CATEGORIES, CategoryCatalog
 from domain.tasks.extract import TaskCandidate, TaskExtractor
+from domain.tasks.triage_rules import RuleKey, TriageLearning
 from security.masking import mask
+
+logger = logging.getLogger(__name__)
 
 S = TaskStatus
 ALLOWED_TRANSITIONS: Final[dict[TaskStatus, frozenset[TaskStatus]]] = {
@@ -37,6 +50,14 @@ ALLOWED_TRANSITIONS: Final[dict[TaskStatus, frozenset[TaskStatus]]] = {
 
 DUE_SOON: Final = timedelta(days=1)
 MAX_EVIDENCE_CACHE: Final = 500
+
+
+# 결정 종류 → 결정 직후 상태(결정 취소 때 확인)
+TRIAGE_AFTER: Final = {
+    "approved": TaskStatus.WAITING,
+    "snoozed": TaskStatus.SUGGESTED,
+    "dismissed": TaskStatus.DISMISSED,
+}
 
 
 class TransitionError(UserInputError):
@@ -56,6 +77,7 @@ class TaskEdit:
     due_at: datetime | None = None
     module_tag: str | None = None
     clear_due: bool = False
+    weekly_section: str | None = None  # 주간보고 위치(사용자 선택, 결정기록 0015)
 
     def validate(self, categories: Sequence[str] = DEFAULT_CATEGORIES) -> None:
         if self.title is not None and not 1 <= len(self.title.strip()) <= 200:
@@ -66,6 +88,8 @@ class TaskEdit:
             raise UserInputError("설정에 없는 구분입니다")
         if self.due_at is not None and self.due_at.tzinfo is None:
             raise UserInputError("기한에는 시간대가 필요합니다")
+        if self.weekly_section is not None and self.weekly_section not in WEEKLY_SECTIONS:
+            raise UserInputError("주간보고 위치가 올바르지 않습니다")
 
     def apply(self, task: Task, categories: Sequence[str] = DEFAULT_CATEGORIES) -> Task:
         self.validate(categories)
@@ -79,6 +103,9 @@ class TaskEdit:
             ),
             due_at=None if self.clear_due else (self.due_at or task.due_at),
             module_tag=self.module_tag if self.module_tag is not None else task.module_tag,
+            weekly_section=(
+                self.weekly_section if self.weekly_section is not None else task.weekly_section
+            ),
         )
 
 
@@ -112,8 +139,10 @@ class TaskService:
         assignee: str,
         *,
         catalog: CategoryCatalog | None = None,
+        learning: TriageLearning | None = None,
     ) -> None:
         self._catalog = catalog
+        self._learning = learning
         self._tasks = tasks
         self._refs = mail_refs
         self._events = events
@@ -202,6 +231,7 @@ class TaskService:
             candidate = self._extractor.extract(thread)
             if candidate is None:
                 continue
+            candidate = self._apply_learning(thread, candidate)
             task = self._tasks.add(
                 Task(
                     title=mask(candidate.title).value[:200],
@@ -217,6 +247,8 @@ class TaskService:
                     due_at=candidate.due_at,
                     module_tag=candidate.module_tag,
                     thread_id=thread.thread_id,
+                    confidence=round(candidate.confidence, 3),
+                    reasons=candidate.reasons,
                 )
             )
             assert task.id is not None  # noqa: S101
@@ -227,6 +259,52 @@ class TaskService:
                 self._evidence.pop(next(iter(self._evidence)))
             suggested.append((task, candidate))
         return IngestResult(suggested, linked, replied)
+
+    def _apply_learning(self, thread: MailThread, candidate: TaskCandidate) -> TaskCandidate:
+        """'업무 아님' 학습 감점(확신도만 낮춤, 자동 제외 없음)."""
+        received = [m for m in thread.messages if not m.sent_by_me]
+        if self._learning is None or not received:
+            return candidate
+        first = received[0]
+        try:
+            keys = self._learning.keys_for(first.sender_address, first.subject)
+            confidence, penalized = self._learning.adjust(candidate.confidence, keys)
+        except Exception as exc:  # 학습(보조 기능) 오류가 메일 반영을 멈추지 않게 한다
+            logger.warning("업무 아님 학습 감점 생략: %s", type(exc).__name__)
+            return candidate
+        if not penalized:
+            return candidate
+        return replace(
+            candidate,
+            confidence=confidence,
+            reasons=(*candidate.reasons[: MAX_REASONS - 1], "learned_penalty"),
+        )
+
+    def learn_dismissal(self, sender_address: str, subject: str) -> tuple[RuleKey, ...]:
+        """업무 아님으로 고른 메일의 키 해시를 1 올린다. 되돌리기용 키를 돌려준다(원문은 버림)."""
+        if self._learning is None:
+            return ()
+        try:
+            keys = self._learning.keys_for(sender_address, subject)
+            self._learning.record(keys, +1)
+        except Exception as exc:  # 결정은 이미 저장됐다. 학습만 생략하고 결정·되돌리기는 유지
+            logger.warning("업무 아님 학습 기록 생략: %s", type(exc).__name__)
+            return ()
+        return keys
+
+    def unlearn(self, keys: tuple[RuleKey, ...]) -> None:
+        if self._learning is None:
+            return
+        try:
+            self._learning.record(keys, -1)
+        except Exception as exc:
+            logger.warning("업무 아님 학습 취소 생략: %s", type(exc).__name__)
+
+    def learned_rule_count(self) -> int:
+        return self._learning.total() if self._learning is not None else 0
+
+    def reset_learning(self) -> int:
+        return self._learning.reset() if self._learning is not None else 0
 
     def _detect_reply(self, task: Task, thread: MailThread) -> bool:
         """내 회신이 마지막 받은 메일 뒤에 있으면 '완료 후보'로 표시한다(TODO-05, 확정은 사용자)."""
@@ -247,9 +325,51 @@ class TaskService:
         self._check(task, S.WAITING)
         updated = edit.apply(task, self.categories()) if edit else task
         changed = updated != task
-        saved = self._save(replace(updated, status=S.WAITING))
+        saved = self._save(replace(updated, status=S.WAITING, snooze_until=None))
         kind = TaskEventType.APPROVED_EDITED if changed else TaskEventType.APPROVED
         self._events.record(kind, task_id=task_id)
+        return saved
+
+    # ---- 제안 트리아지(결정기록 0015) ----
+    def snooze(self, task_id: int) -> Task:
+        """'나중에': 제안됨 상태 그대로 다음 근무일 아침까지 제안 목록에서 숨긴다."""
+        task = self.get(task_id)
+        if task.status is not S.SUGGESTED:
+            raise TransitionError("제안된 업무만 나중에로 미룰 수 있습니다")
+        until = next_business_morning(self._clock.now())
+        saved = self._save(replace(task, snooze_until=until))
+        self._events.record(TaskEventType.SNOOZED, task_id=task_id)
+        return saved
+
+    def is_snoozed(self, task: Task) -> bool:
+        return task.snooze_until is not None and task.snooze_until > self._clock.now()
+
+    def triage_decisions_since(self, since: datetime) -> int:
+        """since 이후 내린 제안 결정 수(할 일로·업무 아님·나중에 − 되돌림). 이벤트에서 센다."""
+        kinds = [
+            TaskEventType.APPROVED,
+            TaskEventType.APPROVED_EDITED,
+            TaskEventType.DISMISSED,
+            TaskEventType.SNOOZED,
+            TaskEventType.TRIAGE_REVERTED,
+        ]
+        events = self._events.list_events(kinds=kinds, since=since)
+        reverted = sum(1 for e in events if e.kind is TaskEventType.TRIAGE_REVERTED)
+        return max(0, len(events) - 2 * reverted)
+
+    def revert_triage(self, decision: str, before: Task) -> Task:
+        """결정 취소: 결정 직전 값(before)으로 되돌린다. 상태 전이 표와 별개의 전용 경로다.
+
+        결정 뒤 다른 상태로 더 바뀐 업무는 되돌리지 않는다(TransitionError).
+        """
+        expected = TRIAGE_AFTER.get(decision)
+        if expected is None or before.id is None:
+            raise TransitionError("되돌릴 수 없는 결정입니다")
+        current = self.get(before.id)
+        if current.status is not expected:
+            raise TransitionError("이미 다른 상태로 바뀌어 되돌릴 수 없습니다")
+        saved = self._save(before)
+        self._events.record(TaskEventType.TRIAGE_REVERTED, task_id=before.id, detail=decision)
         return saved
 
     def dismiss(self, task_id: int) -> Task:

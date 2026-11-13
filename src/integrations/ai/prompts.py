@@ -19,13 +19,11 @@ MAX_ANSWER_CHARS: Final = 4000
 MAX_REFERENCES: Final = 5
 PARSE_FAILED: Final = "AI 응답 형식을 해석하지 못했습니다. 잠시 후 다시 시도해 주세요."
 
-_MODULES_TEXT: Final = ", ".join((*MODULE_TAGS, "없음"))
 
 CLASSIFY_TEMPLATE: Final = (
-    "다음은 SAP ERP 운영 담당자가 받은 메일의 요약입니다(민감정보는 [마스킹]으로 가림).\n"
-    "처리해야 할 업무 요청인지 판단해 주세요. 반드시 아래 형식 3줄로만 답하세요.\n"
+    "다음은 업무 담당자가 받은 메일의 요약입니다(민감정보는 [마스킹]으로 가림).\n"
+    "처리해야 할 업무 요청인지 판단해 주세요. 반드시 아래 형식 2줄로만 답하세요.\n"
     "업무: 예 또는 아니오\n"
-    "모듈: {modules} 중 하나\n"
     "확신도: 0과 1 사이 숫자\n"
     "---\n"
     "요약: {summary}"
@@ -55,9 +53,12 @@ _HTTPS_LINK: Final = re.compile(r"https://[^\s<>\"')\]]{1,500}")
 
 SUMMARIZE_TEMPLATE: Final = (
     "다음은 업무 담당자가 받은 메일 {count}건입니다(민감정보는 [마스킹]으로 가림).\n"
-    "각 메일에서 '보낸 사람이 요청한 일'을 업무 목록 제목으로 쓸 "
-    "한 문장(40자 이내, 명사형)으로 요약해 주세요.\n"
-    "인사말·서명·회신 기록은 무시하고, 사람 이름은 쓰지 마세요.\n"
+    "각 메일에서 '보낸 사람이 요청한 일'을 업무 목록 제목으로 쓸 한 문장으로 요약해 주세요.\n"
+    "규칙:\n"
+    "- '무엇을(대상: 시스템·문서·T-code·화면) + 어떻게(행동)' 순서의 명사형 40자 이내. "
+    "예: 'KSB1 조회 권한 부여', 'PO 결제 조건 문구 변경'\n"
+    "- '부탁드립니다', '요청드립니다', '확인 부탁' 같은 인사·요청 어미만 쓰지 마세요.\n"
+    "- 인사말·서명·회신 기록은 무시하고, 사람 이름은 쓰지 마세요.\n"
     "반드시 아래 형식으로 메일 번호마다 한 줄씩만 답하세요.\n"
     "1. 요약\n"
     "2. 요약\n"
@@ -86,7 +87,7 @@ def parse_summaries(text: str, count: int) -> list[str | None]:
 
 
 def classify_prompt(summary: MaskedText) -> str:
-    return CLASSIFY_TEMPLATE.format(modules=_MODULES_TEXT, summary=summary.value)
+    return CLASSIFY_TEMPLATE.format(summary=summary.value)
 
 
 def suggest_prompt(summary: MaskedText, cases: Sequence[MaskedText]) -> str:

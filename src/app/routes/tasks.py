@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, time
 from typing import Annotated, Any, Literal
 
@@ -15,6 +16,7 @@ from domain.errors import UserInputError
 from domain.models import STATUS_LABELS, Task, TaskStatus
 from domain.retention_rules import retention_info
 from domain.tasks.service import TaskEdit, TaskNotFoundError, TransitionError, due_badge
+from domain.tasks.triage_view import is_low_confidence, received_group
 from security.links import safe_link
 
 router = APIRouter(prefix="/api/tasks")
@@ -34,6 +36,7 @@ class EditBody(BaseModel):
     due_date: date | None = None  # 기한 날짜(그날 23:59:59 KST)
     clear_due: bool = False
     module_tag: ModuleTag | None = None
+    weekly_section: Literal["done", "planned", "issues", "none"] | None = None
 
     def to_edit(self) -> TaskEdit:
         due = None
@@ -45,6 +48,7 @@ class EditBody(BaseModel):
             due_at=due,
             module_tag=self.module_tag,
             clear_due=self.clear_due,
+            weekly_section=self.weekly_section,
         )
 
 
@@ -81,6 +85,13 @@ def task_json(request: Request, task: Task) -> dict[str, Any]:
         "gk_link": safe_link(task.gk_link or "", [str(container.settings.gknowledge_base_url)]),
         "retention_days_left": info.days_left if info else None,
         "retention_alert": bool(info and info.alert),
+        # 제안 트리아지(결정기록 0015): 이유는 코드값, 문장은 담지 않는다
+        "confidence": task.confidence,
+        "reasons": list(task.reasons),
+        "weekly_section": task.weekly_section,
+        "snoozed": container.tasks.is_snoozed(task),
+        "snooze_until": _iso(task.snooze_until),
+        "thread_count": len(container.mail.refs_for_task(task.id)) if task.id else 0,
     }
 
 
@@ -90,15 +101,33 @@ def _error(message: str, status: int) -> JSONResponse:
 
 @router.get("")
 def list_tasks(
-    request: Request, status: Annotated[list[StatusName] | None, Query()] = None
+    request: Request,
+    status: Annotated[list[StatusName] | None, Query()] = None,
+    snoozed: Literal["hide", "only"] = "hide",
 ) -> JSONResponse:
     statuses = [TaskStatus(s) for s in status] if status else None
     container = get_container(request)
     tasks = container.tasks.list_tasks(statuses)
+    suggested_view = statuses == [TaskStatus.SUGGESTED]
+    if suggested_view:
+        # 제안 목록: '나중에'로 미룬 업무는 다시 보일 시각 전까지 뺀다(결정기록 0015).
+        # snoozed=only면 미룬 업무만 돌려준다('나중에 n건' 펼침).
+        want = snoozed == "only"
+        tasks = [t for t in tasks if container.tasks.is_snoozed(t) == want]
     # 아직 AI 요청 요약을 만들지 않은 업무(제목이 메일 제목에서 온 임시 제목)
     pending = container.summary_job.pending_ids()
+    now = container.clock.now()
     return JSONResponse(
-        [{**task_json(request, t), "summary_pending": t.id in pending} for t in tasks]
+        [
+            {
+                **task_json(request, t),
+                "summary_pending": t.id in pending,
+                # 받은 시각 묶음(오늘·어제·이번 주·이전)과 확신도 낮음 표시(2단계)
+                "group": received_group(t.requested_at or t.created_at, now),
+                "low_confidence": is_low_confidence(t.confidence),
+            }
+            for t in tasks
+        ]
     )
 
 
@@ -115,6 +144,27 @@ def get_task(request: Request, task_id: int) -> JSONResponse:
         {"id": ref.id, "received_at": _iso(ref.received_at), "summary": ref.summary}
         for ref in container.mail.refs_for_task(task_id)
     ]
+    return JSONResponse(body)
+
+
+def _decide(
+    request: Request, task_id: int, decision: str, action: Any, learn: Any = None
+) -> JSONResponse:
+    """제안 결정(할 일로·업무 아님). 결정 직전 값을 보관하고 되돌리기 토큰을 함께 돌려준다.
+
+    learn: 제안을 '업무 아님'으로 고른 직후 학습 키를 기록하고 그 키를 돌려주는 함수(선택).
+    """
+    container = get_container(request)
+    try:
+        before = container.tasks.get(task_id)
+    except TaskNotFoundError:
+        return _error("요청한 항목을 찾을 수 없습니다.", 404)
+    response = _apply(request, action)
+    if response.status_code != 200 or before.status is not TaskStatus.SUGGESTED:
+        return response
+    learned = learn() if learn is not None else ()
+    body = json.loads(bytes(response.body))
+    body["decision_token"] = container.decisions.issue(decision, before, learned)
     return JSONResponse(body)
 
 
@@ -140,13 +190,10 @@ def add_manual(request: Request, body: ManualBody) -> JSONResponse:
 def approve(request: Request, task_id: int, body: EditBody | None = None) -> JSONResponse:
     tasks = get_container(request).tasks
     edit = body.to_edit() if body else None
-    return _apply(request, lambda: tasks.approve(task_id, edit))
+    return _decide(request, task_id, "approved", lambda: tasks.approve(task_id, edit))
 
 
-@router.post("/{task_id}/dismiss")
-def dismiss(request: Request, task_id: int) -> JSONResponse:
-    tasks = get_container(request).tasks
-    return _apply(request, lambda: tasks.dismiss(task_id))
+# '업무 아님'(POST /{task_id}/dismiss)은 학습 기록 때문에 routes/triage.py에 있다.
 
 
 @router.post("/{task_id}/edit")

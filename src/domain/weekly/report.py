@@ -80,7 +80,19 @@ def classify_week(tasks: list[Task], moment: datetime, template: WikiTemplate) -
     """WIKI-01 자동 분류."""
     start, end = week_range(moment)
     draft = WeeklyDraft(start)
+    sections = {"done": draft.done, "planned": draft.planned, "issues": draft.issues}
     for task in tasks:
+        if task.weekly_section is not None and task.status not in (
+            TaskStatus.SUGGESTED,
+            TaskStatus.DISMISSED,
+        ):
+            # 사용자가 고른 위치가 자동 분류보다 우선한다(결정기록 0015). 지난주 이전 완료는 제외.
+            old_done = task.status is TaskStatus.DONE and (
+                task.closed_at is None or not start <= task.closed_at < end
+            )
+            if task.weekly_section in sections and not old_done:
+                sections[task.weekly_section].append(_item(task, template))
+            continue  # 'none'(넣지 않음) 포함
         if task.status is TaskStatus.DONE:
             if task.closed_at is not None and start <= task.closed_at < end:
                 draft.done.append(_item(task, template))

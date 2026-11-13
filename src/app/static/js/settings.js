@@ -31,7 +31,22 @@ document.getElementById("btn-wipe").addEventListener("click", async () => {
   if (!window.confirm("로컬 데이터를 모두 지울까요? 되돌릴 수 없습니다.")) return;
   const result = await api("POST", "/api/data/wipe", { confirm: true });
   toast(result.ok ? "로컬 데이터를 모두 지웠습니다" : errorText(result, "삭제하지 못했습니다"));
+  loadRuleCount();
 });
+
+// '업무 아님' 학습 규칙 수·초기화(결정기록 0015)
+async function loadRuleCount() {
+  const result = await api("GET", "/api/triage-rules");
+  document.getElementById("rules-count").textContent = result.ok ? String(result.data.rules) : "-";
+}
+document.getElementById("btn-rules-reset").addEventListener("click", async () => {
+  if (!window.confirm("'업무 아님' 학습을 초기화할까요? 되돌릴 수 없습니다.")) return;
+  const result = await api("DELETE", "/api/triage-rules", { confirm: true });
+  toast(result.ok ? "학습 규칙 " + result.data.deleted + "개를 지웠습니다" : errorText(result, "초기화하지 못했습니다"),
+    { kind: result.ok ? "ok" : "error" });
+  loadRuleCount();
+});
+loadRuleCount();
 
 function showTitleRule(data) {
   document.getElementById("title-format").value = data.page_title_format;

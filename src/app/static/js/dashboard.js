@@ -4,7 +4,8 @@
 
 let currentGrain = "month";
 let allTasks = [];
-let currentFilter = "all";
+// 기본 필터: 할 일(제안됨·무시 제외). 제안은 '제안된 업무' 화면에서 정리한다(점검 D3)
+let currentFilter = "todo";
 let selectedId = null;
 let searchTerm = "";
 const checked = new Set();  // 일괄 작업 선택(메모리에만)
@@ -57,6 +58,7 @@ let currentView = { items: [], page: 1, pages: 1, total: 0 };
 function filteredTasks() {
   const term = searchTerm.trim().toLowerCase();
   const byStatus = (t) => currentFilter === "all" ? t.status !== "dismissed"
+    : currentFilter === "todo" ? t.status !== "dismissed" && t.status !== "suggested"
     : currentFilter === "soon" ? Boolean(t.due_badge) : t.status === currentFilter;
   const byTerm = (t) => !term || [t.title, t.requester_dept, t.module_tag].some((v) => v && v.toLowerCase().includes(term));
   return sortTasks(allTasks.filter((t) => byStatus(t) && byTerm(t)), todoSort);
@@ -115,6 +117,7 @@ function renderTodo() {
   for (const button of document.querySelectorAll("#filters button")) {
     const key = button.dataset.f;
     const count = key === "all" ? allTasks.filter((t) => t.status !== "dismissed").length
+      : key === "todo" ? allTasks.filter((t) => t.status !== "dismissed" && t.status !== "suggested").length
       : allTasks.filter((t) => key === "soon" ? Boolean(t.due_badge) : t.status === key).length;
     button.textContent = button.textContent.replace(/\s\d+$/, "") + " " + count;
     button.classList.toggle("on", key === currentFilter);
@@ -134,6 +137,13 @@ function renderTodo() {
   renderBulk();
   renderPager(document.getElementById("todo-pager"), document.getElementById("todo-info"), currentView, perPage, (p) => { todoPage = p; renderTodo(); });
   drawDonut(document.getElementById("status-donut"), allTasks, setFilter);
+}
+
+// 정리할 제안(나중에로 미룬 것 제외)이 있으면 '제안된 업무'로 안내한다(점검 D3)
+function renderSuggestionBanner() {
+  const n = allTasks.filter((t) => t.status === "suggested" && !t.snoozed).length;
+  document.getElementById("sugg-banner").classList.toggle("hidden", n === 0);
+  document.getElementById("sugg-banner-text").textContent = "정리할 제안 " + n + "건 → 제안된 업무에서 정리하기";
 }
 
 function setFilter(key) {
@@ -163,6 +173,7 @@ async function loadTasks() {
     allTasks = result.data;
     renderTodo();
     scheduleFit();
+    renderSuggestionBanner();
   }
   const alerts = await api("GET", "/api/alerts");
   const box = document.getElementById("alerts");

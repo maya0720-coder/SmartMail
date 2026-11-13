@@ -10,6 +10,7 @@ from app.container import Container
 from app.ratelimit import RateLimiter
 from app.summary_job import SummaryJob
 from app.title_rule import apply_saved_rule
+from app.triage_tokens import DecisionTokens
 from app.web_security import new_csrf_token
 from collectors.demo_data import demo_messages
 from collectors.detect import CollectorKind, DetectionResult, detect_collector
@@ -20,6 +21,7 @@ from config.rules import (
     DEFAULT_MAIL_RULES,
     load_category_rules,
     load_mail_rules,
+    load_title_rules,
     load_wiki_template,
 )
 from config.settings import PROJECT_ROOT, Settings
@@ -36,6 +38,7 @@ from domain.tasks.categories import CategoryCatalog
 from domain.tasks.extract import TaskExtractor
 from domain.tasks.service import TaskService
 from domain.tasks.summarize import SummaryService
+from domain.tasks.triage_rules import TriageLearning
 from domain.weekly.service import WeeklyService, WikiApi
 from integrations.ai.fake import FakeKnowledgeAI
 from integrations.ai.gateway import AiGateway
@@ -52,6 +55,7 @@ from security.credentials import (
     LoginService,
     PasswordAuthenticator,
 )
+from security.hashing import LocalKeyHasher
 from security.logging_policy import Site
 from security.login_flows import load_login_fields
 from security.residue_check import ResidueChecker
@@ -77,12 +81,14 @@ from storage.repositories import (
     SqliteTaskRepository,
 )
 from storage.retention import RetentionJob
+from storage.triage_rules_repo import SqliteTriageRules
 
 # 사이트별 로그인 시도 제한: 1분에 5회
 LOGIN_MAX_ATTEMPTS: Final = 5
 LOGIN_WINDOW: Final = timedelta(minutes=1)
 # AI 관문 시간 초과 = 어댑터 답변 대기 + 이 여유(초)
 AI_GATEWAY_MARGIN_SECONDS: Final = 15.0
+LEARNING_KEY_FILE: Final = "triage_hash.bin"  # '업무 아님' 학습 HMAC 키(결정기록 0015)
 
 
 def _site_base_url(settings: Settings, site: Site) -> str:
@@ -198,6 +204,8 @@ def build_container(
     # 업무 구분(사용자 정의 목록 + 전자결재 판별 규칙, 결정기록 0014)
     app_settings = SqliteAppSettings(db)
     category_rules, title_noise = load_category_rules()
+    # '업무 아님' 학습 키: DB와 같은 로컬 폴더. 데모(메모리 DB)는 파일 없이 메모리에만
+    learning_key = None if settings.demo_mode else settings.db_path.parent / LEARNING_KEY_FILE
     catalog = CategoryCatalog(app_settings, category_rules)
     tasks = TaskService(
         SqliteTaskRepository(db),
@@ -208,6 +216,7 @@ def build_container(
         TaskExtractor(ai, categorizer=catalog, noise_prefixes=title_noise),
         settings.user_display_name,
         catalog=catalog,
+        learning=TriageLearning(SqliteTriageRules(db, clock), LocalKeyHasher(learning_key)),
     )
     # 예전 SAP 모듈 태그처럼 목록에 없는 구분은 시작할 때 규칙으로 다시 구분한다
     tasks.recategorize_unknown()
@@ -225,7 +234,7 @@ def build_container(
     history_service = HistoryService(history, tasks, mail, clock)
     # 업무 제목 = AI 요청 요약(결정기록 0014). 가짜 AI(데모·fake 설정)는 로그인 없이 동작
     summary_job = SummaryJob(
-        SummaryService(tasks, SqliteMailRefRepository(db), mail, ai),
+        SummaryService(tasks, SqliteMailRefRepository(db), mail, ai, load_title_rules()),
         sessions,
         always_ready=isinstance(ai_adapter, FakeKnowledgeAI),
     )
@@ -276,4 +285,5 @@ def build_container(
         catalog=catalog,
         account_domain=login_fields.entra.account_domain,
         summary_job=summary_job,
+        decisions=DecisionTokens(clock),
     )

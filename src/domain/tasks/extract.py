@@ -15,6 +15,7 @@ from typing import Final, Protocol
 from domain.ai import AiUnavailableError, Classification
 from domain.clock import KST
 from domain.mail import MailMessage, MailThread
+from domain.models import MAX_REASONS
 from security.masking import MaskedText, mask
 
 REQUEST_PATTERNS: Final = re.compile(
@@ -58,6 +59,7 @@ class TaskCandidate:
     module_tag: str | None
     evidence: str  # 메모리 전용
     confidence: float
+    reasons: tuple[str, ...] = ()  # 제안 이유 코드(결정기록 0015). 문장은 담지 않는다
 
 
 def clean_title(subject: str, noise_prefixes: tuple[str, ...] = ()) -> str:
@@ -124,6 +126,8 @@ def _evidence(message: MailMessage) -> tuple[str, int]:
 class Categorizer(Protocol):
     def categorize(self, subject: str, sender_address: str) -> str: ...
 
+    def is_approval_category(self, value: str) -> bool: ...
+
 
 class TaskExtractor:
     def __init__(
@@ -171,6 +175,7 @@ class TaskExtractor:
             if self._categorizer is not None
             else None
         )
+        ai_judged = False
         if points < SCORE_TASK:
             if points < SCORE_AMBIGUOUS:
                 return None
@@ -178,15 +183,48 @@ class TaskExtractor:
             if verdict is None or not verdict.is_task:
                 return None
             confidence = verdict.confidence
+            ai_judged = True
         # 기한 탐색은 앞부분만(긴 본문으로 인한 처리 지연 방지)
         text_for_due = f"{first.subject}\n{first.body[:MAX_DUE_SCAN]}"
+        due = parse_due(text_for_due, first.received_at)
         return TaskCandidate(
             title=self.title_of(first.subject),
             thread_id=thread.thread_id,
             requested_at=first.received_at,
             requester_dept=requester_dept(first.sender_name),
-            due_at=parse_due(text_for_due, first.received_at),
+            due_at=due,
             module_tag=category,
             evidence=evidence or self.title_of(first.subject),
             confidence=confidence,
+            reasons=self._reasons(thread, first, evidence, due, category, ai_judged),
         )
+
+    def _reasons(
+        self,
+        thread: MailThread,
+        first: MailMessage,
+        evidence: str,
+        due: datetime | None,
+        category: str | None,
+        ai_judged: bool,
+    ) -> tuple[str, ...]:
+        """제안 이유 코드(명세 3-2). 이미 계산한 신호만 쓰고 코드값만 돌려준다(최대 6개)."""
+        codes: list[str] = []
+        if evidence:
+            codes.append("request_phrase")
+        if REQUEST_SUBJECT.search(first.subject):
+            codes.append("subject_request")
+        if due is not None:
+            codes.append("due_phrase")
+        if first.to_me:
+            codes.append("to_me")
+        elif first.cc_me:
+            codes.append("cc_only")
+        if len(thread.messages) >= 2 and not any(m.sent_by_me for m in thread.messages):
+            codes.append("thread_waiting")
+        categorizer = self._categorizer
+        if category and categorizer is not None and categorizer.is_approval_category(category):
+            codes.append("approval")
+        if ai_judged:
+            codes.append("ai_judged")
+        return tuple(codes[:MAX_REASONS])

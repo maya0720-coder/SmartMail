@@ -65,6 +65,24 @@ class TaskEventType(StrEnum):
     DRAFT_CREATED = "draft_created"  # 주간보고 초안 생성
     PUBLISHED = "published"  # 위키 게시
     AI_CALLED = "ai_called"  # g-llm 호출(detail: success|failure)
+    SNOOZED = "snoozed"  # 제안 '나중에'(결정기록 0015)
+    TRIAGE_REVERTED = "triage_reverted"  # 결정 취소(detail: approved|snoozed|dismissed)
+
+
+# 제안 이유 코드(결정기록 0015, 명세 3-2). 화면 문구는 화면에서 바꾼다.
+REASON_CODES: tuple[str, ...] = (
+    "request_phrase",
+    "subject_request",
+    "due_phrase",
+    "to_me",
+    "cc_only",
+    "thread_waiting",
+    "approval",
+    "ai_judged",
+    "learned_penalty",
+)
+MAX_REASONS = 6
+WEEKLY_SECTIONS: tuple[str, ...] = ("done", "planned", "issues", "none")
 
 
 class ResolutionStage(StrEnum):
@@ -113,6 +131,11 @@ class Task:
     gk_link: str | None = None
     gk_registered_at: datetime | None = None
     shared: bool = False  # TODO-08: 웹 배포 단계용(로컬 버전 비활성)
+    # 제안 트리아지(결정기록 0015). 이유는 코드값만, 문장·주소는 저장하지 않는다.
+    snooze_until: datetime | None = None  # 이 시각 전에는 제안 목록에서 숨김
+    confidence: float | None = None  # 추출 확신도(0~1)
+    reasons: tuple[str, ...] = ()  # 제안 이유 코드(REASON_CODES)
+    weekly_section: str | None = None  # 주간보고 위치(사용자 선택): done|planned|issues|none
     id: int | None = None
 
     @property

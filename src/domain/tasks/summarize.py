@@ -25,7 +25,7 @@ BATCH_SIZE: Final = 6
 MAX_ITEM_CHARS: Final = 900
 MAX_BODY_EXCERPT: Final = 700
 # 회신·전달 기록이 시작되는 줄(그 아래는 이전 메일 인용이라 요약에서 뺀다)
-_QUOTE_START: Final = re.compile(
+QUOTE_START: Final = re.compile(
     r"^\s*(?:-{2,}\s*(?:Original Message|원본 메시지|원래 메시지)|From:|보낸 사람:|보낸사람:|"
     r"Sent:|On .{0,80} wrote:|>)",
     re.IGNORECASE,
@@ -45,18 +45,44 @@ class SummaryTasks(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class TitleRules:
+    """업무 제목 규칙(결정기록 0015 · 점검 D1): 일반 문구뿐이거나 짧은 요약은 버린다."""
+
+    min_chars: int = 8
+    generic_phrases: tuple[str, ...] = ()
+    polite_endings: tuple[str, ...] = ()
+
+    def is_generic(self, summary: str) -> bool:
+        compact = _normalize(summary)
+        if len(compact) < self.min_chars:
+            return True
+        rest = compact
+        for phrase in sorted(self.generic_phrases, key=len, reverse=True):
+            rest = rest.replace(_normalize(phrase), "")
+        for ending in sorted(self.polite_endings, key=len, reverse=True):
+            rest = rest.replace(_normalize(ending), "")
+        # 일반 문구·어미를 지우고 남는 내용이 거의 없으면(4자 미만) 일반 문구로 본다
+        return len(rest) < 4
+
+
+def _normalize(text: str) -> str:
+    return re.sub(r"[\s\W_]+", "", text).casefold()
+
+
+@dataclass(frozen=True, slots=True)
 class SummaryRun:
     done: int
     failed: int
     remaining: int
     message: str | None = None
+    kept: int = 0  # 일반 문구라 메일 제목을 유지한 건수
 
 
 def body_excerpt(body: str) -> str:
     """회신 기록 앞까지의 본문을 줄여서 돌려준다."""
     kept: list[str] = []
     for line in body.splitlines():
-        if _QUOTE_START.match(line):
+        if QUOTE_START.match(line):
             break
         if line.strip():
             kept.append(line.strip())
@@ -70,7 +96,9 @@ class SummaryService:
         refs: MailRefRepository,
         mail: MailService,
         ai: RequestSummarizer,
+        title_rules: TitleRules | None = None,
     ) -> None:
+        self._rules = title_rules or TitleRules()
         self._tasks = tasks
         self._refs = refs
         self._mail = mail
@@ -110,7 +138,7 @@ class SummaryService:
 
     def run(self, max_batches: int) -> SummaryRun:
         queue = self.pending()
-        done = failed = 0
+        done = failed = kept = 0
         for _ in range(max_batches):
             batch: list[tuple[Task, MailRef, MaskedText]] = []
             while queue and len(batch) < BATCH_SIZE:
@@ -132,7 +160,12 @@ class SummaryService:
                 if not answer or task.id is None or ref.id is None:
                     failed += 1
                     continue
+                if self._rules.is_generic(answer):
+                    # 일반 문구뿐이면 메일 제목 정리본을 유지하고 다시 보내지 않는다(점검 D1)
+                    self._refs.set_summary(ref.id, task.title[:500])
+                    kept += 1
+                    continue
                 self._tasks.set_summary_title(task.id, answer)
                 self._refs.set_summary(ref.id, answer[:500])
                 done += 1
-        return SummaryRun(done, failed, len(self.pending()))
+        return SummaryRun(done, failed, len(self.pending()), kept=kept)

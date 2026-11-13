@@ -24,6 +24,20 @@ def week_range(moment: datetime) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=7)
 
 
+MORNING_HOUR: Final = 8
+
+
+def next_business_morning(moment: datetime, hour: int = MORNING_HOUR) -> datetime:
+    """다음 근무일 아침(KST). 월~목 → 다음 날, 금·토·일 → 다음 월요일(결정기록 0015).
+
+    공휴일은 고려하지 않는다(사내 달력 연동 전, 확인 필요).
+    """
+    local = require_aware(moment).astimezone(KST)
+    days = {4: 3, 5: 2, 6: 1}.get(local.weekday(), 1)  # 금 +3, 토 +2, 일 +1, 그 외 +1
+    target = local + timedelta(days=days)
+    return target.replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
 def local_date_label(moment: datetime) -> str:
     """화면 표시용 'MM/DD(요일)'."""
     local = require_aware(moment).astimezone(KST)

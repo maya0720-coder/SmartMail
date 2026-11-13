@@ -97,3 +97,6 @@ class CategoryCatalog:
 
     def allows(self, value: str) -> bool:
         return value in self.categories()
+
+    def is_approval_category(self, value: str) -> bool:
+        return value == self.rules.approval_category

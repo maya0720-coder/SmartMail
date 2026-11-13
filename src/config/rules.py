@@ -10,6 +10,7 @@ from config.settings import ConfigError
 from domain.errors import UserInputError
 from domain.mail_rules import ExclusionRules
 from domain.tasks.categories import CategoryRules
+from domain.tasks.summarize import TitleRules
 from domain.weekly.report import WikiTemplate
 from domain.weekly.title_rule import validate_title_rule
 
@@ -17,6 +18,7 @@ RULES_DIR: Final = Path(__file__).resolve().parent / "rules"
 DEFAULT_MAIL_RULES: Final = RULES_DIR / "mail_exclusions.toml"
 DEFAULT_WIKI_TEMPLATE: Final = RULES_DIR / "wiki_template.toml"
 DEFAULT_CATEGORY_RULES: Final = RULES_DIR / "task_categories.toml"
+DEFAULT_TITLE_RULES: Final = RULES_DIR / "title_rules.toml"
 MAX_RULE_ITEMS: Final = 500
 
 
@@ -86,6 +88,22 @@ def load_category_rules(
         sender_patterns=str_list(data, "approval_sender_patterns", path.name),
     )
     return rules, str_list(data, "title_noise_prefixes", path.name)
+
+
+def load_title_rules(path: Path = DEFAULT_TITLE_RULES) -> TitleRules:
+    """업무 제목 일반 문구 규칙(결정기록 0015). 형식 오류는 시작 시 실패."""
+    data = read_toml(path)
+    unknown = set(data) - {"min_chars", "generic_phrases", "polite_endings"}
+    if unknown:
+        raise ConfigError(f"{path.name}: 알 수 없는 키 {sorted(unknown)}")
+    min_chars = data.get("min_chars", 8)
+    if not isinstance(min_chars, int) or isinstance(min_chars, bool) or not 1 <= min_chars <= 50:
+        raise ConfigError(f"{path.name}: min_chars는 1~50 정수여야 합니다")
+    return TitleRules(
+        min_chars=min_chars,
+        generic_phrases=str_list(data, "generic_phrases", path.name),
+        polite_endings=str_list(data, "polite_endings", path.name),
+    )
 
 
 def load_wiki_template(path: Path = DEFAULT_WIKI_TEMPLATE) -> WikiTemplate:

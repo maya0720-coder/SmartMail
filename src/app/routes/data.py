@@ -26,5 +26,6 @@ def wipe(request: Request, body: WipeRequest) -> JSONResponse:
     container = get_container(request)
     deleted = container.db.wipe_all()
     container.tasks.clear_cache()
+    container.tasks.reset_learning()  # 학습 규칙 표는 위에서 비웠고, 로컬 학습 키 파일도 폐기
     logger.info("로컬 데이터 전체 삭제: %d행", deleted)
     return JSONResponse({"deleted": deleted})

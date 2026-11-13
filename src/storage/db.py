@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-SCHEMA_VERSION: Final = 1
+SCHEMA_VERSION: Final = 2  # 2: 제안 트리아지 필드·학습 규칙 표(결정기록 0015)
 
 # 사용자 데이터 테이블(전체 삭제 대상). 순서는 외래 키 의존의 역순.
 DATA_TABLES: Final = (
@@ -30,6 +30,7 @@ DATA_TABLES: Final = (
     "task",
     "sync_state",
     "app_setting",
+    "triage_rules",
 )
 
 SCHEMA: Final = """
@@ -131,6 +132,28 @@ CREATE TABLE IF NOT EXISTS app_setting (
 """
 
 
+# 스키마 2(결정기록 0015): 제안 트리아지 필드. 이유는 코드값 목록만(문장 저장 금지).
+MIGRATION_2_TASK_COLUMNS: Final = (
+    ("snooze_until", "TEXT"),
+    ("confidence", "REAL CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1))"),
+    ("reasons", "TEXT CHECK (reasons IS NULL OR length(reasons) <= 200)"),
+    (
+        "weekly_section",
+        "TEXT CHECK (weekly_section IS NULL OR weekly_section IN"
+        " ('done', 'planned', 'issues', 'none'))",
+    ),
+)
+# '업무 아님' 학습 규칙: 원문 주소·말머리 대신 HMAC 키 해시만 저장(3단계에서 사용)
+MIGRATION_2_TRIAGE_RULES: Final = """
+CREATE TABLE IF NOT EXISTS triage_rules (
+    key_hash TEXT PRIMARY KEY CHECK (length(key_hash) = 64),
+    kind TEXT NOT NULL CHECK (kind IN ('sender', 'prefix')),
+    dismiss_count INTEGER NOT NULL DEFAULT 0 CHECK (dismiss_count >= 0),
+    updated_at TEXT NOT NULL
+)
+"""
+
+
 def to_db_time(value: datetime | None) -> str | None:
     """aware 시각을 UTC ISO 문자열로 바꾼다(문자열 비교로 시간 순서가 유지된다)."""
     if value is None:
@@ -159,7 +182,21 @@ class Database:
         # 정렬·VACUUM 임시 데이터를 디스크 임시 파일에 남기지 않는다.
         self._conn.execute("PRAGMA temp_store = MEMORY")
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION:d}")
+
+    def _migrate(self) -> None:
+        """스키마 1 → 2: 기존 데이터를 보존하며 열을 더한다(새 DB도 같은 경로).
+
+        여러 번 실행해도 안전하다(이미 있는 열은 건너뜀).
+        """
+        existing = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(task)")}
+        with self.transaction() as conn:
+            for name, ddl in MIGRATION_2_TASK_COLUMNS:
+                if name not in existing:
+                    # 열 이름·정의는 아래 상수에서만 온다(사용자 입력 아님)
+                    conn.execute(f"ALTER TABLE task ADD COLUMN {name} {ddl}")  # noqa: S608
+            conn.execute(MIGRATION_2_TRIAGE_RULES)
 
     @classmethod
     def in_memory(cls) -> Database:

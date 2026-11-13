@@ -10,6 +10,7 @@
 <title>업무 처리 현황</title>
 <link rel="preload" href="/static/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+{% block head %}{% endblock %}
 </head>
 {% set nav_icons = {"dashboard": "layout-grid", "suggestions": "inbox", "weekly": "file-text", "history": "history", "settings": "settings"} %}
 {% set short_labels = {"dashboard": "홈", "suggestions": "제안", "weekly": "주간보고", "history": "히스토리", "settings": "설정"} %}
