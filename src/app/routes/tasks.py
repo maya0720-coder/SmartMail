@@ -17,6 +17,7 @@ from domain.errors import UserInputError
 from domain.models import STATUS_LABELS, Task, TaskStatus, summary_state_of
 from domain.retention_rules import retention_info
 from domain.tasks.followup import FollowupState
+from domain.tasks.period_view import in_period
 from domain.tasks.progress import progress_stale, ref_title, rule_summary
 from domain.tasks.service import TaskEdit, TaskNotFoundError, TransitionError, due_badge
 from domain.tasks.triage_view import is_low_confidence, received_group
@@ -127,10 +128,20 @@ def list_tasks(
     request: Request,
     status: Annotated[list[StatusName] | None, Query()] = None,
     snoozed: Literal["hide", "only"] = "hide",
+    since: datetime | None = None,
+    carry: bool = True,
 ) -> JSONResponse:
     statuses = [TaskStatus(s) for s in status] if status else None
     container = get_container(request)
     tasks = container.tasks.list_tasks(statuses)
+    if since is not None:
+        # 대시보드 기간 필터(결정기록 0039): [since, 지금]에 걸친 업무 + 이월(carry)
+        if since.tzinfo is None:
+            return _error("기간 시작에는 시간대가 있어야 합니다.", 400)
+        end = container.clock.now()
+        tasks = [
+            t for t in tasks if in_period(t, _group_time(container, t), since, end, carry=carry)
+        ]
     suggested_view = statuses == [TaskStatus.SUGGESTED]
     if suggested_view:
         # 제안 목록: '나중에'로 미룬 업무는 다시 보일 시각 전까지 뺀다(결정기록 0015).

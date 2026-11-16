@@ -3,17 +3,20 @@
 - 비율은 기간 전체의 분자·분모를 합쳐 계산한다(주별 비율 평균 금지).
 - 기한 없는 업무는 MET-02 분모, 유사 검색을 하지 않은 업무는 MET-04 분모에서 뺀다.
 - 표본(분모) 5건 미만은 '참고'로 표시한다. 분모가 0이면 값은 None('-').
-- 카드는 최근 완료 기간 vs 직전 기간. 진행 중 기간은 partial로 표시한다.
+- 카드 기준(결정기록 0039)
+  - current(기본): 진행 중인 현재 기간 [시작, 지금] vs 직전 기간의 같은 경과 구간(동기 비교)
+  - last_complete: 최근 완료 기간 vs 그 직전 기간(진행 중 기간 제외, 이전 방식)
+- 추이 그래프의 진행 중 기간은 partial로 표시한다.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final, Literal
 
-from domain.metrics.periods import Bucket, Grain, recent_buckets
+from domain.metrics.periods import Bucket, Grain, bucket_of, recent_buckets
 from domain.models import LedgerEntry, ResolutionStage
 
 MetricId = Literal["MET-01", "MET-02", "MET-03", "MET-04"]
@@ -24,6 +27,15 @@ METRIC_NAMES: Final[dict[MetricId, str]] = {
     "MET-04": "이력 재사용률",
 }
 REFERENCE_SAMPLE: Final = 5
+Basis = Literal["current", "last_complete"]
+# 동기 비교 문구(직전 기간 이름)
+COMPARE_NAMES: Final[dict[Grain, str]] = {
+    "year": "전년",
+    "half": "전반기",
+    "quarter": "전분기",
+    "month": "전월",
+    "week": "전주",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,3 +127,54 @@ def cards(series: list[BucketMetrics]) -> list[Card]:
         return [Card(m, empty, empty, None, "-") for m in METRIC_NAMES]
     current, previous = complete[-1], complete[-2]
     return [_trend(m, current.values[m], previous.values[m]) for m in METRIC_NAMES]
+
+
+@dataclass(frozen=True, slots=True)
+class CardWindow:
+    """카드가 비교하는 두 구간(반열린 [start, end))과 화면 문구."""
+
+    start: datetime
+    end: datetime
+    compare_start: datetime
+    compare_end: datetime
+    current_label: str  # 예: "2026년(진행 중)"
+    period_text: str  # 예: "2026년 · 11/17까지"
+    compare_label: str  # 예: "전년 동기 대비"
+    compare_text: str  # 예: "2025.01.01~2025.11.17"
+
+
+def _day(moment: datetime) -> str:
+    return f"{moment:%Y.%m.%d}"
+
+
+def _bucket_name(bucket: Bucket, grain: Grain) -> str:
+    return f"{bucket.label}년" if grain == "year" else bucket.label
+
+
+def current_window(now: datetime, grain: Grain) -> CardWindow:
+    """현재 기간 [시작, 지금]과 직전 기간의 같은 경과 구간(직전 기간 끝을 넘지 않음)."""
+    bucket = bucket_of(now, grain)
+    previous = bucket_of(bucket.start - timedelta(microseconds=1), grain)
+    elapsed = now - bucket.start
+    compare_end = min(previous.start + elapsed, previous.end)
+    last_day = compare_end - timedelta(microseconds=1)
+    name = _bucket_name(bucket, grain)
+    return CardWindow(
+        start=bucket.start,
+        end=now,
+        compare_start=previous.start,
+        compare_end=compare_end,
+        current_label=f"{name}(진행 중)",
+        period_text=f"{name} · {now:%m/%d}까지",
+        compare_label=f"{COMPARE_NAMES[grain]} 동기 대비",
+        compare_text=f"{_day(previous.start)}~{_day(max(last_day, previous.start))}",
+    )
+
+
+def current_cards(entries: Iterable[LedgerEntry], window: CardWindow) -> list[Card]:
+    """현재 기간 카드: 진행 중 기간 값 vs 직전 기간 같은 경과 구간 값."""
+    rows = list(entries)
+    now_rows = [e for e in rows if window.start <= e.completed_at <= window.end]
+    before = [e for e in rows if window.compare_start <= e.completed_at < window.compare_end]
+    current, previous = compute(now_rows), compute(before)
+    return [_trend(m, current[m], previous[m]) for m in METRIC_NAMES]

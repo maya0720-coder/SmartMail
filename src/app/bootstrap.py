@@ -39,6 +39,8 @@ from domain.knowledge import KnowledgeStore
 from domain.knowledge_service import KnowledgeService
 from domain.mail import MailCollector
 from domain.mail_service import MailService
+from domain.metrics.backfill import backfill_ledger
+from domain.models import TaskStatus
 from domain.ports import Clock
 from domain.search.context import TaskContextBuilder
 from domain.search.pipeline import SearchPipeline
@@ -257,6 +259,10 @@ def build_container(
     )
     # 예전 SAP 모듈 태그처럼 목록에 없는 구분은 시작할 때 규칙으로 다시 구분한다
     tasks.recategorize_unknown()
+    # 완료 상태인데 지표 원장에 없는 업무를 채운다(숫자 항목만, 결정기록 0039)
+    backfill_ledger(
+        tasks.list_tasks([TaskStatus.DONE]), SqliteLedgerRepository(db), settings.user_display_name
+    )
 
     store: KnowledgeStore
     if settings.demo_mode:

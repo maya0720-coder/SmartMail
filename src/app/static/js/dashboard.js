@@ -1,8 +1,11 @@
 // 대시보드(디자인 명세 03): 압축 KPI·상태 도넛, 내 할 일(체크·정렬·페이지·검색 거르기·키보드), 일괄 작업.
+// 상단 기간 버튼은 대시보드 전체 기간을 정한다(지표 카드는 dashboard_metrics.js, 결정기록 0039).
 // 상세 패널·서랍은 dashboard_detail.js, 상태 변경·일괄 처리는 todo_actions.js, 목록 계산은 todo_list.js.
 "use strict";
 
-let currentGrain = "month";
+// 대시보드 기간(결정기록 0039): 지표 카드·상태 도넛·할 일 목록이 함께 따른다. 저장값은 ui_prefs
+let currentGrain = document.querySelector("#seg button.on").dataset.g;
+let carryOver = true;  // 이월 포함(기간 시작 전에 생긴 미완료 업무)
 let allTasks = [];
 // 기본 필터: 전체(무시만 제외). 사용자 요청으로 기본값을 '전체'로 둔다(결정기록 0018).
 // 제안은 '제안된 업무' 화면에서도 정리할 수 있고, 상단 배너로 안내한다(점검 D3).
@@ -11,44 +14,7 @@ let selectedId = null;
 let searchTerm = "";
 const checked = new Set();  // 일괄 작업 선택(메모리에만)
 
-const METRIC_DEFS = {
-  "MET-01": "기간 내 완료 확정 업무 수",
-  "MET-02": "기한 내 완료 ÷ 기한이 있는 완료 업무",
-  "MET-03": "G-Knowledge 등록 완료 업무 ÷ 완료 업무",
-  "MET-04": "앱·G-Knowledge에서 해결 ÷ 유사 업무 검색",
-};
-const METRIC_ICONS = { "MET-01": "check", "MET-02": "target", "MET-03": "book-open", "MET-04": "repeat" };
-const GRAIN_LABEL = { year: "연간", half: "반기", quarter: "분기", month: "월", week: "주(목~수)" };
-
-// ---- 성과 지표(압축 KPI: 이름 / 값 + 작은 그래프 / 직전 대비) ----
-async function loadMetrics() {
-  const result = await api("GET", "/api/metrics?grain=" + encodeURIComponent(currentGrain));
-  if (!result.ok) return;
-  const data = result.data;
-  const range = data.buckets.length ? data.buckets[0].label + " ~ " + data.buckets[data.buckets.length - 1].label : "";
-  document.getElementById("mk").replaceChildren(...data.cards.map((card) => {
-    const cur = card.current;
-    const definition = METRIC_DEFS[card.metric];
-    const deltaText = card.delta === null ? "직전 대비 -" :
-      "직전 대비 " + (card.metric === "MET-01" ? (card.delta >= 0 ? "+" : "") + Math.round(card.delta) + "건" : (card.delta >= 0 ? "+" : "") + Math.round(card.delta * 100) + "%p");
-    const trendClass = card.trend === "개선" ? "up" : card.trend === "악화" ? "dn" : "";
-    return el("div", { class: "kpi", title: definition + " · 표본 " + cur.sample + "건 · " + range },
-      el("div", { class: "l" }, icon(METRIC_ICONS[card.metric] || "target"), el("span", {}, card.name),
-        cur.reference_only ? el("span", { class: "ref" }, "참고") : null),
-      el("div", { class: "vrow" },
-        el("div", { class: "v" }, formatMetric(card.metric, cur.value), el("span", { class: "u" }, card.metric === "MET-01" ? "건" : "")),
-        el("div", { class: "chartbox" }, drawChart(card.metric, data.buckets, data.target_due_rate, definition))),
-      el("div", { class: "dl" }, deltaText, card.trend ? " · " : "", el("span", { class: trendClass }, card.trend || "")));
-  }));
-  const desc = GRAIN_LABEL[currentGrain] + " 기준 · 카드는 최근 완료 기간 vs 직전 기간 · 진행 중 기간은 흐리게 표시 · 기한 준수율 목표 " +
-    Math.round(data.target_due_rate * 100) + "%(예시, IE팀 확정 전)";
-  document.getElementById("m-desc").textContent = desc;
-  document.getElementById("toggle-table").title = desc;
-  const header = el("tr", {}, el("th", {}, "기간"), ...Object.values(data.names).map((n) => el("th", {}, n)));
-  const rows = data.buckets.map((b) => el("tr", {}, el("td", {}, b.label + (b.partial ? " (진행 중)" : "")),
-    ...Object.keys(data.names).map((m) => el("td", {}, formatMetric(m, b.values[m].value) + " (n=" + b.values[m].sample + ")"))));
-  document.getElementById("m-tbl").replaceChildren(el("table", {}, el("thead", {}, header), el("tbody", {}, rows)));
-}
+// 성과 지표 카드·표는 dashboard_metrics.js(결정기록 0039)
 
 // ---- 내 할 일 ----
 // 기본 정렬: 스레드 마지막 메일이 최근인 순(결정기록 0028)
@@ -187,8 +153,14 @@ new ResizeObserver(scheduleFit).observe(document.getElementById("todo-wrap"));
 window.addEventListener("resize", scheduleFit);
 if (document.fonts) document.fonts.ready.then(scheduleFit);
 
+// 기간 필터: 현재 기간 시작(since)과 이월 포함 여부를 서버에 보낸다. '전체'면 거르지 않는다
+function tasksUrl() {
+  if (!periodStart) return "/api/tasks";
+  return "/api/tasks?since=" + encodeURIComponent(periodStart) + "&carry=" + (carryOver ? "true" : "false");
+}
+
 async function loadTasks() {
-  const result = await api("GET", "/api/tasks");
+  const result = await api("GET", tasksUrl());
   if (result.ok) {
     allTasks = result.data;
     renderTodo();
@@ -223,7 +195,8 @@ function openTask(taskId, row) {
 }
 
 async function refresh() {
-  await Promise.all([loadMetrics(), loadTasks()]);
+  await loadMetrics();  // 기간 시작(periodStart)을 먼저 정한다
+  await loadTasks();
   if (selectedId !== null && allTasks.some((t) => t.id === selectedId)) await selectTask(selectedId, { keepFocus: true });
   else if (selectedId !== null) { selectedId = null; renderDetailEmpty(); }
 }
@@ -286,12 +259,23 @@ if (topSearch) {
 
 // ---- 이벤트 연결 ----
 for (const button of document.querySelectorAll("#seg button")) {
-  button.addEventListener("click", () => {
-    for (const other of document.querySelectorAll("#seg button")) other.classList.toggle("on", other === button);
+  button.addEventListener("click", async () => {
+    for (const other of document.querySelectorAll("#seg button")) {
+      other.classList.toggle("on", other === button);
+      other.setAttribute("aria-pressed", other === button ? "true" : "false");
+    }
     currentGrain = button.dataset.g;
-    loadMetrics();
+    document.getElementById("carry-box").classList.toggle("hidden", currentGrain === "all");
+    todoPage = 1;
+    api("PUT", "/api/ui-prefs", { dashboard_grain: currentGrain });  // 다음에 열 때 같은 기간
+    await refresh();
   });
 }
+document.getElementById("carry").addEventListener("change", async (event) => {
+  carryOver = event.target.checked;
+  todoPage = 1;
+  await loadTasks();
+});
 for (const button of document.querySelectorAll("#filters button")) {
   button.addEventListener("click", () => setFilter(button.dataset.f));
 }
@@ -317,26 +301,6 @@ document.getElementById("todo-all-menu").addEventListener("click", (event) => {
     ["전체 해제", () => { checked.clear(); renderTodo(); }, !checked.size],
   ]);
 });
-// 표로 보기: 화면을 밀어내지 않도록 모달로 연다
-document.getElementById("toggle-table").addEventListener("click", (event) => {
-  event.preventDefault();
-  openDlg("dlg-mtbl");
-  showAiQuality();
-});
-
-// AI 품질(최근 30일): 해결 방안 '도움 됨' 비율·AI 호출 성공률(결정기록 0021)
-async function showAiQuality() {
-  const box = document.getElementById("m-ai");
-  const result = await api("GET", "/api/metrics/ai-quality");
-  if (!box || !result.ok) return;
-  const q = result.data;
-  const pct = (v) => (v === null ? "-" : Math.round(v * 100) + "%");
-  box.textContent = "AI 품질(최근 " + q.window_days + "일) · 해결 방안 '도움 됨' " + pct(q.helpful_rate)
-    + " (" + q.helpful + "/" + (q.helpful + q.not_helpful) + "건" + (q.reference_only ? ", 표본 적음·참고값" : "") + ")"
-    + " · AI 호출 성공 " + pct(q.ai_success_rate) + " (" + q.ai_success + "/" + (q.ai_success + q.ai_failure) + "회)";
-}
-document.getElementById("mtbl-close").addEventListener("click", () => closeDlg("dlg-mtbl"));
-
 // 백그라운드 자동 수집이 끝나면 화면을 새로 고친다(처음 30일 수집은 몇 분 걸릴 수 있음).
 const SYNC_POLL_MS = 15000;
 let lastSyncSeen;

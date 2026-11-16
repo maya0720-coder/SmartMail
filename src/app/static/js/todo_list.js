@@ -81,7 +81,8 @@ function drawDonut(box, tasks, onPick) {
   box.replaceChildren(
     el("div", { class: "donut" }, svg,
       el("ul", { class: "legend" }, ...counts.map((c) => el("li", {},
-        el("button", { type: "button", class: "lg-item" + (c.n ? "" : " zero"), title: c.label + " " + c.n + "건 · 눌러서 목록 거르기",
+        el("button", { type: "button", class: "lg-item" + (c.n ? "" : " zero"), title: c.label + " " + c.n + "건 · 눌러서 목록 거르기"
+          + (c.key === "done" ? " · 지금 완료 상태인 업무 수(지표 카드 '완료 건수'는 기간 안 완료 확정 원장 기준)" : ""),
           onclick: () => onPick(DONUT_FILTER[c.key] || "all") },
           el("i", { class: "dot s-" + c.key }), el("span", {}, c.label), el("b", {}, String(c.n))))))));
 }

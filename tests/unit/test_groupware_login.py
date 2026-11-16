@@ -437,12 +437,16 @@ def test_ui_prefs_ignores_non_ascii_digits(tmp_path: Path, clock: FixedClock) ->
     store = SqliteAppSettings(container.db)
     store.set("ui_detail_w", "²²²")
     store.set("ui_triage_list_w", "9" * 150)
+    store.set("ui_dashboard_grain", "<script>")  # 허용 값이 아니면 기본값(결정기록 0039)
     with app_client(container) as client:
-        assert client.get("/").status_code == 200
+        page = client.get("/")
+        assert page.status_code == 200 and '<script>"' not in page.text
+        assert 'data-g="month" class="on"' in page.text
         assert client.get("/api/ui-prefs").json() == {
             "detail_w": None,
             "triage_list_w": None,
             "triage_wide": False,
+            "dashboard_grain": None,
         }
 
 

@@ -20,13 +20,16 @@ MAX_PANEL_WIDTH: Final = 2400
 PREF_KEYS: Final = {"detail_w": "ui_detail_w", "triage_list_w": "ui_triage_list_w"}
 # 켬/끔 설정(켜면 "1"을 저장하고, 끄면 지운다)
 FLAG_KEYS: Final = {"triage_wide": "ui_triage_wide"}
-ALL_KEYS: Final = {**PREF_KEYS, **FLAG_KEYS}
+# 고르기 설정(허용 값 중 하나만 저장). 대시보드 기간(결정기록 0039)
+CHOICE_KEYS: Final = {"dashboard_grain": "ui_dashboard_grain"}
+CHOICES: Final = {"dashboard_grain": ("all", "year", "half", "quarter", "month", "week")}
+ALL_KEYS: Final = {**PREF_KEYS, **FLAG_KEYS, **CHOICE_KEYS}
 _FLAG_ON: Final = "1"
 
 
-def load_ui_prefs(store: SqliteAppSettings) -> dict[str, int | bool | None]:
+def load_ui_prefs(store: SqliteAppSettings) -> dict[str, int | bool | str | None]:
     """저장된 폭(없거나 범위를 벗어나면 None = 화면 기본 폭)과 켬/끔 설정(없으면 False)."""
-    prefs: dict[str, int | bool | None] = {}
+    prefs: dict[str, int | bool | str | None] = {}
     for key, name in PREF_KEYS.items():
         raw = store.get(name)
         # ASCII 숫자 1~4자리만 받는다(DB를 직접 고친 값으로 화면이 깨지지 않게)
@@ -36,11 +39,19 @@ def load_ui_prefs(store: SqliteAppSettings) -> dict[str, int | bool | None]:
         prefs[key] = value if in_range else None
     for key, name in FLAG_KEYS.items():
         prefs[key] = store.get(name) == _FLAG_ON
+    for key, name in CHOICE_KEYS.items():
+        raw = store.get(name)
+        prefs[key] = raw if raw in CHOICES[key] else None  # 허용 값이 아니면 화면 기본값
     return prefs
 
 
-def save_ui_prefs(store: SqliteAppSettings, values: Mapping[str, int | bool]) -> None:
+def save_ui_prefs(store: SqliteAppSettings, values: Mapping[str, int | bool | str]) -> None:
     for key, value in values.items():
+        if key in CHOICE_KEYS:
+            if not isinstance(value, str) or value not in CHOICES[key]:
+                raise ValueError("허용되지 않은 설정 값입니다")
+            store.set(CHOICE_KEYS[key], value)
+            continue
         if key in FLAG_KEYS:
             if not isinstance(value, bool):
                 raise ValueError("켬/끔 설정은 참·거짓만 받습니다")
@@ -49,7 +60,9 @@ def save_ui_prefs(store: SqliteAppSettings, values: Mapping[str, int | bool]) ->
             else:
                 store.delete(FLAG_KEYS[key])
             continue
-        if isinstance(value, bool) or not MIN_PANEL_WIDTH <= value <= MAX_PANEL_WIDTH:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("패널 폭은 숫자만 받습니다")
+        if not MIN_PANEL_WIDTH <= value <= MAX_PANEL_WIDTH:
             raise ValueError("패널 폭이 허용 범위를 벗어났습니다")
         store.set(PREF_KEYS[key], str(value))
 

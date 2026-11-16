@@ -15,7 +15,12 @@ from domain.clock import FixedClock
 from fixtures.app_factory import app_client, make_container
 from storage.repositories import SqliteAppSettings
 
-EMPTY = {"detail_w": None, "triage_list_w": None, "triage_wide": False}
+EMPTY = {
+    "detail_w": None,
+    "triage_list_w": None,
+    "triage_wide": False,
+    "dashboard_grain": None,
+}
 
 
 def _delete(client: TestClient, url: str) -> Any:

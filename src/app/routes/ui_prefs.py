@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +32,8 @@ class UiPrefsBody(BaseModel):
     detail_w: int | None = Field(default=None, ge=MIN_PANEL_WIDTH, le=MAX_PANEL_WIDTH)
     triage_list_w: int | None = Field(default=None, ge=MIN_PANEL_WIDTH, le=MAX_PANEL_WIDTH)
     triage_wide: bool | None = None  # 제안 상세 넓게 보기(결정기록 0033)
+    # 대시보드 기간(결정기록 0039)
+    dashboard_grain: Literal["all", "year", "half", "quarter", "month", "week"] | None = None
 
 
 @router.get("")

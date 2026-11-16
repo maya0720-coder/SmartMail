@@ -194,6 +194,8 @@ class SqliteAppSettings:
             "ui_triage_list_w",
             # 제안 상세 넓게 보기 켬 표시("1"만, 결정기록 0033)
             "ui_triage_wide",
+            # 대시보드 기간(허용 값 중 하나, 결정기록 0039)
+            "ui_dashboard_grain",
         }
     )
 
