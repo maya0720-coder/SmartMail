@@ -40,6 +40,7 @@ router = APIRouter(prefix="/api/login")
 # 일괄 로그인 대상. 그룹웨어는 자체 로그인(아이디만, 공통 암호) — 결정기록 0017
 COMPANY_SITES: Final = (Site.AIGROUND, Site.GKNOWLEDGE)
 COMPANY_LIMIT_KEY: Final = "company-account"  # 회사 계정 시도 횟수 공용 키
+COMPANY_SSO_LIMIT_KEY: Final = "company-sso"  # 입력 없는 SSO 시도(암호 미제출) 횟수 키
 # 시작 로그인 창이 한 번에 로그인하는 사이트. 그룹웨어는 빼고, 필요할 때 사용자가 직접
 # (설정·연결의 '로그인' 버튼 → only=groupware) 로그인한다(사용자 결정 2026-11-15, 결정기록 0026)
 AUTO_SITES: Final = (*COMPANY_SITES, Site.WIKI)
@@ -108,10 +109,14 @@ def _login_one(
     company = site in COMPANY_SITES
     if not company and (not user_id or not secret):
         return NEEDS_INPUT  # 시도 횟수를 쓰지 않는다(보안 검토 L5)
-    # 회사 계정 사이트는 같은 계정이므로 시도 횟수를 함께 센다(보안 검토 M4)
-    if container.login_limiter.check(COMPANY_LIMIT_KEY if company else site.value) is not None:
+    sso_only = not user_id or not secret
+    # 회사 계정 사이트는 같은 계정이므로 시도 횟수를 함께 센다(보안 검토 M4).
+    # 입력 없는 SSO 시도는 암호를 제출하지 않으므로 따로 센다. 진입점마다 SSO를 시도해도
+    # 실제 암호 로그인 한도를 소모하지 않게 한다(결정기록 0034 보안 검토 L2)
+    key = (COMPANY_SSO_LIMIT_KEY if sso_only else COMPANY_LIMIT_KEY) if company else site.value
+    if container.login_limiter.check(key) is not None:
         return RATE_LIMITED
-    if not user_id or not secret:
+    if sso_only:
         # 입력이 없으면 SSO만 시도한다(다른 회사 계정 사이트가 로그인돼 있을 때 성공).
         if container.login.try_sso(site) is not None:
             return None
@@ -205,18 +210,21 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
             Site.GROUPWARE: True,
             Site.WIKI: hmac.compare_digest(buffers[3], buffers[1]),
         }
-        company_failed = False
+        # 공통 암호로 시도한 사이트가 '틀림'이거나 '한도 초과(확인 안 됨)'이면, 같은 공통 암호를
+        # 다른 사이트에 다시 제출하지 않는다(계정 잠금 방지, M4·결정기록 0034 보안 검토 L1·L3)
+        common_block: str | None = None
         for site in targets:
             if only is not None and site is not only:
                 continue
             is_company = site in COMPANY_SITES
-            if company_failed and (is_company or uses_common[site]):
-                # 회사 계정에서 틀린 암호를 다른 사이트에 다시 제출하지 않는다(계정 잠금 방지, M4)
-                error: str | None = FAILED
+            common = is_company or uses_common[site]
+            if common_block is not None and common:
+                error: str | None = common_block
             else:
                 user_id, secret = company if is_company else own_login[site]
                 error = _login_one(container, site, user_id, secret)
-                company_failed = company_failed or (is_company and error == FAILED)
+                if common and user_id and secret and error in (FAILED, RATE_LIMITED):
+                    common_block = error
             results.append({"site": site.value, "logged_in": error is None, "error": error})
     finally:
         for buffer in buffers:

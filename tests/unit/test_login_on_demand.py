@@ -6,11 +6,17 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from pathlib import Path
+from typing import Any
 
+import pytest
+
+from app.routes.login_all import RATE_LIMITED
 from domain.clock import FixedClock
 from fixtures.app_factory import app_client, make_container
+from security.credentials import FakePasswordAuthenticator, LoginFailedError
 from security.logging_policy import Site
 
 
@@ -101,3 +107,84 @@ def test_auth01_sites_login_requires_csrf(tmp_path: Path, clock: FixedClock) -> 
         client.headers.pop("X-CSRF-Token")
         response = client.post("/api/login/all", json={**_body(), "sites": ["wiki"]})
         assert response.status_code == 403
+
+
+class _Failing(FakePasswordAuthenticator):
+    """틀린 암호로 실패하는 가짜 인증기(호출 횟수만 센다)."""
+
+    def authenticate(self, user_id: bytearray, secret: bytearray) -> Any:
+        self.calls += 1
+        raise LoginFailedError("x")
+
+
+def test_auth01_sites_wrong_common_password_not_resubmitted(
+    tmp_path: Path, clock: FixedClock
+) -> None:
+    """보안 검토 L1: 위키가 공통 암호로 실패하면 같은 요청의 그룹웨어에 다시 제출하지 않는다."""
+    container = make_container(tmp_path, clock)
+    wiki, groupware = _Failing(), _Failing()
+    container.login.password_authenticators[Site.WIKI] = wiki  # type: ignore[index]
+    container.login.password_authenticators[Site.GROUPWARE] = groupware  # type: ignore[index]
+    with app_client(container) as client:
+        results = client.post(
+            "/api/login/all", json={**_body(), "sites": ["wiki", "groupware"]}
+        ).json()["results"]
+    assert wiki.calls == 1 and groupware.calls == 0
+    assert all(not r["logged_in"] for r in results)
+
+
+def test_auth01_sites_company_failure_blocks_common_sites(
+    tmp_path: Path, clock: FixedClock
+) -> None:
+    """회사 계정이 틀리면 sites 경로에서도 위키·그룹웨어에 같은 암호를 제출하지 않는다(M4)."""
+    container = make_container(tmp_path, clock)
+    ai, gk, wiki, gw = _Failing(), _Failing(), _Failing(), _Failing()
+    for site, auth in (
+        (Site.AIGROUND, ai),
+        (Site.GKNOWLEDGE, gk),
+        (Site.WIKI, wiki),
+        (Site.GROUPWARE, gw),
+    ):
+        container.login.password_authenticators[site] = auth  # type: ignore[index]
+    sites = ["ai-ground", "g-knowledge", "wiki", "groupware"]
+    with app_client(container) as client:
+        client.post("/api/login/all", json={**_body(), "sites": sites})
+    assert ai.calls + gk.calls + wiki.calls + gw.calls == 1
+
+
+def test_auth01_company_rate_limit_blocks_common_sites(tmp_path: Path, clock: FixedClock) -> None:
+    """보안 검토 L3: 회사 계정이 한도 초과(확인 안 됨)면 공통 암호를 다른 사이트에 내지 않는다."""
+    container = make_container(tmp_path, clock)
+    for _ in range(10):  # 회사 계정 시도 한도를 다 쓴다
+        container.login_limiter.check("company-account")
+    wiki = _Failing()
+    container.login.password_authenticators[Site.WIKI] = wiki  # type: ignore[index]
+    with app_client(container) as client:
+        results = client.post(
+            "/api/login/all", json={**_body(), "sites": ["ai-ground", "wiki"]}
+        ).json()["results"]
+    assert wiki.calls == 0
+    assert {r["site"]: r["error"] for r in results}["wiki"] == RATE_LIMITED
+
+
+def test_auth05_sso_attempts_do_not_use_password_limit(tmp_path: Path, clock: FixedClock) -> None:
+    """보안 검토 L2: 입력 없는 SSO 시도를 여러 번 해도 실제 암호 로그인 한도는 남아 있다."""
+    container = make_container(tmp_path, clock)
+    with app_client(container) as client:
+        for _ in range(10):
+            client.post("/api/login/all", json={"sites": ["ai-ground"]})
+        done = client.post("/api/login/all", json={**_body(), "sites": ["ai-ground"]}).json()
+    assert [(r["site"], r["logged_in"]) for r in done["results"]] == [("ai-ground", True)]
+
+
+def test_auth01_sites_rejects_query_and_logs_no_secret(
+    tmp_path: Path, clock: FixedClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """주소에 값이 붙은 요청은 거부하고, 로그에 ID·암호가 남지 않는다."""
+    body = _body()
+    with caplog.at_level(logging.DEBUG), app_client(make_container(tmp_path, clock)) as client:
+        assert (
+            client.post("/api/login/all?x=1", json={**body, "sites": ["wiki"]}).status_code == 400
+        )
+        client.post("/api/login/all", json={**body, "sites": ["wiki"]})
+    assert body["pass" + "word"] not in caplog.text and "tester01" not in caplog.text
