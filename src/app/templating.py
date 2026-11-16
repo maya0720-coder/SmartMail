@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from app.deps import get_container
+from app.triage_tokens import MAX_BULK
 from app.ui_prefs import load_ui_prefs
 
 TEMPLATE_DIR: Final = Path(__file__).resolve().parent / "templates"
@@ -70,6 +71,7 @@ def render(request: Request, template: str, active: str, **context: Any) -> HTML
         active=active,
         site_labels=SITE_LABELS,
         ui_prefs=load_ui_prefs(container.app_settings),
+        bulk_max=MAX_BULK,
         **context,
     )
     return HTMLResponse(html, headers={"cache-control": "no-store"})

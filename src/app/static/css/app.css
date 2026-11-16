@@ -151,7 +151,7 @@ tr.row:hover{background:var(--soft) !important}
 tr.row.sel{background:var(--accent-soft) !important;box-shadow:inset 3px 0 0 var(--accent)}
 tr.row:focus{outline:none}
 tr.row:focus-visible{box-shadow:inset 3px 0 0 var(--accent),inset 0 0 0 2px var(--accent)}
-.w-cb{width:36px}.w-mod{width:72px}.w-dept{width:112px}.w-due{width:88px}.w-st{width:96px}
+.w-cb{width:52px}.w-mod{width:72px}.w-dept{width:112px}.w-due{width:88px}.w-st{width:96px}
 .c-cb{padding-right:0}
 .c-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .t-title{font-weight:600}
@@ -249,6 +249,12 @@ th[aria-sort="descending"] .ic{transform:rotate(180deg)}
 .bulk button{border:0;height:28px;padding:0 10px;border-radius:6px;background:var(--bulk-btn);color:var(--card);font-weight:600;font-size:12px;transition:var(--ease)}
 .bulk button:hover{background:var(--bulk-btn-h)}
 .bulk button.p{background:var(--accent);color:#fff}
+/* 선택 범위 ▾ 메뉴(결정기록 0040, 대시보드·제안 공통) */
+.bulk-menu-wrap{position:relative;display:inline-flex}
+.bulk-menu{left:0;right:auto;flex-direction:column;align-items:stretch;gap:2px;padding:6px}
+.bulk-menu .btn{justify-content:flex-start;color:var(--fg)}
+.cb-menu{border:0;background:transparent;width:16px;height:20px;padding:0;color:var(--sub);font-size:10px;cursor:pointer;border-radius:4px}
+.cb-menu:hover{background:var(--soft);color:var(--fg)}
 .empty-row td{height:auto}
 
 /* 상세 패널: 본문(내부 스크롤) + 하단 고정 버튼 */

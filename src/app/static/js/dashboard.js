@@ -70,7 +70,7 @@ function filteredTasks() {
 function todoRow(task) {
   const box = el("input", { type: "checkbox", class: "cb", "aria-label": task.title + " 선택", checked: checked.has(task.id),
     onclick: (event) => event.stopPropagation(),
-    onchange: (event) => { if (event.target.checked) checked.add(task.id); else checked.delete(task.id); renderBulk(); renderHeadCheck(); } });
+    onchange: (event) => { toggleOne(checked, task.id); event.target.checked = checked.has(task.id); renderBulk(); renderHeadCheck(); } });
   const sel = task.id === selectedId;
   return el("tr", { class: "row" + (sel ? " sel" : ""), tabindex: "-1", "aria-selected": sel ? "true" : "false", dataset: { id: String(task.id) },
     onclick: (event) => openTask(task.id, event.currentTarget) },
@@ -113,13 +113,9 @@ function renderSortHeads() {
   }
 }
 
-// 머리칸 체크박스: 현재 페이지 전체 선택, 일부만 선택이면 indeterminate
+// 머리칸 체크박스: 현재 페이지 3상태(bulk_select.js, 결정기록 0040)
 function renderHeadCheck() {
-  const all = document.getElementById("todo-all");
-  const ids = currentView.items.map((t) => t.id);
-  const n = ids.filter((id) => checked.has(id)).length;
-  all.checked = ids.length > 0 && n === ids.length;
-  all.indeterminate = n > 0 && n < ids.length;
+  headState(document.getElementById("todo-all"), groupState(checked, currentView.items.map((t) => t.id)));
 }
 
 function renderBulk() {
@@ -254,7 +250,8 @@ document.addEventListener("keydown", (event) => {
     if (modalOpen) return;
     if (closeDrawer()) { event.preventDefault(); return; }
     const search = document.querySelector("#search-form input");
-    if (searchTerm || (search && search.value)) { search.value = ""; searchTerm = ""; todoPage = 1; renderTodo(); event.preventDefault(); }
+    if (searchTerm || (search && search.value)) { search.value = ""; searchTerm = ""; todoPage = 1; renderTodo(); event.preventDefault(); return; }
+    if (checked.size && !typing) { checked.clear(); renderTodo(); event.preventDefault(); }  // 체크 전체 해제(결정기록 0040)
     return;
   }
   if (typing || modalOpen || drawerOpen()) return;
@@ -270,7 +267,7 @@ document.addEventListener("keydown", (event) => {
     case " ":
       if (onControl || selectedId === null) return;
       event.preventDefault();
-      if (checked.has(selectedId)) checked.delete(selectedId); else checked.add(selectedId);
+      toggleOne(checked, selectedId);
       renderTodo();
       break;
     default:
@@ -306,11 +303,19 @@ for (const head of document.querySelectorAll("#todo-head th[data-sort] button"))
     renderTodo();
   });
 }
-document.getElementById("todo-all").addEventListener("change", (event) => {
-  for (const task of currentView.items) {
-    if (event.target.checked) checked.add(task.id); else checked.delete(task.id);
-  }
+document.getElementById("todo-all").addEventListener("change", () => {
+  toggleGroup(checked, currentView.items.map((t) => t.id));
   renderTodo();
+});
+// ▾ 선택 범위: 지금 필터(검색 포함)의 모든 페이지 · 전체 해제(결정기록 0040)
+document.getElementById("todo-all-menu").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (closeBulkMenu()) return;
+  const ids = filteredTasks().map((t) => t.id);
+  openBulkMenu(event.currentTarget, [
+    ["이 필터 전체 선택(" + ids.length + "건)", () => { setMany(checked, ids, true); renderTodo(); }, !ids.length],
+    ["전체 해제", () => { checked.clear(); renderTodo(); }, !checked.size],
+  ]);
 });
 // 표로 보기: 화면을 밀어내지 않도록 모달로 연다
 document.getElementById("toggle-table").addEventListener("click", (event) => {

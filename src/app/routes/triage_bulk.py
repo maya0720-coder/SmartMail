@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -19,12 +19,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.deps import get_container
 from app.routes.tasks import ModuleTag, _apply, _error, approve
 from app.routes.triage import REVERT_EXPIRED, dismiss, revert_one, snooze
+from app.triage_tokens import MAX_BULK
 from domain.models import TaskStatus
 from domain.tasks.service import TaskEdit, TaskNotFoundError
 
 router = APIRouter(prefix="/api/triage")
 
-MAX_BULK: Final = 100
 TaskId = Annotated[int, Field(gt=0, lt=2**31)]
 BulkDecisionName = Literal["approve", "snooze", "dismiss", "category"]
 NOT_SUGGESTED = "제안 상태인 항목만 일괄로 처리할 수 있습니다"

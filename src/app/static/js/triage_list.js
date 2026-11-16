@@ -1,6 +1,6 @@
 // 제안된 업무 트리아지 — 목록(결정기록 0015, 명세 2-1).
 // 1단계: 목록·선택·키보드(↑↓ · A·S·D·E). 2단계: 받은 시각 묶음·탭·진행 막대·'나중에 n건' 펼침.
-// 여러 건 선택·일괄 작업 바는 triage_bulk.js(결정기록 0036).
+// 여러 건 체크·일괄 작업 바는 triage_bulk.js(결정기록 0036·0040).
 // 목록 상태는 메모리에만 둔다. 모든 글자는 el()/textContent로만 넣는다.
 "use strict";
 
@@ -110,7 +110,7 @@ function renderTabs() {
   fill(document.getElementById("tr-tabs"), ...tabs.map(([key, label]) => {
     const n = TR.items.filter((t) => inTab(t, key)).length;
     return el("button", { type: "button", class: key === TR.tab ? "on" : "", "aria-pressed": key === TR.tab ? "true" : "false",
-      onclick: () => { TR.tab = key; TR.page = 1; BULK.ids.clear(); renderTabs(); renderItems(); ensureSelection(); bulkChanged(); } }, label + " " + n);
+      onclick: () => { TR.tab = key; TR.page = 1; renderTabs(); renderItems(); ensureSelection(); bulkChanged(); } }, label + " " + n);
   }));
 }
 
@@ -179,12 +179,12 @@ function renderItems() {
   for (const group of ["today", "yesterday", "week", "older"]) {
     const inGroup = items.filter((t) => (t.group || "older") === group);
     if (!inGroup.length) continue;
-    nodes.push(el("li", { class: "tr-group", role: "presentation" }, GROUP_LABELS[group] + " " + inGroup.length));
+    nodes.push(el("li", { class: "tr-group", role: "presentation" }, groupCheck(group, GROUP_LABELS[group]), GROUP_LABELS[group] + " " + inGroup.length));
     nodes.push(...inGroup.map((t) => itemNode(t, false)));
   }
   if (!items.length) nodes.push(el("li", { class: "tr-group-empty", role: "presentation" }, "이 탭에 해당하는 제안이 없습니다"));
   if (TR.snoozedOpen && TR.snoozedItems.length && lastPage) {
-    nodes.push(el("li", { class: "tr-group", role: "presentation" }, "나중에로 미룬 제안 " + TR.snoozedItems.length));
+    nodes.push(el("li", { class: "tr-group", role: "presentation" }, groupCheck("snoozed", "나중에로 미룬 제안"), "나중에로 미룬 제안 " + TR.snoozedItems.length));
     nodes.push(...TR.snoozedItems.map((t) => itemNode(t, true)));
   }
   list.replaceChildren(...nodes);
@@ -233,8 +233,8 @@ async function loadTriage(keepId) {
   TR.selectedId = target ? target.id : null;
   pruneBulk();
   renderItems();
-  if (bulkActive()) renderBulkBar();
-  else if (target) renderTriageDetail(target); else renderTriageEmpty();
+  renderBulkBar();  // 체크가 있으면 상세 위에 일괄 바(상세는 그대로, 결정기록 0040)
+  if (target) renderTriageDetail(target); else renderTriageEmpty();
 }
 
 function ensureSelection() {
@@ -255,7 +255,7 @@ function selectTriage(id, focus, open) {
     li.setAttribute("aria-selected", on ? "true" : "false");
     if (on) { row = li; li.scrollIntoView({ block: "nearest" }); if (focus) li.focus({ preventScroll: true }); }
   }
-  if (bulkActive()) renderBulkBar(); else renderTriageDetail(task);
+  renderTriageDetail(task);
   if (open) openTriageDrawer(row);
 }
 

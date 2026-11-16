@@ -60,10 +60,10 @@ def test_ui_todo02_mouse_select_bulk_and_undo(tmp_path: Path) -> None:
         _open(page, base)
         page_ids = page.evaluate(PAGE_IDS)
         assert len(page_ids) == 20
-        # Ctrl+클릭: 지금 항목 + 고른 항목 → 2건이면 일괄 바
+        # Ctrl+클릭: 누른 항목만 체크(지금 보는 항목은 자동으로 넣지 않음, 0040) → 일괄 바
         _row(page, 2).click(modifiers=["Control"])
         page.wait_for_selector("#bulk-bar")
-        assert "선택 2건" in page.inner_text("#bulk-count")
+        assert "1건 선택" in page.inner_text("#bulk-count")
         # Shift+클릭 범위는 현재 페이지 안
         _row(page, 19).click(modifiers=["Shift"])
         picked = page.evaluate(PICKED)
@@ -72,10 +72,11 @@ def test_ui_todo02_mouse_select_bulk_and_undo(tmp_path: Path) -> None:
         page.focus("#tr-items")
         page.keyboard.press("Control+a")
         assert page.evaluate(PICKED) == page_ids
-        assert "선택 20건" in page.inner_text("#bulk-count")
-        # 이 탭 전체 선택: 모든 페이지
+        assert "20건 선택" in page.inner_text("#bulk-count")
+        # ▾ 이 탭 전체 선택: 모든 페이지
+        page.click("#tr-all-menu")
         page.click("#bulk-tab-all")
-        assert "선택 25건" in page.inner_text("#bulk-count")
+        assert "25건 선택" in page.inner_text("#bulk-count")
         page.click("#bulk-approve")
         page.wait_for_selector("#toast.show")
         assert "25건을 할 일로 옮겼습니다" in page.inner_text("#toast")
@@ -103,7 +104,7 @@ def test_ui_todo02_keyboard_only_bulk(tmp_path: Path) -> None:
         page.keyboard.press("Shift+ArrowDown")
         page.keyboard.press("Shift+ArrowDown")
         page.wait_for_selector("#bulk-bar")
-        assert "선택 3건" in page.inner_text("#bulk-count")
+        assert "3건 선택" in page.inner_text("#bulk-count")
         page.keyboard.press("Escape")
         page.wait_for_selector("#bulk-bar", state="detached")
         assert page.evaluate(PICKED) == []

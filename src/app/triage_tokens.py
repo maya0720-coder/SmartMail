@@ -22,6 +22,8 @@ from domain.tasks.triage_rules import RuleKey
 TOKEN_TTL: Final = timedelta(seconds=60)
 MAX_TOKENS: Final = 400  # 일괄 100건 결정 뒤 건별 결정을 이어 해도 일괄 되돌리기가 남게 넉넉히
 MAX_BULK_TOKENS: Final = 20
+# 한 번에 일괄 처리·체크할 수 있는 최대 건수(서버 검증과 화면 체크 한도가 함께 쓴다, 0040)
+MAX_BULK: Final = 100
 TOKEN_PATTERN: Final = re.compile(r"[A-Za-z0-9_-]{20,64}")
 
 
