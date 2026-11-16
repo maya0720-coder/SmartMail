@@ -31,3 +31,4 @@ dist/
 
 # Claude Code 개인 설정
 .claude/settings.local.json
+.claude/worklog.md

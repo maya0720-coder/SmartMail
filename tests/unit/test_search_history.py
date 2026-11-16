@@ -37,6 +37,7 @@ class CountingAdvisor:
         self.calls = 0
         self.fail = fail
         self.received: list[MaskedText] = []
+        self.cases: list[list[MaskedText]] = []
 
     def suggest_solution(
         self,
@@ -46,6 +47,7 @@ class CountingAdvisor:
     ) -> AiAnswer:
         self.calls += 1
         self.received.append(summary)
+        self.cases.append(list(similar_cases))
         if self.fail:
             raise AiUnavailableError("확인 필요")
         return AiAnswer("AI 제안")
@@ -94,21 +96,73 @@ def env(db: Database, clock: FixedClock) -> Env:
     return Env(db, clock)
 
 
-def test_srch01_app_hit_stops_before_gk_and_ai(env: Env) -> None:
+def test_srch01_app_hit_is_attached_to_ai_suggestion(env: Env) -> None:
+    """앱 이력을 찾으면 그 사례를 근거로 붙여 AI 해결 방안까지 만든다(결정기록 0021)."""
     env.done_task_with_card("전표 역분개 오류", "OB52 오픈")
     outcome = env.pipeline.search("역분개")
-    assert outcome.resolved is ResolutionStage.APP
-    assert env.store.search_calls == 0 and env.advisor.calls == 0
-    assert [s.ran for s in outcome.stages] == [True, False, False]
+    assert outcome.resolved is ResolutionStage.APP  # 해결 단계는 가장 앞에서 찾은 단계
+    assert [s.ran for s in outcome.stages] == [True, True, True]
+    assert env.advisor.calls == 1 and outcome.stages[2].cases_used >= 1
+    assert "OB52" in env.advisor.cases[0][0].value  # 사례(조치)가 AI 입력에 들어감
 
 
-def test_srch02_gk_hit_skips_ai(env: Env) -> None:
+def test_srch01_find_only_does_not_call_ai(env: Env) -> None:
+    env.done_task_with_card("전표 역분개 오류", "OB52 오픈")
+    outcome = env.pipeline.search("역분개", suggest=False)
+    assert outcome.resolved is ResolutionStage.APP and env.advisor.calls == 0
+    assert [s.ran for s in outcome.stages] == [True, True, False]
+
+
+def test_srch02_gk_hit_attached_when_no_app_history(env: Env) -> None:
     task_id = env.done_task_with_card("출하 인터페이스 실패", "재처리")
     env.knowledge.register(task_id, env.knowledge.preview(task_id))
     env.history._history = SqliteHistoryRepository(Database.in_memory())  # 앱 기록 없음 상황
     outcome = env.pipeline.search("출하 인터페이스")
     assert outcome.resolved is ResolutionStage.GKNOWLEDGE
-    assert env.advisor.calls == 0
+    assert env.advisor.calls == 1
+    assert env.advisor.cases[0][0].value.startswith("[G-Knowledge 문서]")
+
+
+def test_hist04_partial_word_match_and_tcode_weight(env: Env) -> None:
+    """업무 제목 전체로 검색해도(모든 단어 일치 아님) 이력을 찾고, T-code가 같으면 위로."""
+    env.done_task_with_card("원가 보고서 조회 권한", "KSB1 역할 부여")
+    env.done_task_with_card("전표 조회 권한 요청", "FB03 역할 부여")
+    hits = env.history.search("KSB1 원가센터 보고서 조회 권한 부여 요청")
+    assert hits and hits[0].card.problem == "원가 보고서 조회 권한"
+    assert env.history.search("완전히 무관한 단어 모음") == []
+
+
+def test_ai_context_uses_task_digest_not_only_title(env: Env, clock: FixedClock) -> None:
+    """업무 맥락(구조화 요약·메일 발췌, 마스킹)이 AI 입력으로 가고, 제목만 가지 않는다."""
+    from domain.models import MailRef
+    from domain.search.context import TaskContextBuilder
+
+    rrn = synthetic_rrn()
+    task = env.tasks.add_manual("배치 지연 확인")
+    assert task.id is not None
+    env.collector.add(
+        MailMessage(
+            key=MailKey(MailSource.OUTLOOK, "C1", "<c1@x.invalid>"),
+            thread_id="TC",
+            subject="야간 배치 지연",
+            sender_name="가상",
+            received_at=clock.now(),
+            folder="받은 편지함",
+            body=f"안녕하세요.\nSM37에서 ZJOB_NIGHT가 2시간 지연됩니다. 대상 {rrn}\n감사합니다.",
+        )
+    )
+    refs = SqliteMailRefRepository(env.db)
+    ref = refs.add(
+        MailRef(MailSource.OUTLOOK, "C1", "<c1@x.invalid>", "TC", clock.now(), task_id=task.id)
+    )
+    assert ref.id is not None
+    refs.set_digest(ref.id, "요청 사항:\n- 배치 지연 원인 확인\n기한: 금일 중")
+    builder = TaskContextBuilder(env.tasks, refs, env.mail)
+    env.pipeline._context = builder.build
+    env.pipeline.search("배치 지연 확인", task_id=task.id)
+    sent = env.advisor.received[0].value
+    assert "SM37" in sent and "배치 지연 원인 확인" in sent and "금일 중" in sent
+    assert rrn not in sent and "감사합니다" not in sent
 
 
 def test_srch03_ai_when_nothing_found_and_masked(env: Env) -> None:

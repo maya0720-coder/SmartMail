@@ -16,6 +16,7 @@ from domain.ai import AiUnavailableError, Classification
 from domain.clock import KST
 from domain.mail import MailMessage, MailThread
 from domain.models import MAX_REASONS
+from domain.tasks.mail_text import mail_excerpt
 from security.masking import MaskedText, mask
 
 REQUEST_PATTERNS: Final = re.compile(
@@ -43,6 +44,9 @@ MAX_DUE_SCAN: Final = 2000
 MAX_TITLE_CHARS: Final = 200
 SCORE_TASK: Final = 2  # 이 점수 이상이면 규칙만으로 후보
 SCORE_AMBIGUOUS: Final = 1  # 이 점수면 AI 분류로 결정
+AI_UNAVAILABLE_CONFIDENCE: Final = 0.35  # AI 판단 실패로 남긴 제안의 확신도(낮음 탭에 보임)
+MAX_CLASSIFY_EXCERPT: Final = 400
+MAX_CLASSIFY_CHARS: Final = 800
 
 
 class TaskClassifier(Protocol):
@@ -123,6 +127,11 @@ def _evidence(message: MailMessage) -> tuple[str, int]:
     return "", 0
 
 
+def _with_flag(codes: tuple[str, ...], flag: str | None) -> tuple[str, ...]:
+    """이유 코드 상한(MAX_REASONS)을 지키며 표시 코드를 덧붙인다."""
+    return codes if flag is None else (*codes[: MAX_REASONS - 1], flag)
+
+
 class Categorizer(Protocol):
     def categorize(self, subject: str, sender_address: str) -> str: ...
 
@@ -155,8 +164,11 @@ class TaskExtractor:
     def _ai_says_task(self, message: MailMessage, evidence: str) -> Classification | None:
         if self._classifier is None:
             return None
+        # 근거 문장만으로는 판단이 어려워 본문 앞부분(서명·인사 제외)을 함께 보낸다(결정기록 0021).
         # 마스킹한 뒤 자르고 다시 마스킹 타입으로 만든다(경계 노출 방지)
-        summary = mask(mask(f"{self.title_of(message.subject)} / {evidence}").value[:500])
+        excerpt = " ".join(mail_excerpt(message.body, MAX_CLASSIFY_EXCERPT).splitlines())
+        text = f"{self.title_of(message.subject)} / {evidence} / {excerpt}"
+        summary = mask(mask(text).value[:MAX_CLASSIFY_CHARS])
         try:
             return self._classifier.classify_task(summary)
         except (AiUnavailableError, ValueError):
@@ -175,15 +187,21 @@ class TaskExtractor:
             if self._categorizer is not None
             else None
         )
-        ai_judged = False
+        ai_judged = ai_unavailable = False
         if points < SCORE_TASK:
             if points < SCORE_AMBIGUOUS:
                 return None
             verdict = self._ai_says_task(first, evidence)
-            if verdict is None or not verdict.is_task:
+            if verdict is None and self._classifier is not None:
+                # AI 실패(로그인·호출 제한 등): 조용히 버리지 않고 확신도 낮은 제안으로 남긴다
+                # (사용자가 제안 목록에서 판단, 결정기록 0021)
+                confidence = AI_UNAVAILABLE_CONFIDENCE
+                ai_unavailable = True
+            elif verdict is None or not verdict.is_task:
                 return None
-            confidence = verdict.confidence
-            ai_judged = True
+            else:
+                confidence = verdict.confidence
+                ai_judged = True
         # 기한 탐색은 앞부분만(긴 본문으로 인한 처리 지연 방지)
         text_for_due = f"{first.subject}\n{first.body[:MAX_DUE_SCAN]}"
         due = parse_due(text_for_due, first.received_at)
@@ -196,7 +214,10 @@ class TaskExtractor:
             module_tag=category,
             evidence=evidence or self.title_of(first.subject),
             confidence=confidence,
-            reasons=self._reasons(thread, first, evidence, due, category, ai_judged),
+            reasons=_with_flag(
+                self._reasons(thread, first, evidence, due, category, ai_judged),
+                "ai_unavailable" if ai_unavailable else None,
+            ),
         )
 
     def _reasons(

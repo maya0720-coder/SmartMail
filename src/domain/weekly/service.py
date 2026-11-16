@@ -17,19 +17,36 @@ from domain.errors import UserInputError
 from domain.models import TaskEventType
 from domain.ports import Clock, EventRecorder
 from domain.tasks.service import TaskService
+from domain.weekly.convert import to_platform_text
+from domain.weekly.form import (
+    FormLayout,
+    FormRules,
+    build_layout,
+    headings_from_html,
+    parse_outline,
+)
+from domain.weekly.links import PLATFORM_LABELS, Platform, ReferenceLink
 from domain.weekly.report import (
     WeeklyDraft,
     WikiTemplate,
     classify_week,
     render_section,
     replace_own_section,
+    single_line,
+    with_layout,
 )
+from domain.weekly.rich import sanitize, unmasked_text_left
 from domain.weekly.sections import current_section_text
+from security.links import safe_link
 from security.masking import mask
 
 
 class WikiUnavailableError(Exception):
     """위키 사용 불가(API 규격·인증 미확인, 로그인 필요, 오류). 메시지는 사용자 안내용."""
+
+
+class WikiLoginRequiredError(WikiUnavailableError):
+    """위키 로그인 필요. 로그인 후 다시 시도해야 하므로 클립보드 폴백 대상이 아니다."""
 
 
 class WikiConflictError(Exception):
@@ -48,6 +65,10 @@ class WikiPage:
 class WikiApi(Protocol):
     def get_page(self, space_key: str, title: str) -> WikiPage | None: ...
 
+    def get_page_by_link(self, link: str) -> WikiPage | None:
+        """등록된 참고 링크의 위키 페이지 본문(양식 구조 파싱용). 위키 기준 주소 밖이면 None."""
+        ...
+
     def create_page(self, space_key: str, title: str, body: str) -> WikiPage: ...
 
     def update_page(self, page: WikiPage, body: str) -> WikiPage:
@@ -63,6 +84,38 @@ class PublishLog(Protocol):
         approved_at: datetime,
         published_at: datetime,
     ) -> None: ...
+
+
+class PublishCache(Protocol):
+    def add(
+        self,
+        week_start: datetime,
+        platform: str,
+        method: str,
+        link: str | None,
+        published_at: datetime,
+        snapshot: str,
+    ) -> int: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryTarget:
+    """게시 대상. 링크는 등록된 참고 링크(검증 끝난 https)이거나 없음."""
+
+    platform: Platform = Platform.WIKI
+    link: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Delivery:
+    method: str  # "api" | "clipboard"
+    platform: Platform
+    text: str  # 대상 플랫폼 형식(클립보드용)
+    html: str  # 이스케이프된 본인 영역 HTML(위키 붙여넣기용)
+    title: str
+    page: WikiPage | None = None
+    reason: str | None = None  # 폴백 사유
+    cache_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,13 +152,27 @@ class ApprovedReport:
         self.approved_at = approved_at
 
 
-def _masked(draft: WeeklyDraft) -> WeeklyDraft:
+def _masked(draft: WeeklyDraft, link_bases: tuple[str, ...] = ()) -> WeeklyDraft:
+    """목록은 항목별 마스킹, 편집기 HTML은 허용 목록 정리 + 글자 마스킹(결정기록 0030)."""
+    clean = None
+    if draft.html is not None:
+        clean = sanitize(draft.html, link_bases)
+        if unmasked_text_left(clean):
+            raise UserInputError(SPLIT_SENSITIVE)
     return WeeklyDraft(
         draft.week_start,
-        [mask(i).value for i in draft.done],
-        [mask(i).value for i in draft.planned],
-        [mask(i).value for i in draft.issues],
+        [single_line(mask(i).value) for i in draft.done],
+        [single_line(mask(i).value) for i in draft.planned],
+        [single_line(mask(i).value) for i in draft.issues],
+        draft.layout,
+        clean,
     )
+
+
+SPLIT_SENSITIVE = (
+    "서식 사이에 걸친 민감정보(전화번호·계좌번호 등)가 있어 받을 수 없습니다. "
+    "해당 글자를 고쳐 주세요"
+)
 
 
 DEFAULT_AUTHOR = "본인"
@@ -130,7 +197,13 @@ class WeeklyService:
         clock: Clock,
         template: WikiTemplate,
         author: str,
+        cache: PublishCache | None = None,
+        form_rules: FormRules | None = None,
+        wiki_base_url: str = "",
+        link_bases: tuple[str, ...] = (),
     ) -> None:
+        # 편집기 링크로 허용할 사이트(https, 설정의 기준 주소와 출처가 같은 것만)
+        self._link_bases = tuple(b for b in (wiki_base_url, *link_bases) if b)
         self._tasks = tasks
         self._wiki = wiki
         self._events = events
@@ -139,6 +212,14 @@ class WeeklyService:
         self.template = template
         self._author = author
         self._pending: dict[str, _Pending] = {}
+        self._cache = cache
+        self._wiki_base = wiki_base_url
+        self._rules = form_rules or FormRules()
+
+    @property
+    def own_heading(self) -> str:
+        """본인 영역 머리글(h2). 편집기에서 읽기 전용으로 보여 준다."""
+        return self.template.heading(self._author)
 
     def draft(self, moment: datetime | None = None) -> WeeklyDraft:
         result = classify_week(self._tasks.list_tasks(), moment or self._clock.now(), self.template)
@@ -155,7 +236,7 @@ class WeeklyService:
     def preview(self, draft: WeeklyDraft) -> Preview:
         """사용자가 편집한 초안을 마스킹해 미리보기를 만든다. 위키를 못 읽으면 새 페이지 기준."""
         draft.validate()
-        masked = _masked(draft)
+        masked = _masked(draft, self._link_bases)
         try:
             page = self._page(masked)
         except WikiUnavailableError:
@@ -172,7 +253,9 @@ class WeeklyService:
         self._pending[nonce] = _Pending(masked.digest(), base_version, now + NONCE_TTL)
         return Preview(
             title=self.template.page_title(masked.week_start),
-            section_html=render_section(masked, self.template, self._author),
+            section_html=render_section(
+                masked, with_layout(self.template, masked.layout), self._author
+            ),
             digest=masked.digest(),
             base_version=base_version,
             nonce=nonce,
@@ -193,14 +276,14 @@ class WeeklyService:
         pending = self._pending.pop(nonce, None)
         if pending is None or pending.expires_at <= self._clock.now():
             raise UserInputError("미리보기가 만료되었습니다. 다시 미리보기 후 승인해 주세요")
-        masked = _masked(draft)
+        masked = _masked(draft, self._link_bases)
         if not secrets.compare_digest(masked.digest(), pending.digest):
             raise UserInputError(
                 "미리보기 이후 내용이 바뀌었습니다. 다시 미리보기 후 승인해 주세요"
             )
         fixed = Preview(
             self.template.page_title(masked.week_start),
-            render_section(masked, self.template, self._author),
+            render_section(masked, with_layout(self.template, masked.layout), self._author),
             pending.digest,
             pending.base_version,
         )
@@ -208,11 +291,16 @@ class WeeklyService:
 
     def _check_masked(self, approved: ApprovedReport) -> None:
         """보낼 내용이 마스킹된 초안에서만 만들어졌는지 다시 확인한다(M-3)."""
-        masked = _masked(approved.draft)
+        masked = _masked(approved.draft, self._link_bases)
         for item in masked.done + masked.planned + masked.issues:
             if mask(item).value != item:
                 raise UserInputError("마스킹되지 않은 민감정보가 남아 있어 게시하지 않았습니다")
-        expected = render_section(masked, self.template, self._author)
+        if masked.html is not None and (
+            unmasked_text_left(masked.html)
+            or sanitize(masked.html, self._link_bases) != masked.html
+        ):
+            raise UserInputError("마스킹되지 않은 민감정보가 남아 있어 게시하지 않았습니다")
+        expected = render_section(masked, with_layout(self.template, masked.layout), self._author)
         if expected != approved.preview.section_html:
             raise UserInputError("게시 내용 확인에 실패했습니다. 다시 미리보기해 주세요")
 
@@ -253,3 +341,101 @@ class WeeklyService:
         self._log.record(approved.draft.week_start, result, approved.approved_at, now)
         self._events.record(TaskEventType.PUBLISHED)
         return result
+
+    def resolve_layout(self, link: ReferenceLink | None) -> FormLayout:
+        """참고 링크 양식의 머리글 구조를 정한다(WIKI-02). 실패하면 기본 양식으로 되돌린다.
+
+        위키 링크는 위키 어댑터로만 읽고(SSRF 회피), 그 외 링크는 사용자가 붙여 넣은 목차만 쓴다.
+        """
+        tpl = self.template
+        defaults = (tpl.heading_done, tpl.heading_planned, tpl.heading_issues)
+
+        def fallback(why: str) -> FormLayout:
+            return FormLayout(*defaults, source="default", label=f"기본 양식 ({why})")
+
+        if link is None:
+            return fallback("참고 링크 미선택")
+        headings: list[str] = []
+        why = "양식 정보 없음"
+        # 경로 패턴으로 '위키' 배지가 붙어도 서버 조회는 위키 기준 주소와 출처(scheme·호스트·포트)가
+        # 정확히 같을 때만 한다. 다르면 조회하지 않고 붙여 넣은 목차로 처리한다(SSRF 방지).
+        same_origin = bool(self._wiki_base) and safe_link(link.url, [self._wiki_base]) is not None
+        if link.platform is Platform.WIKI and same_origin:
+            try:
+                page = self._wiki.get_page_by_link(link.url)
+                if page is not None:
+                    headings = headings_from_html(page.body)
+            except WikiUnavailableError as exc:
+                why = str(exc)
+        if not headings and link.outline:
+            headings = parse_outline(link.outline)
+        label = f"{PLATFORM_LABELS[link.platform]} 양식 {link.name or link.url}"
+        layout = build_layout(headings, defaults, self._rules, label)
+        if layout is None:
+            return fallback("매핑되는 머리글 없음" if headings else why)
+        return layout
+
+    def convert(self, draft: WeeklyDraft, platform: Platform) -> tuple[str, str]:
+        """마스킹한 초안을 대상 플랫폼 형식(텍스트, 위키용 HTML)으로 바꾼다. 게시는 하지 않는다."""
+        draft.validate()
+        masked = _masked(draft, self._link_bases)
+        text = to_platform_text(masked, self.template, self._author, platform)
+        html = render_section(masked, with_layout(self.template, masked.layout), self._author)
+        return text, html
+
+    def deliver(
+        self, approved: ApprovedReport, target: DeliveryTarget, *, allow_fallback: bool
+    ) -> Delivery:
+        """승인된 보고서를 게시한다. 위키 API가 되면 자동 게시, 아니면 클립보드 폴백(WIKI-06).
+
+        폴백이면 호출한 화면이 변환본을 클립보드에 넣고 대상 링크를 연다.
+        어느 쪽이든 게시 캐시에 남긴다.
+        """
+        if not isinstance(approved, ApprovedReport):
+            raise TypeError("승인된 보고서만 게시할 수 있습니다")
+        page: WikiPage | None = None
+        reason: str | None = None
+        if target.platform is Platform.WIKI:
+            try:
+                page = self.publish(approved)
+            except WikiLoginRequiredError:
+                raise
+            except WikiUnavailableError as exc:
+                if not allow_fallback:
+                    raise
+                reason = str(exc)
+        elif allow_fallback:
+            reason = "슬랙·기타 웹은 API 연동이 없어 복사 후 붙여넣는 방식으로 처리합니다"
+        else:
+            raise WikiUnavailableError("슬랙·기타 웹은 자동 게시를 지원하지 않습니다")
+        masked = _masked(approved.draft, self._link_bases)
+        if page is None:
+            self._check_masked(approved)
+            self._events.record(TaskEventType.PUBLISHED)
+        text = to_platform_text(masked, self.template, self._author, target.platform)
+        method = "api" if page is not None else "clipboard"
+        cache_id = None
+        if self._cache is not None:
+            # 보관 스냅샷에는 본인 이름 머리글을 넣지 않는다(개인정보 최소 저장).
+            snapshot = to_platform_text(
+                masked, self.template, self._author, target.platform, include_owner=False
+            )
+            link = page.link if page is not None else target.link
+            cache_id = self._cache.add(
+                approved.draft.week_start,
+                target.platform.value,
+                method,
+                link,
+                self._clock.now(),
+                snapshot,
+            )
+        return Delivery(
+            method,
+            target.platform,
+            text,
+            approved.preview.section_html,
+            approved.preview.title,
+            page,
+            reason,
+            cache_id,
+        )

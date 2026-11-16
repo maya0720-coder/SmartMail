@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="{{ asset('css/weekly.css') }}">{% endblock %}
 {% block page_title %}<h2>설정·연결</h2>{% endblock %}
 {% block page_sub %}{% set set_desc = "사이트 로그인은 앱을 열 때 뜨는 로그인 창에서 합니다. 로그인 정보(ID·암호)는 어디에도 저장하지 않고, 앱을 종료하면 모든 세션이 삭제됩니다." %}<span class="page-sub" title="{{ set_desc }}">{{ set_desc }}</span>{% endblock %}
 {% block content %}
@@ -14,12 +15,26 @@
         <label class="t-sub">날짜 기준 <select id="title-offset" aria-label="날짜 기준 요일"></select>요일</label>
         <button class="btn sm primary" type="submit">저장</button>
       </form></div></div>
+  <div class="set-row"><div><div class="k">주간보고 참고 링크 <span class="chip" id="wl-count">0</span></div>
+      <div class="s">이전 보고서·양식 링크(https)를 등록하면 슬랙/위키/기타 웹을 자동 구분하고, 주간보고 초안을 그 양식의 머리글 구조로 만듭니다. 서버는 링크를 직접 열어 가져오지 않습니다(위키는 위키 로그인 세션으로만 읽음). 슬랙·기타 웹은 아래 '양식 목차'를 붙여 넣어 주세요(머리글 줄만, 선택).</div>
+      <form class="wl-form" id="wl-form">
+        <div class="row">
+          <input type="url" id="wl-url" maxlength="500" required placeholder="https://..." aria-label="참고 링크 주소">
+          <input type="text" id="wl-name" maxlength="40" placeholder="이름(선택)" aria-label="링크 이름">
+          <button class="btn sm primary" type="submit" id="wl-add">등록</button>
+        </div>
+        <textarea id="wl-outline" maxlength="3000" placeholder="양식 목차(선택, 한 줄에 머리글 하나) 예: 금주 실적 / 차주 계획 / 이슈·요청" aria-label="양식 목차"></textarea>
+      </form>
+      <div class="wl-list" id="wl-list"></div></div></div>
   <div class="set-row"><div><div class="k">업무 구분</div>
       <div class="s">쉼표로 구분해 최대 8개 · 첫 항목이 기본 구분 · 제목·발신자에 결재 키워드가 있으면 '<span id="cat-approval">전자결재</span>'로 자동 구분</div>
       <form class="actions tight" id="cat-form">
         <input type="text" id="cat-input" maxlength="180" required aria-label="업무 구분 목록">
         <button class="btn sm primary" type="submit">저장</button>
       </form></div></div>
+  <div class="set-row"><div><div class="k">외부 회사 도메인 <span class="chip" id="co-count">0</span></div>
+      <div class="s">외부 메일의 요청부서에 표시할 회사명입니다. AI 추정값은 도메인 문자열만 AI-Ground에 물어 얻은 값이고, 여기서 고치면 '사용자 확정'으로 같은 도메인 업무 전체에 적용됩니다. 고정 매핑은 config/rules/company_domains.toml에서 관리합니다.</div>
+      <div id="co-list"></div></div></div>
   <div class="set-row"><div><div class="k">화면 배치 초기화</div><div class="s">대시보드 상세·제안 목록 패널의 조절한 폭을 기본값으로 되돌립니다</div></div><button class="btn sm" id="btn-ui-reset" type="button">배치 초기화</button></div>
   <div id="setconn"></div>
   <div class="set-row"><div><div class="k">업무 아님 학습 초기화(규칙 <span id="rules-count">-</span>개)</div><div class="s">'업무 아님'으로 고른 보낸 사람·말머리의 키 해시(원문 아님)를 지웁니다. 학습은 제안 확신도만 낮춥니다</div></div><button class="btn sm" id="btn-rules-reset" type="button">학습 초기화</button></div>
@@ -27,4 +42,4 @@
   <div class="set-row"><div><div class="k">로컬 데이터 전체 삭제</div><div class="s">업무·요약·이력·지표를 모두 지웁니다 (메일 원본은 그대로)</div></div><button class="btn sm due-crit" id="btn-wipe">전체 삭제</button></div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ asset('js/settings.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/weekly_common.js') }}"></script><script src="{{ asset('js/settings.js') }}"></script><script src="{{ asset('js/settings_links.js') }}"></script><script src="{{ asset('js/settings_companies.js') }}"></script>{% endblock %}

@@ -40,6 +40,12 @@ def _task_from_row(row: sqlite3.Row) -> Task:
         confidence=row["confidence"],
         reasons=tuple(code for code in (row["reasons"] or "").split(",") if code),
         weekly_section=row["weekly_section"],
+        last_mail_at=from_db_time(row["last_mail_at"]),
+        last_mail_direction=row["last_mail_direction"],
+        progress_digest=row["progress_digest"],
+        progress_ref_count=row["progress_ref_count"],
+        requester_kind=row["requester_kind"],
+        requester_domain=row["requester_domain"],
     )
 
 
@@ -68,7 +74,22 @@ def _task_params(task: Task) -> tuple[object, ...]:
         task.confidence,
         ",".join(task.reasons) or None,
         task.weekly_section,
+        to_db_time(task.last_mail_at),
+        task.last_mail_direction,
+        task.progress_digest[:1000] if task.progress_digest else None,
+        task.progress_ref_count,
+        task.requester_kind,
+        task.requester_domain,
     )
+
+
+_TASK_COLUMNS = (
+    "title, requester_dept, requested_at, due_at, status, module_tag, source, thread_id,"
+    " created_at, closed_at, gk_link, gk_registered_at, shared, snooze_until, confidence,"
+    " reasons, weekly_section, last_mail_at, last_mail_direction, progress_digest,"
+    " progress_ref_count, requester_kind, requester_domain"
+)
+_TASK_COLUMN_COUNT = len(_TASK_COLUMNS.split(","))
 
 
 class SqliteTaskRepository:
@@ -77,11 +98,9 @@ class SqliteTaskRepository:
 
     def add(self, task: Task) -> Task:
         with self._db.transaction() as conn:
+            marks = ",".join("?" for _ in range(_TASK_COLUMN_COUNT))
             cursor = conn.execute(
-                "INSERT INTO task (title, requester_dept, requested_at, due_at, status,"
-                " module_tag, source, thread_id, created_at, closed_at, gk_link,"
-                " gk_registered_at, shared, snooze_until, confidence, reasons, weekly_section)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                f"INSERT INTO task ({_TASK_COLUMNS}) VALUES ({marks})",  # noqa: S608 - 상수
                 _task_params(task),
             )
         return replace(task, id=cursor.lastrowid)
@@ -94,11 +113,9 @@ class SqliteTaskRepository:
         if task.id is None:
             raise ValueError("저장되지 않은 업무입니다")
         with self._db.transaction() as conn:
+            assignments = ", ".join(f"{name.strip()}=?" for name in _TASK_COLUMNS.split(","))
             cursor = conn.execute(
-                "UPDATE task SET title=?, requester_dept=?, requested_at=?, due_at=?, status=?,"
-                " module_tag=?, source=?, thread_id=?, created_at=?, closed_at=?, gk_link=?,"
-                " gk_registered_at=?, shared=?, snooze_until=?, confidence=?, reasons=?,"
-                " weekly_section=? WHERE id=?",
+                f"UPDATE task SET {assignments} WHERE id=?",  # noqa: S608 - 열 이름은 상수
                 (*_task_params(task), task.id),
             )
         if cursor.rowcount != 1:
@@ -133,6 +150,10 @@ def _mail_from_row(row: sqlite3.Row) -> MailRef:
         received_at=_required_time(row["received_at"]),
         summary=row["summary"],
         task_id=row["task_id"],
+        digest=row["digest"],
+        summary_tries=int(row["summary_tries"] or 0),
+        summary_state=row["summary_state"],
+        direction=row["direction"],
     )
 
 
@@ -201,7 +222,7 @@ class SqliteMailRefRepository:
         with self._db.transaction() as conn:
             cursor = conn.execute(
                 "INSERT INTO mail_ref (source, entry_id, message_id, thread_id, received_at,"
-                " summary, task_id) VALUES (?,?,?,?,?,?,?)",
+                " summary, task_id, summary_state, direction) VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     ref.source.value,
                     ref.entry_id,
@@ -210,6 +231,8 @@ class SqliteMailRefRepository:
                     to_db_time(ref.received_at),
                     ref.summary,
                     ref.task_id,
+                    ref.summary_state or ("pending" if ref.summary is None else "kept"),
+                    ref.direction,
                 ),
             )
         return replace(ref, id=cursor.lastrowid)
@@ -232,9 +255,39 @@ class SqliteMailRefRepository:
         )
         return [_mail_from_row(row) for row in rows]
 
-    def set_summary(self, ref_id: int, summary: str | None) -> None:
+    def set_summary(self, ref_id: int, summary: str | None, state: str | None = None) -> None:
+        """요약 제목과 요약 상태(결정기록 0029)를 함께 기록한다. state가 없으면 상태는 그대로."""
         with self._db.transaction() as conn:
-            conn.execute("UPDATE mail_ref SET summary = ? WHERE id = ?", (summary, ref_id))
+            if state is None:
+                conn.execute("UPDATE mail_ref SET summary = ? WHERE id = ?", (summary, ref_id))
+            else:
+                conn.execute(
+                    "UPDATE mail_ref SET summary = ?, summary_state = ? WHERE id = ?",
+                    (summary, state, ref_id),
+                )
+
+    def set_direction(self, ref_id: int, direction: str) -> None:
+        """메일 방향(in|out)을 채운다(결정기록 0028, 기존 행은 다음 수집 때)."""
+        with self._db.transaction() as conn:
+            conn.execute("UPDATE mail_ref SET direction = ? WHERE id = ?", (direction, ref_id))
+
+    def set_digest(self, ref_id: int, digest: str | None) -> None:
+        """구조화 요약 저장. 호출자가 마스킹한 값만 넘긴다(결정기록 0021)."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE mail_ref SET digest = ? WHERE id = ?",
+                (digest[:1500] if digest else None, ref_id),
+            )
+
+    def add_summary_try(self, ref_id: int) -> int:
+        """요약 실패 1회를 기록하고 누적 횟수를 돌려준다."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE mail_ref SET summary_tries = summary_tries + 1 WHERE id = ?", (ref_id,)
+            )
+            row = conn.execute("SELECT summary_tries FROM mail_ref WHERE id = ?", (ref_id,))
+            found = row.fetchone()
+        return int(found[0]) if found else 0
 
 
 class SqliteEventRecorder:

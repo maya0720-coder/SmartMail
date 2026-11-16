@@ -80,6 +80,7 @@ REASON_CODES: tuple[str, ...] = (
     "approval",
     "ai_judged",
     "learned_penalty",
+    "ai_unavailable",  # AI 판단 실패로 확신도 낮게 남김(결정기록 0021)
 )
 MAX_REASONS = 6
 WEEKLY_SECTIONS: tuple[str, ...] = ("done", "planned", "issues", "none")
@@ -111,9 +112,31 @@ class MailRef:
     message_id: str
     thread_id: str
     received_at: datetime
-    summary: str | None = None  # 사용자 확인분만
+    summary: str | None = None  # 요청 요약 제목(처리했으면 값이 있다)
     task_id: int | None = None
     id: int | None = None
+    # 구조화 요약(마스킹된 AI 요약: 요청 사항·기한·필요 조치, 결정기록 0021). 원문 아님
+    digest: str | None = None
+    summary_tries: int = 0  # 요약 실패 횟수(상한에 닿으면 더 보내지 않음)
+    # 요약 상태(결정기록 0029): pending|done|kept|missing. None이면 summary로 추정
+    summary_state: str | None = None
+    direction: str | None = None  # 메일 방향(결정기록 0028): in(받음)|out(보냄). 기존 행은 None
+
+
+# 요약 상태 값(결정기록 0029). running은 저장하지 않고 API에서 합성한다.
+SUMMARY_PENDING: str = "pending"
+SUMMARY_DONE: str = "done"
+SUMMARY_KEPT: str = "kept"
+SUMMARY_MISSING: str = "missing"
+MAIL_IN: str = "in"
+MAIL_OUT: str = "out"
+
+
+def summary_state_of(ref: MailRef) -> str:
+    """저장된 요약 상태. 값이 없는(이관 전에 생긴) 행은 summary 유무로 추정한다."""
+    if ref.summary_state is not None:
+        return ref.summary_state
+    return SUMMARY_PENDING if ref.summary is None else SUMMARY_KEPT
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +159,15 @@ class Task:
     confidence: float | None = None  # 추출 확신도(0~1)
     reasons: tuple[str, ...] = ()  # 제안 이유 코드(REASON_CODES)
     weekly_section: str | None = None  # 주간보고 위치(사용자 선택): done|planned|issues|none
+    # 스레드 최종 메일(결정기록 0028): 행 정렬·묶음 기준. 없으면 requested_at
+    last_mail_at: datetime | None = None
+    last_mail_direction: str | None = None  # in|out
+    # 진행 요약(결정기록 0028): 마스킹된 AI 진행 요약과 요약 당시 메일 수
+    progress_digest: str | None = None
+    progress_ref_count: int | None = None
+    # 요청자 구분(결정기록 0027): internal|external|freemail, 외부 회사 도메인(외부일 때만)
+    requester_kind: str | None = None
+    requester_domain: str | None = None
     id: int | None = None
 
     @property

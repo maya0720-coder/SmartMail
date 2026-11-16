@@ -16,6 +16,7 @@ from app.mail_sync import background_sync
 from app.routes import (
     auth,
     categories,
+    companies,
     data,
     gk,
     history,
@@ -24,17 +25,20 @@ from app.routes import (
     metrics,
     pages,
     summaries,
+    task_progress,
     tasks,
     title_rule,
     triage,
     ui_prefs,
     weekly,
+    weekly_drafts,
+    weekly_links,
 )
 from app.scheduler import PeriodicJob
 from app.summary_job import SUMMARY_INTERVAL_SECONDS
 from app.templating import STATIC_DIR
 from app.web_security import ALLOWED_HOSTS, LOOPBACK_CLIENTS, SecurityMiddleware
-from security.logging_policy import EventType, Site, log_event
+from security.logging_policy import EndReason, EventType, Site, log_event
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +71,29 @@ def create_app(
         summary_job = PeriodicJob(
             "summary", container.summary_job.run_once, SUMMARY_INTERVAL_SECONDS
         )
+        # 연결 유지 점검(결정기록 0031): 사이트 쪽 만료 감지. 0분이거나 대상이 없으면 끔
+        keepalive_minutes = container.settings.session_keepalive_minutes
+        keepalive_job = PeriodicJob(
+            "keepalive", container.keepalive.run_once, max(keepalive_minutes, 1) * 60
+        )
+        keepalive_on = keepalive_minutes > 0 and container.keepalive.enabled
+        # 외부 회사명 확인(결정기록 0027): 요약 작업과 같은 주기, 수집 흐름과 분리
+        company_job = PeriodicJob(
+            "company", container.company_job.run_once, SUMMARY_INTERVAL_SECONDS
+        )
         if run_background_jobs:
             job.start()
             sweeper.start()
             mail_job.start()
             summary_job.start()
+            company_job.start()
+            if keepalive_on:
+                keepalive_job.start()
         try:
             yield
         finally:
+            await keepalive_job.stop()
+            await company_job.stop()
             await summary_job.stop()
             await mail_job.stop()
             await job.stop()
@@ -82,7 +101,7 @@ def create_app(
             close = getattr(container.mail.collector, "close", None)
             if callable(close):
                 close()
-            container.sessions.logout_all()
+            container.sessions.logout_all(EndReason.APP_STOP)
             container.ai.close()
             container.browser.shutdown()
             container.residue.run()
@@ -111,15 +130,19 @@ def create_app(
     app.include_router(data.router)
     app.include_router(mail.router)
     app.include_router(categories.router)
+    app.include_router(companies.router)
     app.include_router(summaries.router)
     app.include_router(triage.router)
     app.include_router(triage.rules_router)
+    app.include_router(task_progress.router)
     app.include_router(tasks.router)
     app.include_router(gk.router)
     app.include_router(history.router)
     app.include_router(title_rule.router)
     app.include_router(ui_prefs.router)
     app.include_router(weekly.router)
+    app.include_router(weekly_drafts.router)
+    app.include_router(weekly_links.router)
     app.include_router(metrics.router)
     app.include_router(pages.router)
     return app

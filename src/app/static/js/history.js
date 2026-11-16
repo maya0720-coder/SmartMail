@@ -11,25 +11,28 @@ function badge(stage, text) {
 function renderStages(data, query) {
   const groups = data.stages.map((stage) => {
     let content;
-    if (!stage.ran) content = el("div", { class: "empty" }, "실행 안 함");
+    if (!stage.ran) return null;
     else if (!stage.found) content = el("div", { class: "empty" }, stage.notice || "찾지 못함");
-    else if (stage.ai_answer) content = el("div", { class: "step aihit" }, stage.ai_answer.text, el("div", { class: "ai-label" }, stage.ai_answer.label));
+    else if (stage.ai_answer) content = el("div", { class: "step aihit" },
+      el("div", { class: "t-sub" }, stage.cases_used ? "위 사례 " + stage.cases_used + "건을 근거로 제안" : "비슷한 사례 없이 제안"),
+      el("div", { class: "ai-text" }, stage.ai_answer.text), el("div", { class: "ai-label" }, stage.ai_answer.label));
     else if (stage.app_hits.length) content = el("div", {}, ...stage.app_hits.map((h) => el("div", { class: "step hit" },
       el("div", { class: "t-title" }, h.title), el("div", { class: "t-sub" }, "원인: " + (h.cause || "-")), el("div", {}, "조치: " + h.action))));
     else content = el("div", {}, ...stage.gk_hits.map((h) => el("div", { class: "step hit" },
       el("a", { class: "link", href: h.link, target: "_blank", rel: "noopener noreferrer" }, h.title))));
     return el("div", { class: "result-group" }, el("div", { class: "sec" }, badge(stage.stage, stage.badge)), content);
   });
-  const next = { app: "gk", gk: "ai" }[data.resolved];
+  // 검색은 사례 찾기만(AI 호출 없음). 필요하면 찾은 사례를 근거로 AI 해결 방안을 만든다(결정기록 0021)
+  const ai = data.stages.find((s) => s.stage === "ai");
   fill(document.getElementById("hres"), ...groups,
     data.message ? el("div", { class: "empty" }, data.message) : null,
-    next ? el("button", { class: "btn sm", onclick: () => runSearch(query, next) }, "다음 단계 강제 검색") : null);
+    ai && !ai.ran ? el("button", { class: "btn sm ai", onclick: () => runSearch(query, true) }, "이 사례로 AI 해결 방안 만들기") : null);
 }
 
-async function runSearch(query, startFrom) {
+async function runSearch(query, suggest) {
   if (!query.trim()) return;
   document.getElementById("hres").replaceChildren(el("div", { class: "empty" }, "찾는 중…"));
-  const body = { query: query.trim().slice(0, 200), start_from: startFrom || "app" };
+  const body = { query: query.trim().slice(0, 200), start_from: "app", suggest: Boolean(suggest) };
   if (historyModule) body.module = historyModule;
   const result = await api("POST", "/api/search", body);
   if (!result.ok) { document.getElementById("hres").replaceChildren(el("div", { class: "empty" }, errorText(result, "검색하지 못했습니다"))); return; }

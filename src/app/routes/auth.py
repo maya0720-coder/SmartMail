@@ -135,6 +135,9 @@ def connections(request: Request) -> JSONResponse:
                 "logged_in": status.logged_in,
                 "browser_login": container.login.uses_browser_login(status.site),
                 "url": site_urls.get(status.site, ""),
+                # 로그인 안 됨일 때 마지막 종료 사유(결정기록 0031). 코드 값만 담는다
+                "ended_reason": None if status.ended_reason is None else status.ended_reason.value,
+                "keep_while_running": container.sessions.keep_while_running,
             }
             for status in container.sessions.status()
         ]

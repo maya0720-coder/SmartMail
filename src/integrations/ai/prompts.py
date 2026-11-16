@@ -11,7 +11,7 @@ import re
 from collections.abc import Sequence
 from typing import Final
 
-from domain.ai import AiAnswer, AiUnavailableError, Classification
+from domain.ai import AiAnswer, AiParseError, Classification, RequestDigest
 from domain.tasks.modules import MODULE_TAGS
 from security.masking import MaskedText
 
@@ -30,12 +30,22 @@ CLASSIFY_TEMPLATE: Final = (
 )
 
 SUGGEST_TEMPLATE: Final = (
-    "다음은 SAP ERP 운영 문의의 요약입니다(민감정보는 [마스킹]으로 가림).\n"
-    "아래 비슷한 과거 사례를 참고해, 확인 순서와 조치 방법을 5줄 이내로 제안해 주세요.\n"
+    "당신은 SAP ERP 운영 담당자를 돕는 조수입니다. 아래는 담당자가 받은 업무 요청입니다"
+    "(민감정보는 [마스킹]으로 가림).\n"
+    "담당자가 바로 처리할 수 있게 해결 방안을 제안해 주세요. 비슷한 과거 사례가 있으면 "
+    "그 원인·조치를 우선 참고하고, 사례와 다른 점이 있으면 짚어 주세요. "
+    "확실하지 않은 내용은 '추정'이라고 쓰세요.\n"
+    "반드시 아래 형식으로만 답하세요(각 항목 3줄 이내).\n"
+    "원인 추정: ...\n"
+    "확인 순서:\n1. ...\n2. ...\n"
+    "조치 방안:\n- ...\n"
+    "관련 T-code: 쉼표로 구분(없으면 없음)\n"
+    "참고한 사례: 사례 번호(없으면 없음)\n"
     "근거 문서가 있으면 마지막 줄에 https 주소만 적어 주세요.\n"
     "---\n"
-    "문의 요약: {summary}\n"
-    "비슷한 사례:\n{cases}"
+    "업무 요청:\n{summary}\n"
+    "---\n"
+    "비슷한 과거 사례:\n{cases}"
 )
 
 # 줄 단위로만 찾는다(반복 상한을 둬 처리 시간이 입력 길이에 비례하게 함)
@@ -52,21 +62,43 @@ _HTTPS_LINK: Final = re.compile(r"https://[^\s<>\"')\]]{1,500}")
 
 
 SUMMARIZE_TEMPLATE: Final = (
-    "다음은 업무 담당자가 받은 메일 {count}건입니다(민감정보는 [마스킹]으로 가림).\n"
-    "각 메일에서 '보낸 사람이 요청한 일'을 업무 목록 제목으로 쓸 한 문장으로 요약해 주세요.\n"
-    "규칙:\n"
-    "- '무엇을(대상: 시스템·문서·T-code·화면) + 어떻게(행동)' 순서의 명사형 40자 이내. "
-    "예: 'KSB1 조회 권한 부여', 'PO 결제 조건 문구 변경'\n"
-    "- '부탁드립니다', '요청드립니다', '확인 부탁' 같은 인사·요청 어미만 쓰지 마세요.\n"
-    "- 인사말·서명·회신 기록은 무시하고, 사람 이름은 쓰지 마세요.\n"
-    "반드시 아래 형식으로 메일 번호마다 한 줄씩만 답하세요.\n"
-    "1. 요약\n"
-    "2. 요약\n"
+    "당신은 SAP ERP 운영 담당자의 메일함을 정리하는 조수입니다. 다음은 담당자가 받은 메일 "
+    "{count}건입니다(민감정보는 [마스킹]으로 가림). 전달(FW) 메일은 인용된 원래 메일의 요청이 "
+    "핵심이고, '후속 메일'이 있으면 추가·변경된 요청을 함께 반영하세요.\n"
+    "메일마다 아래 4줄 형식으로만 답하세요.\n"
+    "[메일 번호]\n"
+    "제목: 무엇을(시스템·문서·T-code·화면) + 어떻게(행동), 명사형 40자 이내\n"
+    "요청: 요청 사항을 ' / '로 구분(최대 5개, 각 40자 이내)\n"
+    "기한: 메일에 적힌 기한 그대로(없으면 없음)\n"
+    "조치: 담당자가 할 일 한 문장(60자 이내)\n"
+    "규칙: 인사말·서명·면책 문구는 무시하고, 사람 이름은 쓰지 마세요. "
+    "'부탁드립니다', '확인 부탁' 같은 요청 어미만으로 제목을 쓰지 마세요.\n"
+    "예시)\n[메일 1]\n제목: KSB1 원가센터 보고서 조회 권한 부여\n"
+    "요청: 원가팀 사용자 KSB1 조회 권한 부여 / 권한 범위 원가센터 그룹 확인\n"
+    "기한: 금일 중\n조치: 원가 조회 역할(PFCG) 확인 후 사용자에 할당\n"
     "---\n"
     "{items}"
 )
 MAX_SUMMARY_LINE: Final = 120
-_SUMMARY_LINE: Final = re.compile(r"^[ \t*]{0,4}(\d{1,2})[.)][ \t]{0,3}(.{1,200})$", re.MULTILINE)
+MAX_FIELD_LINE: Final = 200
+# 묶음 머리: '[메일 1]'뿐 아니라 실제 채팅 답변에 흔한 꼴도 받는다(결정기록 0026).
+#   '**[메일 1]**', '### 메일 1', '1. [메일 1]', '메일 1:', '[메일 1] 제목: …'(같은 줄에 제목)
+# 줄 맨 앞(장식·번호 뒤)에서만 찾고 숫자 뒤에 글자가 붙으면('메일 1건') 머리로 보지 않는다.
+_ITEM_HEAD: Final = re.compile(
+    r"^[ \t*#>-]{0,6}(?:\d{1,2}[.)][ \t]{0,2})?[*\[(]{0,3}메일[ \t]{0,2}(\d{1,2})(?![\d가-힣])"
+    r"[ \t]{0,2}[\])*]{0,3}[ \t*]{0,4}[:：.]?[ \t]{0,2}",
+    re.MULTILINE,
+)
+
+
+def _field(block: str, name: str) -> str | None:
+    match = re.search(
+        rf"^[ \t*-]{{0,4}}{name}[ \t*]{{0,3}}[:：][ \t]{{0,3}}(.{{1,400}})$", block, re.M
+    )
+    if match is None:
+        return None
+    value = match.group(1).strip().strip("*\"'“”").strip()
+    return value[:MAX_FIELD_LINE] or None
 
 
 def summarize_prompt(items: Sequence[MaskedText]) -> str:
@@ -74,15 +106,29 @@ def summarize_prompt(items: Sequence[MaskedText]) -> str:
     return SUMMARIZE_TEMPLATE.format(count=len(items), items=body)
 
 
-def parse_summaries(text: str, count: int) -> list[str | None]:
-    """'번호. 요약' 줄만 해석한다. 빠진 번호는 None(추측 금지)."""
-    found: dict[int, str] = {}
-    for match in _SUMMARY_LINE.finditer(text[:MAX_ANSWER_CHARS]):
-        number, line = int(match.group(1)), match.group(2).strip().strip("*\"'“”").strip()
-        if 1 <= number <= count and line and number not in found:
-            found[number] = line[:MAX_SUMMARY_LINE]
+def parse_digests(text: str, count: int) -> list[RequestDigest | None]:
+    """'[메일 N]' 묶음마다 제목·요청·기한·조치 줄을 해석한다. 제목이 없으면 None(추측 금지)."""
+    head = text[: MAX_ANSWER_CHARS * 2]
+    marks = list(_ITEM_HEAD.finditer(head))
+    found: dict[int, RequestDigest] = {}
+    for index, mark in enumerate(marks):
+        number = int(mark.group(1))
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(head)
+        # 같은 줄에 이어진 내용('[메일 1] 제목: …')도 한 줄로 읽히게 줄바꿈을 앞에 붙인다
+        block = "\n" + head[mark.end() : end]
+        title = _field(block, "제목")
+        if not (1 <= number <= count) or number in found or not title:
+            continue
+        requests = _field(block, "요청") or ""
+        due = _field(block, "기한")
+        found[number] = RequestDigest(
+            title=title[:MAX_SUMMARY_LINE],
+            requests=tuple(r.strip()[:80] for r in requests.split(" / ") if r.strip())[:5],
+            due=None if due in (None, "없음", "없음.", "-") else due,
+            action=_field(block, "조치"),
+        )
     if not found:
-        raise AiUnavailableError(PARSE_FAILED)
+        raise AiParseError(PARSE_FAILED)
     return [found.get(index) for index in range(1, count + 1)]
 
 
@@ -91,7 +137,7 @@ def classify_prompt(summary: MaskedText) -> str:
 
 
 def suggest_prompt(summary: MaskedText, cases: Sequence[MaskedText]) -> str:
-    lines = "\n".join(f"- {case.value}" for case in cases) or "- (없음)"
+    lines = "\n".join(f"[사례 {n}] {case.value}" for n, case in enumerate(cases, 1)) or "(없음)"
     return SUGGEST_TEMPLATE.format(summary=summary.value, cases=lines)
 
 
@@ -106,7 +152,7 @@ def parse_classification(text: str) -> Classification:
     head = text[:MAX_ANSWER_CHARS]
     task = _TASK_LINE.search(head)
     if task is None:
-        raise AiUnavailableError(PARSE_FAILED)
+        raise AiParseError(PARSE_FAILED)
     module = _MODULE_LINE.search(head)
     confidence_match = _CONFIDENCE_LINE.search(head)
     confidence = float(confidence_match.group(1)) if confidence_match else 0.5
@@ -120,7 +166,7 @@ def parse_classification(text: str) -> Classification:
 def parse_answer(text: str) -> AiAnswer:
     body = text.strip()[:MAX_ANSWER_CHARS]
     if not body:
-        raise AiUnavailableError(PARSE_FAILED)
+        raise AiParseError(PARSE_FAILED)
     links = tuple(dict.fromkeys(_HTTPS_LINK.findall(body)))[:MAX_REFERENCES]
     # 링크는 게이트웨이에서 허용 사이트만 남긴다(safe_link)
     return AiAnswer(text=body, references=links)

@@ -4,22 +4,44 @@
 // ---- AI 요청 요약 상태(결정기록 0014) ----
 let lastDone = null;
 let sumTimer = 0;
+const SUMMARY_POLL_RUNNING_MS = 1000;  // 실행 중에는 진행률이 바로 보이게 짧게
+const SUMMARY_POLL_IDLE_MS = 15000;
+
+// 진행률 막대: 실행 중에만 보인다(결정기록 0023). 글자는 textContent로만 넣는다.
+function renderSummaryProgress(s) {
+  const box = document.getElementById("sum-prog-box");
+  const show = Boolean(s.running && s.total);
+  box.classList.toggle("hidden", !show);
+  if (!show) return;
+  const total = Number(s.total) || 0;
+  const completed = Math.min(Number(s.completed) || 0, total);
+  const pct = total ? Math.round((completed / total) * 100) : 0;
+  const bar = document.getElementById("sum-prog");
+  bar.setAttribute("aria-valuenow", String(pct));
+  bar.setAttribute("aria-valuetext", "완료 " + completed + " / 전체 " + total);
+  document.getElementById("sum-prog-bar").style.width = pct + "%";
+  document.getElementById("sum-pct").textContent = pct + "%";
+  document.getElementById("sum-count").textContent = "완료 " + completed + " / 전체 " + total;
+}
 async function loadSummaryStatus() {
   const result = await api("GET", "/api/summaries/status");
   if (!result.ok) return;
   const s = result.data;
   const text = document.getElementById("sum-text");
   const button = document.getElementById("sum-run");
+  renderSummaryProgress(s);
   if (!s.pending) text.textContent = "모든 업무 제목이 요청 요약으로 바뀌었습니다.";
   else if (s.running) text.textContent = "AI-Ground로 요청 요약을 만드는 중… (남은 " + s.pending + "건)";
   else if (!s.ready) text.textContent = "요약 대기 " + s.pending + "건 · AI-Ground에 로그인하면 메일 제목 대신 요청 요약을 보여 줍니다.";
   else text.textContent = "요약 대기 " + s.pending + "건 · 2분마다 조금씩 자동으로 바꿉니다" + (s.message ? " (" + s.message + ")" : "");
   button.disabled = !s.pending || s.running;
   button.textContent = s.ready ? "AI로 일괄 요약" : "AI-Ground 로그인";
-  if (lastDone !== null && s.done !== lastDone) loadTriage();  // 요약이 생기면 목록 갱신
-  lastDone = s.done;
+  // 요약 진행·완료 시 보이는 항목의 칩·제목만 갱신(전체 다시 그리기 없음, 결정기록 0029)
+  const progressKey = s.done + ":" + s.completed + ":" + s.running;
+  if (lastDone !== null && progressKey !== lastDone) patchSummaryStates();
+  lastDone = progressKey;
   clearTimeout(sumTimer);
-  sumTimer = setTimeout(loadSummaryStatus, s.running ? 2000 : 15000);
+  sumTimer = setTimeout(loadSummaryStatus, s.running ? SUMMARY_POLL_RUNNING_MS : SUMMARY_POLL_IDLE_MS);
 }
 document.getElementById("sum-run").addEventListener("click", async () => {
   const status = await api("GET", "/api/summaries/status");

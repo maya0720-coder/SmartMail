@@ -32,6 +32,8 @@ from domain.ports import (
 )
 from domain.tasks.categories import DEFAULT_CATEGORIES, CategoryCatalog
 from domain.tasks.extract import TaskCandidate, TaskExtractor
+from domain.tasks.requester import RequesterClassifier
+from domain.tasks.thread_sync import sync_thread_fields
 from domain.tasks.triage_rules import RuleKey, TriageLearning
 from security.masking import mask
 
@@ -140,7 +142,9 @@ class TaskService:
         *,
         catalog: CategoryCatalog | None = None,
         learning: TriageLearning | None = None,
+        requesters: RequesterClassifier | None = None,
     ) -> None:
+        self._requesters = requesters  # 요청자 내부·외부 구분(결정기록 0027)
         self._catalog = catalog
         self._learning = learning
         self._tasks = tasks
@@ -170,6 +174,17 @@ class TaskService:
         cleaned = mask(title.strip()).value[:200]
         if cleaned:
             self._save(replace(task, title=cleaned))
+
+    def set_progress_digest(self, task_id: int, digest: str, ref_count: int) -> Task:
+        """AI 진행 요약 저장(결정기록 0028): 마스킹, 1,000자, 요약 당시 메일 수."""
+        task = self.get(task_id)
+        return self._save(
+            replace(
+                task,
+                progress_digest=mask(digest.strip()).value[:1000] or None,
+                progress_ref_count=max(0, ref_count),
+            )
+        )
 
     def recategorize_unknown(self) -> int:
         """구분 목록에 없는 값(예: 예전 SAP 모듈 태그)을 가진 업무를 규칙으로 다시 구분한다.
@@ -216,6 +231,17 @@ class TaskService:
             if ref is not None and ref.id is not None and ref.task_id is None:
                 self._refs.link_task(ref.id, task_id)
 
+    def _sync_thread(self, task_id: int, thread: MailThread) -> None:
+        """마지막 메일·요청자 구분을 갱신한다(결정기록 0027·0028). 바뀐 게 없으면 저장 안 함."""
+        task = self._tasks.get(task_id)
+        if task is None:
+            return
+        updated = sync_thread_fields(
+            task, thread, self._refs.list_for_task(task_id), self._requesters
+        )
+        if updated != task:
+            self._tasks.update(updated)
+
     def ingest(self, threads: list[MailThread]) -> IngestResult:
         """수집한 스레드로 업무를 제안하고, 기존 업무의 후속 메일·회신을 연결한다."""
         suggested: list[tuple[Task, TaskCandidate]] = []
@@ -224,6 +250,7 @@ class TaskService:
             existing = self._tasks.find_by_thread(thread.thread_id)
             if existing is not None and existing.id is not None:
                 self._link_thread(thread, existing.id)  # TODO-04 중복 생성 금지
+                self._sync_thread(existing.id, thread)
                 linked += 1
                 if self._detect_reply(existing, thread):
                     replied += 1
@@ -253,6 +280,7 @@ class TaskService:
             )
             assert task.id is not None  # noqa: S101
             self._link_thread(thread, task.id)
+            self._sync_thread(task.id, thread)
             self._events.record(TaskEventType.SUGGESTED, task_id=task.id)
             self._evidence[task.id] = (task.created_at, candidate.evidence)
             while len(self._evidence) > MAX_EVIDENCE_CACHE:

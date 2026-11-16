@@ -101,10 +101,7 @@ a.chip:hover{color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
 .site-link{color:inherit;display:inline-flex;align-items:center;gap:2px}.site-link:hover{color:var(--accent)}.site-link .ic{width:14px;height:14px}
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.b-prop,.b-wait{background:var(--soft);color:var(--sub)}
-.b-prog{background:var(--accent-soft);color:var(--accent)}
-.b-done{background:var(--success-soft);color:var(--success)}
-.b-cand{background:var(--warn-soft);color:var(--warn)}
+/* 상태 배지 색(.b-*)은 status.css */
 .tag{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:var(--soft);color:var(--sub)}
 .due-crit{color:var(--danger);font-weight:600}.due-warn{color:var(--warn);font-weight:600}
 .seg,.filters{display:inline-flex;gap:2px;padding:2px;background:var(--soft);border-radius:var(--r-ctl);flex-wrap:wrap}
@@ -221,12 +218,7 @@ th[aria-sort="descending"] .ic{transform:rotate(180deg)}
 .lg-item b{margin-left:auto;font-family:var(--mono);font-weight:600;color:var(--fg)}
 .lg-item.zero{opacity:.45}
 .legend .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
-.s-suggested{stroke:var(--muted);background:var(--muted)}
-.s-waiting{stroke:#64748b;background:#64748b}
-.s-in_progress{stroke:var(--accent);background:var(--accent)}
-.s-done_candidate{stroke:var(--warn);background:var(--warn)}
-.s-on_hold{stroke:var(--danger);background:var(--danger)}
-.s-done{stroke:var(--success);background:var(--success)}
+/* 상태 도넛 색(.s-*)은 status.css */
 #alerts{white-space:nowrap;overflow-x:auto}
 #alerts .ic{width:14px;height:14px}
 
@@ -284,6 +276,7 @@ th[aria-sort="descending"] .ic{transform:rotate(180deg)}
 .step.hit{border-color:var(--gk)}
 .step.aihit{border-color:var(--ai)}
 .ai-label{font-size:11.5px;color:var(--ai);margin-top:6px}
+.ai-text{white-space:pre-wrap;word-break:break-word;line-height:1.55;margin-top:4px}
 .scrim{display:none}
 
 /* ---------- 대시보드 앱 셸: 한 화면 고정형(스크롤 없음, 목록·상세가 화면 아래까지) ---------- */
@@ -369,6 +362,8 @@ td .t-sub.wait{color:var(--warn)}
 .lm-more summary{color:var(--accent);font-weight:600;margin-bottom:8px}
 .mfa{margin:0 0 6px;font-size:12.5px;font-weight:600;color:var(--accent);min-height:0}
 .mfa:empty{display:none}
+.otp{margin:0 0 10px;font-size:12.5px}.otp label{display:block;font-weight:600;color:var(--accent);margin-bottom:6px}
+.otp-row{display:flex;gap:6px}.otp-row input{flex:1;min-width:0;letter-spacing:.15em}
 .login-modal .m-actions .btn.primary{min-width:120px}
 .lm-note{margin:0 -22px;padding:10px 22px 16px;font-size:11px;color:var(--muted);line-height:1.5}
 .card > table td{height:auto;padding:8px 10px}

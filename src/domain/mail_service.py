@@ -15,7 +15,7 @@ from domain.clock import KST
 from domain.errors import UserInputError
 from domain.mail import MailCollector, MailKey, MailMessage, MailThread
 from domain.mail_rules import ExclusionRules
-from domain.models import MailRef, TaskEventType
+from domain.models import MAIL_IN, MAIL_OUT, MailRef, TaskEventType
 from domain.ports import Clock, EventRecorder, MailRefRepository, SyncStateRepository
 
 MISSING_ORIGINAL = "원문 없음"
@@ -148,7 +148,12 @@ class MailService:
         new = 0
         for thread in threads:
             for message in thread.messages:
-                if self._refs.find_by_message_id(message.key.message_id) is not None:
+                direction = MAIL_OUT if message.sent_by_me else MAIL_IN
+                found = self._refs.find_by_message_id(message.key.message_id)
+                if found is not None:
+                    # 방향이 없던 기존 행은 다음 수집 때 채운다(결정기록 0028)
+                    if found.direction is None and found.id is not None:
+                        self._refs.set_direction(found.id, direction)
                     continue
                 self._refs.add(
                     MailRef(
@@ -157,6 +162,7 @@ class MailService:
                         message_id=message.key.message_id,
                         thread_id=message.thread_id,
                         received_at=message.received_at,
+                        direction=direction,
                     )
                 )
                 if not message.sent_by_me:

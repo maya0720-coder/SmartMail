@@ -71,6 +71,21 @@ class EventType(StrEnum):
     GK_SEARCH = "gk_search"
     AI_CALL = "ai_call"
     RETENTION_PURGE = "retention_purge"
+    DISCONNECT = "disconnect"  # 사이트 연결이 끝남(사유는 EndReason, 결정기록 0031)
+
+
+class EndReason(StrEnum):
+    """사이트 연결이 끝난 사유(결정기록 0031). 로그·연결 상태 API에 그대로 쓴다.
+
+    값에 차단 키워드(session 등)가 들어가지 않게 한다.
+    """
+
+    IDLE_TIMEOUT = "idle_timeout"  # 유휴 시간 초과(실행 중 유지를 끈 경우만)
+    CASCADE = "cascade"  # 함께 쓰던 공용 컨텍스트가 다른 사이트 때문에 닫힘
+    REPLACED = "replaced"  # 같은 사이트 재로그인으로 교체됨
+    SITE_EXPIRED = "site_expired"  # 사이트 쪽에서 로그인이 끝남(연결 유지 점검이 감지)
+    LOGOUT = "logout"  # 사용자의 명시적 로그아웃
+    APP_STOP = "app_stop"  # 앱 종료
 
 
 def _render(record: logging.LogRecord) -> str:
@@ -150,11 +165,19 @@ def uninstall_record_sanitizer() -> None:
         _original_factory = None
 
 
-def log_event(event: EventType, site: Site, success: bool) -> None:
-    """감사 로그를 '이벤트 종류, 사이트, 성공/실패'만으로 기록한다(시각은 포맷터가 붙인다)."""
+def log_event(event: EventType, site: Site, success: bool, reason: EndReason | None = None) -> None:
+    """감사 로그를 '이벤트 종류, 사이트, 성공/실패(, 종료 사유)'만으로 기록한다.
+
+    시각은 포맷터가 붙인다. 사유는 정해진 코드 값만 받는다(자유 문자열 없음).
+    """
     logger = logging.getLogger(AUDIT_LOGGER_NAME)
     result = "success" if success else "failure"
-    logger.info("event=%s site=%s result=%s", event.value, site.value, result)
+    if reason is None:
+        logger.info("event=%s site=%s result=%s", event.value, site.value, result)
+    else:
+        logger.info(
+            "event=%s site=%s result=%s reason=%s", event.value, site.value, result, reason.value
+        )
 
 
 def configure_logging(log_file: Path | None = None, level: int = logging.INFO) -> None:

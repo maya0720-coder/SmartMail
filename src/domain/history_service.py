@@ -27,6 +27,43 @@ TCODE: Final = re.compile(
     r"(?<![A-Za-z0-9])(?:[A-Z]{2,4}\d{1,3}[A-Z]?|Z[A-Z0-9_]{3,20})(?![A-Za-z0-9])"
 )
 MAX_FIELD: Final = 2000
+TCODE_WEIGHT: Final = 3  # T-code가 같으면 같은 화면·기능 문제일 가능성이 높다
+# 검색어에서 뺄 일반 단어(업무 제목에 흔한 요청 표현)
+STOPWORDS: Final = frozenset(
+    {
+        "요청",
+        "문의",
+        "확인",
+        "건",
+        "관련",
+        "부탁",
+        "처리",
+        "검토",
+        "요청드립니다",
+        "부탁드립니다",
+        "re",
+        "fw",
+        "fwd",
+        "회신",
+        "전달",
+        "및",
+        "의",
+        "건의",
+    }
+)
+_PARTICLE: Final = re.compile(r"(?:은|는|이|가|을|를|에|에서|의|로|으로|와|과|도)$")
+
+
+def search_words(query: str) -> list[str]:
+    """검색 단어: 소문자, 끝 조사·일반 단어 제거, 2자 이상, 최대 10개."""
+    words: list[str] = []
+    for raw in re.split(r"[\s/,·\[\]()]+", query.casefold()):
+        word = raw.strip(".:;!?\"'")
+        if len(word) > 2:
+            word = _PARTICLE.sub("", word)
+        if len(word) >= 2 and word not in STOPWORDS and word not in words:
+            words.append(word)
+    return words[:10]
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,13 +150,19 @@ class HistoryService:
         tag: str | None = None,
         within_days: int | None = None,
     ) -> list[HistoryHit]:
-        """키워드(공백 구분 AND) + 필터 검색(HIST-03, SRCH-01)."""
-        words = [w.casefold() for w in query.split() if w.strip()][:10]
+        """키워드 + 필터 검색(HIST-03·04, SRCH-01).
+
+        업무 제목을 그대로 검색어로 쓰므로 모든 단어 일치(AND)를 요구하지 않는다(결정기록 0021).
+        단어마다 점수를 매기고(T-code 일치는 가중치), 단어 수에 맞는 최소 점수를 넘은 카드만
+        점수 높은 순으로 돌려준다. 단어가 1~2개면 1개만 맞아도 된다.
+        """
+        words = search_words(query)
         since: datetime | None = None
         if within_days is not None:
             since = self._clock.now() - timedelta(days=within_days)
-        hits = []
-        for card in self._history.list_cards():
+        need = 1 if len(words) <= 2 else 2
+        scored: list[tuple[int, int, HistoryHit]] = []
+        for order, card in enumerate(self._history.list_cards()):
             task = self._tasks_get(card.task_id)
             if module and (task is None or task.module_tag != module):
                 continue
@@ -131,9 +174,11 @@ class HistoryService:
                 [card.problem, card.cause, card.action, card.tcode or "", " ".join(card.tags)]
                 + ([task.title] if task else [])
             ).casefold()
-            if all(word in text for word in words):
-                hits.append(HistoryHit(card, task))
-        return hits
+            tcodes = {c.casefold() for c in TCODE.findall(f"{card.tcode or ''} {text.upper()}")}
+            score = sum((TCODE_WEIGHT if w in tcodes else 1) for w in words if w in text)
+            if not words or score >= need:
+                scored.append((-score, order, HistoryHit(card, task)))
+        return [hit for _, _, hit in sorted(scored, key=lambda item: item[:2])]
 
     def _tasks_get(self, task_id: int) -> Task | None:
         try:

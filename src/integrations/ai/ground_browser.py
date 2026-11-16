@@ -21,19 +21,41 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Final
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from config.rules import RULES_DIR, read_toml
 from config.settings import ConfigError
-from domain.ai import AiAnswer, AiUnavailableError, Classification
+from domain.ai import AiAnswer, AiParseError, AiUnavailableError, Classification, RequestDigest
+from integrations.ai.ground_diag import answer_shape, error_hint
+from integrations.ai.ground_parallel import (
+    ANSWER_TIMEOUT as ANSWER_TIMEOUT,  # 기존 import 호환(테스트)
+)
+from integrations.ai.ground_parallel import (
+    FAILURE,
+    POLL_SECONDS,
+    AnswerWatcher,
+    ChatJob,
+    begin_chat,
+    log_failure,
+    run_chats,
+)
+from integrations.ai.ground_parallel import (
+    NOT_SENT as NOT_SENT,
+)
 from integrations.ai.prompts import (
     MAX_ANSWER_CHARS,
     classify_prompt,
     parse_answer,
     parse_classification,
-    parse_summaries,
+    parse_digests,
     suggest_prompt,
     summarize_prompt,
+)
+from integrations.ai.prompts_extra import (
+    company_prompt,
+    parse_company,
+    parse_progress,
+    progress_prompt,
 )
 from security.browser import EphemeralContext
 from security.links import safe_link
@@ -44,14 +66,13 @@ from security.sessions import SessionExpiredError, SessionStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_FIELDS_FILE: Final = RULES_DIR / "aiground_fields.toml"
-PAGE_TIMEOUT_MS: Final = 30_000
 # 권장값(결정기록 0008, A-6). 실제 사용 후 조정한다.
 MAX_PROMPT_CHARS: Final = 9000  # 요약 2,000자 + 사례 5건×1,000자 + 안내문
 MIN_INTERVAL_SECONDS: Final = 3.0  # 연속 호출 최소 간격
 CALL_WINDOW_SECONDS: Final = 600.0  # 호출 수 제한 구간(10분)
 MAX_CALLS_PER_WINDOW: Final = 20
-STABLE_SECONDS: Final = 2.0  # 답변 글자가 이 시간 동안 그대로면 스트리밍이 끝난 것으로 본다
-POLL_SECONDS: Final = 0.5
+# 그중 백그라운드(요약·분류) 상한. 나머지는 사용자가 누른 해결 방안 요청 몫(결정기록 0021)
+MAX_BACKGROUND_CALLS_PER_WINDOW: Final = 14
 CALL_MARGIN_SECONDS: Final = 10.0
 # 앞선 호출 때문에 이보다 오래 기다려야 하면 보내지 않는다(바깥 시간 초과 계산을 넘지 않게)
 MAX_QUEUE_WAIT_SECONDS: Final = 2 * MIN_INTERVAL_SECONDS
@@ -60,9 +81,6 @@ MAX_READ_CHARS: Final = 2 * MAX_ANSWER_CHARS  # 폴링마다 읽는 답변 글�
 NOT_CONFIRMED: Final = "AI-Ground 채팅 화면 필드가 확인되지 않아 아직 호출할 수 없습니다(확인 필요)"
 LOGIN_REQUIRED: Final = "AI-Ground 로그인이 필요합니다"
 TOO_MANY_CALLS: Final = "AI 호출이 많아 잠시 멈췄습니다. 10분 뒤 다시 시도해 주세요."
-ANSWER_TIMEOUT: Final = "AI 응답이 늦어 중단했습니다. 잠시 후 다시 시도해 주세요."
-FAILURE: Final = "AI-Ground 호출에 실패했습니다. 잠시 후 다시 시도해 주세요."
-NOT_SENT: Final = "AI-Ground가 바빠 질문을 보내지 않았습니다. 잠시 후 다시 시도해 주세요."
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,28 +119,21 @@ def wait_for_answer(
     sleep: Callable[[float], None],
 ) -> str:
     """새 답변이 나타나고 스트리밍이 끝날 때까지 기다린다. 마감 시각이 지나면 시간 초과."""
-    answers_before, done_before = before
-    last = ""
-    stable_since: float | None = None
+    watcher = AnswerWatcher(page, chat, before, now, MAX_READ_CHARS)
     while now() < deadline:
-        answers = page.locator(chat.answer)
-        count = answers.count()
-        if count > answers_before:
-            text = str(answers.nth(count - 1).inner_text())[:MAX_READ_CHARS].strip()
-            busy = bool(chat.busy) and page.locator(chat.busy).count() > 0
-            done = not chat.done or page.locator(chat.done).count() > done_before
-            if text and text == last:
-                stable_since = stable_since if stable_since is not None else now()
-                if not busy and done and now() - stable_since >= STABLE_SECONDS:
-                    return text
-            else:
-                last, stable_since = text, None
+        text = watcher.poll()
+        if text is not None:
+            return text
         sleep(POLL_SECONDS)
+    log_failure("답변 대기", TimeoutError(), page, chat, urlsplit(str(page.url)).netloc)
     raise AiUnavailableError(ANSWER_TIMEOUT)
 
 
 class BrowserGllmAdapter:
     name = "ai-ground-gllm"
+    send_interval_seconds = (
+        MIN_INTERVAL_SECONDS  # 게이트웨이가 병렬 호출의 대기 시간을 계산할 때 쓴다
+    )
 
     def __init__(
         self,
@@ -141,18 +152,84 @@ class BrowserGllmAdapter:
         self._now = now
         self._sleep = sleep
         self._lock = threading.Lock()
-        self._calls: deque[float] = deque()
+        self._calls: deque[tuple[float, bool]] = deque()  # (호출 시각, 백그라운드 여부)
 
     def classify_task(self, summary: MaskedText) -> Classification:
-        return parse_classification(self._ask(classify_prompt(summary)))
+        return parse_classification(self._ask(classify_prompt(summary), background=True))
 
     def suggest_solution(
         self, summary: MaskedText, similar_cases: Sequence[MaskedText]
     ) -> AiAnswer:
-        return parse_answer(self._ask(suggest_prompt(summary, similar_cases)))
+        return parse_answer(self._ask(suggest_prompt(summary, similar_cases), background=False))
 
-    def summarize_requests(self, items: Sequence[MaskedText]) -> list[str | None]:
-        return parse_summaries(self._ask(summarize_prompt(items)), len(items))
+    def summarize_requests(self, items: Sequence[MaskedText]) -> list[RequestDigest | None]:
+        return parse_digests(self._ask(summarize_prompt(items), background=True), len(items))
+
+    def company_name(self, domain: MaskedText) -> str | None:
+        """도메인 문자열 하나로 회사명을 묻는다(결정기록 0027, 백그라운드 몫)."""
+        return parse_company(self._ask(company_prompt(domain), background=True))
+
+    def summarize_progress(self, items: Sequence[MaskedText]) -> str:
+        """업무 진행 요약(결정기록 0028). 사용자가 누른 요청이라 전경 몫으로 보낸다."""
+        return parse_progress(self._ask(progress_prompt(items), background=False))
+
+    def summarize_many(
+        self, batches: Sequence[Sequence[MaskedText]]
+    ) -> list[list[RequestDigest | None] | AiUnavailableError]:
+        """여러 묶음을 한 번의 브라우저 작업에서 여러 탭으로 동시에 진행한다(결정기록 0023).
+
+        호출 순번은 `_reserve`가 상한 안에서 잡는다(상한이 모자라면 뒤쪽 묶음은 보내지 않고
+        TOO_MANY_CALLS). 묶음마다 결과 또는 오류를 돌려주고,
+        한 묶음의 실패가 다른 묶음을 막지 않는다.
+        """
+        chat = self._chat
+        if not chat.ready:
+            raise AiUnavailableError(NOT_CONFIRMED)
+        context = self._context()
+        url = self._url()
+        prompts = [summarize_prompt(batch) for batch in batches]
+        sendable = [i for i, p in enumerate(prompts) if len(p) <= MAX_PROMPT_CHARS]
+        outcomes: list[list[RequestDigest | None] | AiUnavailableError] = [
+            AiUnavailableError("AI로 보낼 내용이 너무 깁니다") for _ in batches
+        ]
+        if not sendable:
+            return outcomes
+        current, slots = self._reserve(len(sendable), background=True)
+        for index in sendable[len(slots) :]:
+            outcomes[index] = AiUnavailableError(TOO_MANY_CALLS)
+        order = sendable[: len(slots)]
+        jobs = [
+            ChatJob(prompts[i], slot, slot + self._timeout)
+            for i, slot in zip(order, slots, strict=True)
+        ]
+
+        def drive(raw: Any) -> list[str | AiUnavailableError]:
+            return run_chats(raw, chat, url, jobs, self._now, self._sleep, MAX_READ_CHARS)
+
+        try:
+            answers = context.call(
+                drive, timeout=(slots[-1] - current) + self._timeout + CALL_MARGIN_SECONDS
+            )
+        except AiUnavailableError:
+            raise
+        except Exception as exc:
+            # 화면 단계 실패는 begin_chat이 이미 기록한다.
+            # 여기는 브라우저 작업 자체의 실패(대기열 시간 초과 등)
+            logger.warning("AI-Ground 브라우저 작업 실패 오류=%s", error_hint(exc))
+            raise AiUnavailableError(FAILURE) from None
+        for index, answer in zip(order, answers, strict=True):
+            if isinstance(answer, AiUnavailableError):
+                outcomes[index] = answer
+                continue
+            try:
+                outcomes[index] = parse_digests(answer, len(batches[index]))
+            except AiParseError as exc:  # 묶음을 1건씩 다시 보낼 수 있음
+                # 답변 형식 진단: 글자 종류만 남긴 모양(내용 없음, 결정기록 0026)
+                logger.warning("AI-Ground 요약 답변 해석 실패 모양=[%s]", answer_shape(answer))
+                outcomes[index] = exc
+            except AiUnavailableError as exc:
+                outcomes[index] = exc
+        return outcomes
 
     def _context(self) -> EphemeralContext:
         handle = self._sessions.current(Site.AIGROUND)
@@ -173,21 +250,38 @@ class BrowserGllmAdapter:
             raise AiUnavailableError("AI-Ground 주소 설정이 올바르지 않습니다")
         return url
 
-    def _throttle(self) -> None:
+    def _reserve(self, count: int, background: bool) -> tuple[float, list[float]]:
+        """호출 상한(구간 상한·백그라운드 몫·최소 간격) 안에서 보낼 순번을 잡는다.
+
+        최대 `count`개를 잡고(상한이 모자라면 적게), 보낼 시각 목록을 돌려준다.
+        하나도 못 잡으면 거부.
+        병렬 처리도 이 순번을 앞당기지 않는다(결정기록 0023).
+        """
         with self._lock:
             current = self._now()
-            while self._calls and current - self._calls[0] >= CALL_WINDOW_SECONDS:
+            while self._calls and current - self._calls[0][0] >= CALL_WINDOW_SECONDS:
                 self._calls.popleft()
-            if len(self._calls) >= MAX_CALLS_PER_WINDOW:
+            room = MAX_CALLS_PER_WINDOW - len(self._calls)
+            if background:
+                # 요약이 밀려도 사용자의 해결 방안 요청 몫은 남겨 둔다
+                room = min(room, MAX_BACKGROUND_CALLS_PER_WINDOW - sum(b for _, b in self._calls))
+            if room <= 0:
                 raise AiUnavailableError(TOO_MANY_CALLS)
-            wait = MIN_INTERVAL_SECONDS - (current - self._calls[-1]) if self._calls else 0.0
-            if wait > MAX_QUEUE_WAIT_SECONDS:
+            last = self._calls[-1][0] if self._calls else None
+            first_wait = MIN_INTERVAL_SECONDS - (current - last) if last is not None else 0.0
+            if first_wait > MAX_QUEUE_WAIT_SECONDS:
                 raise AiUnavailableError(NOT_SENT)
-            self._calls.append(current + max(0.0, wait))
-        if wait > 0:
-            self._sleep(wait)
+            start = current + max(0.0, first_wait)
+            slots = [start + n * MIN_INTERVAL_SECONDS for n in range(min(count, room))]
+            self._calls.extend((slot, background) for slot in slots)
+        return current, slots
 
-    def _ask(self, prompt: str) -> str:
+    def _throttle(self, background: bool) -> None:
+        current, slots = self._reserve(1, background)
+        if slots[0] > current:
+            self._sleep(slots[0] - current)
+
+    def _ask(self, prompt: str, *, background: bool) -> str:
         chat = self._chat
         if not chat.ready:
             raise AiUnavailableError(NOT_CONFIRMED)
@@ -195,7 +289,7 @@ class BrowserGllmAdapter:
             raise AiUnavailableError("AI로 보낼 내용이 너무 깁니다")
         context = self._context()
         url = self._url()
-        self._throttle()
+        self._throttle(background)
         # 포기 시각은 호출한 시점 기준이다. 브라우저 대기열에서 늦게 꺼내져도 이 시각이 지났으면
         # 질문을 보내지 않는다(바깥에서 이미 실패로 처리한 요청이 나중에 전송되지 않게).
         deadline = self._now() + self._timeout
@@ -210,25 +304,7 @@ class BrowserGllmAdapter:
             remaining_ms()
             page = raw.new_page()
             try:
-                # 화면 단계마다의 대기도 남은 시간 안으로 묶는다
-                page.set_default_timeout(remaining_ms())
-                page.goto(url, timeout=min(PAGE_TIMEOUT_MS, remaining_ms()))
-                if chat.new_chat:
-                    page.click(chat.new_chat)
-                if chat.model and chat.model_option:
-                    page.click(chat.model)
-                    page.click(chat.model_option)
-                before = (
-                    page.locator(chat.answer).count(),
-                    page.locator(chat.done).count() if chat.done else 0,
-                )
-                remaining_ms()
-                page.fill(chat.prompt, prompt)
-                remaining_ms()  # 보내기 직전 마지막 확인
-                if chat.submit:
-                    page.click(chat.submit)
-                else:
-                    page.press(chat.prompt, "Enter")
+                before = begin_chat(page, chat, url, prompt, remaining_ms)
                 return wait_for_answer(page, chat, before, deadline, self._now, self._sleep)
             finally:
                 page.close()
@@ -237,6 +313,8 @@ class BrowserGllmAdapter:
             return context.call(drive, timeout=self._timeout + CALL_MARGIN_SECONDS)
         except AiUnavailableError:
             raise
-        except Exception:
-            logger.warning("AI-Ground 화면 자동화 실패")
+        except Exception as exc:
+            # 화면 단계 실패는 begin_chat이 이미 기록한다.
+            # 여기는 브라우저 작업 자체의 실패(대기열 시간 초과 등)
+            logger.warning("AI-Ground 브라우저 작업 실패 오류=%s", error_hint(exc))
             raise AiUnavailableError(FAILURE) from None

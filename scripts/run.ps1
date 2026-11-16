@@ -46,10 +46,19 @@ if ($Listener) {
         Write-Host "이전에 실행한 앱이 아직 실행 중입니다 (PID $($Owner.ProcessId), 시작 $($Owner.CreationDate))."
         $Answer = Read-Host "종료하고 새 버전으로 다시 시작할까요? (Y/N)"
         if ($Answer -match "^[Yy]") {
-            Stop-Process -Id $Owner.ProcessId
+            # 응답을 기다리는 사이 이전 앱이 스스로 종료됐을 수 있다(창 닫힘 등). 이 경우는 정상으로 보고 계속한다.
+            try {
+                Stop-Process -Id $Owner.ProcessId -ErrorAction Stop
+            } catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
+                Write-Host "이전 앱이 이미 종료되었습니다."
+            }
             $Deadline = (Get-Date).AddSeconds(15)
             while ((Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue) -and (Get-Date) -lt $Deadline) {
                 Start-Sleep -Milliseconds 300
+            }
+            $Remaining = Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($Remaining) {
+                throw "포트 $Port 가 아직 사용 중입니다(PID $($Remaining.OwningProcess)). 작업 관리자에서 해당 프로세스를 종료한 뒤 다시 실행해 주세요."
             }
             Write-Host "이전 앱을 종료했습니다. 새로 시작합니다."
         } else {

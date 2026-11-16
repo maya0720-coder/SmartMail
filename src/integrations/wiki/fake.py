@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from domain.weekly.service import WikiConflictError, WikiPage
+from domain.weekly.service import WikiConflictError, WikiPage, WikiUnavailableError
+from security.links import safe_link
 
 FAKE_BASE = "https://wiki.example.invalid/pages/"
 
@@ -15,6 +16,13 @@ class FakeWiki:
 
     def get_page(self, space_key: str, title: str) -> WikiPage | None:
         return self.pages.get(title)
+
+    def get_page_by_link(self, link: str) -> WikiPage | None:
+        """가짜 위키 기준 주소의 링크만 읽는다(페이지 번호로 조회). 그 밖의 링크는 None."""
+        if safe_link(link, [FAKE_BASE]) is None or not link.startswith(FAKE_BASE):
+            raise WikiUnavailableError("위키 기준 주소와 다른 링크라 조회하지 않습니다")
+        page_id = link[len(FAKE_BASE) :].split("?", 1)[0].strip("/")
+        return next((p for p in self.pages.values() if p.page_id == page_id), None)
 
     def create_page(self, space_key: str, title: str, body: str) -> WikiPage:
         if title in self.pages:

@@ -1,0 +1,50 @@
+/* 주간보고 참고 링크·게시 대상·게시 캐시(결정기록 0024). 색은 app.css 토큰만 쓴다. */
+.pf{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 8px 2px 3px;border-radius:999px;white-space:nowrap}
+.pf-ic{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;font-size:10px;font-weight:800;color:#fff}
+.pf.slack{background:var(--ai-soft);color:var(--ai)}
+.pf.slack .pf-ic{background:var(--ai)}
+.pf.wiki{background:var(--accent-soft);color:var(--accent)}
+.pf.wiki .pf-ic{background:var(--accent)}
+.pf.web{background:var(--soft);color:var(--sub)}
+.pf.web .pf-ic{background:var(--muted)}
+.pf-method{font-size:11px;color:var(--sub)}
+
+.wl-form{display:grid;gap:6px;margin-top:6px;max-width:640px}
+.wl-form .row{display:flex;gap:6px;flex-wrap:wrap}
+.wl-form input[type=url]{flex:2 1 260px;min-width:0}
+.wl-form input[type=text]{flex:1 1 140px;min-width:0}
+.wl-form textarea{width:100%;min-height:54px;resize:vertical;font:inherit}
+.wl-list{display:grid;gap:4px;margin-top:8px}
+.wl-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.wl-item .wl-main{flex:1 1 auto;min-width:0}
+.wl-item .wl-name{font-weight:600}
+.wl-item .wl-url{display:block;font-size:12px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.wk-source{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.wk-source select{max-width:100%}
+.wk-form-note{font-size:12px;color:var(--sub)}
+.wk-manual{width:100%;min-height:90px;margin-top:8px;font:inherit}
+.wk-copybuf{position:fixed;left:-9999px;top:0}
+
+/* 미리보기 편집기(결정기록 0030) */
+.wk-tabs{display:flex;align-items:center;gap:4px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.wk-tab{border:0;background:none;padding:6px 12px;font:inherit;color:var(--sub);border-bottom:2px solid transparent;cursor:pointer}
+.wk-tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.wk-tabs .t-sub{margin-left:auto}
+.wk-rich{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:12px}
+.wk-rich.hidden{display:none}
+@media (max-width:900px){.wk-rich{grid-template-columns:minmax(0,1fr)}}
+.wk-readonly{background:var(--soft);color:var(--muted);border:1px dashed var(--line);border-radius:var(--r-ctl);padding:6px 10px;margin-bottom:6px;user-select:none}
+.wk-readonly .wk-own{margin:2px 0 0;font-size:16px;color:var(--muted)}
+.wk-toolbar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.wk-toolbar .sep{width:1px;background:var(--line);margin:0 4px}
+.wk-editor{min-height:320px;max-height:70vh;overflow:auto;outline:none}
+.wk-editor:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.wk-editor table{border-collapse:collapse;margin:6px 0}
+.wk-editor th,.wk-editor td{border:1px solid var(--line);padding:4px 8px;min-width:60px;vertical-align:top}
+.wk-editor th{background:var(--soft)}
+.wk-tasks{border:1px solid var(--line);border-radius:var(--r-ctl);padding:8px;max-height:70vh;overflow:auto}
+.wk-tasks h4{margin:0 0 4px}
+.wk-tasks ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.wk-tasks button{width:100%;text-align:left;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line-soft);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
+.wk-tasks button:hover{border-color:var(--accent)}

@@ -1,0 +1,17 @@
+# 외부 회사 도메인 → 회사명 매핑(결정기록 0027). 사용자가 직접 관리한다.
+# - [companies]: "도메인" = "회사명"(50자 이하). 하위 도메인은 상위 도메인으로 찾는다.
+#   예) "example.co.kr" = "예시회사"  → mail.example.co.kr 에서 온 메일도 '예시회사'
+# - [free_mail]: 개인 메일 도메인. 이 도메인의 메일은 '외부(개인 메일)'로 표시하고 AI에 묻지 않는다.
+# 회사명은 화면 '설정·연결 > 외부 회사 도메인'에서도 확정·수정할 수 있다(그 값이 이 파일보다 우선).
+
+[companies]
+# "example.co.kr" = "예시회사"
+
+[free_mail]
+domains = [
+  "gmail.com", "googlemail.com", "naver.com", "daum.net", "hanmail.net", "kakao.com",
+  "nate.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com",
+  "yahoo.co.kr", "icloud.com", "me.com", "korea.com", "empas.com", "paran.com",
+  "hanmir.com", "dreamwiz.com", "lycos.co.kr", "chol.com", "freechal.com", "proton.me",
+  "protonmail.com", "aol.com", "zoho.com", "mail.com",
+]

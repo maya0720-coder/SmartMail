@@ -1,0 +1,51 @@
+/* 상태·업무 구분 색(결정기록 0022). 상태마다 고유한 배경·글자·점 색, 업무 구분은 아이콘 + 색으로 나눈다.
+   상태: 제안됨(보라) · 대기(슬레이트) · 진행 중(파랑) · 완료 후보(청록) · 완료(녹색) · 보류(주황)
+   구분: 전자결재(인디고 + 결재 문서 아이콘) · 기본 구분=일반업무(에메랄드 + 가방 아이콘) · 그 밖의 사용자 구분(웜그레이) */
+:root{
+  --st-sug:#6d28d9;  --st-sug-soft:#f3e8ff;  --st-sug-dot:#8b5cf6;
+  --st-wait:#475569; --st-wait-soft:#f1f5f9; --st-wait-dot:#64748b;
+  --st-prog:#1d4ed8; --st-prog-soft:#dbeafe; --st-prog-dot:#3b82f6;
+  --st-cand:#0e7490; --st-cand-soft:#cffafe; --st-cand-dot:#06b6d4;
+  --st-done:#15803d; --st-done-soft:#dcfce7; --st-done-dot:#22c55e;
+  --st-hold:#b45309; --st-hold-soft:#fef3c7; --st-hold-dot:#f59e0b;
+  --cat-appr:#4338ca; --cat-appr-soft:#e0e7ff;
+  --cat-gen:#047857;  --cat-gen-soft:#d1fae5;
+  --cat-etc:#57534e;  --cat-etc-soft:#f5f5f4;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --st-sug:#c4b5fd;  --st-sug-soft:#2e1f4d;  --st-sug-dot:#a78bfa;
+    --st-wait:#cbd5e1; --st-wait-soft:#1e293b; --st-wait-dot:#94a3b8;
+    --st-prog:#93c5fd; --st-prog-soft:#172554; --st-prog-dot:#60a5fa;
+    --st-cand:#67e8f9; --st-cand-soft:#083344; --st-cand-dot:#22d3ee;
+    --st-done:#86efac; --st-done-soft:#052e16; --st-done-dot:#4ade80;
+    --st-hold:#fcd34d; --st-hold-soft:#3a2606; --st-hold-dot:#fbbf24;
+    --cat-appr:#a5b4fc; --cat-appr-soft:#1e1b4b;
+    --cat-gen:#6ee7b7;  --cat-gen-soft:#022c22;
+    --cat-etc:#d6d3d1;  --cat-etc-soft:#292524;
+  }
+}
+
+/* 상태 배지(.badge는 app.css): 배경·글자·점 */
+.b-prop{background:var(--st-sug-soft);color:var(--st-sug)}   .b-prop::before{background:var(--st-sug-dot)}
+.b-wait{background:var(--st-wait-soft);color:var(--st-wait)} .b-wait::before{background:var(--st-wait-dot)}
+.b-prog{background:var(--st-prog-soft);color:var(--st-prog)} .b-prog::before{background:var(--st-prog-dot)}
+.b-cand{background:var(--st-cand-soft);color:var(--st-cand)} .b-cand::before{background:var(--st-cand-dot)}
+.b-done{background:var(--st-done-soft);color:var(--st-done)} .b-done::before{background:var(--st-done-dot)}
+.b-hold{background:var(--st-hold-soft);color:var(--st-hold)} .b-hold::before{background:var(--st-hold-dot)}
+
+/* 상태 도넛·범례(대시보드): 배지 점 색과 같게 */
+.s-suggested{stroke:var(--st-sug-dot);background:var(--st-sug-dot)}
+.s-waiting{stroke:var(--st-wait-dot);background:var(--st-wait-dot)}
+.s-in_progress{stroke:var(--st-prog-dot);background:var(--st-prog-dot)}
+.s-done_candidate{stroke:var(--st-cand-dot);background:var(--st-cand-dot)}
+.s-on_hold{stroke:var(--st-hold-dot);background:var(--st-hold-dot)}
+.s-done{stroke:var(--st-done-dot);background:var(--st-done-dot)}
+
+/* 업무 구분 배지: 아이콘 + 글자 */
+.cat-tag{display:inline-flex;align-items:center;gap:3px;max-width:100%;font-size:10.5px;font-weight:600;line-height:16px;padding:1px 6px 1px 4px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.cat-tag .ic{width:11px;height:11px;flex:none}
+.cat-tag > span{overflow:hidden;text-overflow:ellipsis}
+.cat-appr{background:var(--cat-appr-soft);color:var(--cat-appr)}
+.cat-gen{background:var(--cat-gen-soft);color:var(--cat-gen)}
+.cat-etc{background:var(--cat-etc-soft);color:var(--cat-etc)}

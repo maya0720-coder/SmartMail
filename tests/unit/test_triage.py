@@ -181,9 +181,11 @@ def test_todo01_generic_summary_falls_back_to_subject(tmp_path: Path, clock: Fix
     assert not rules.is_generic("KSB1 조회 권한 부여")
     assert not rules.is_generic("PO 결제 조건 문구 변경")
 
+    from domain.ai import RequestDigest
+
     class Generic:
         def summarize_requests(self, items):  # type: ignore[no-untyped-def]
-            return ["확인 부탁드립니다"] * len(items)
+            return [RequestDigest("확인 부탁드립니다")] * len(items)
 
     container = make_container(tmp_path, clock)
     with app_client(container) as client:
@@ -194,6 +196,8 @@ def test_todo01_generic_summary_falls_back_to_subject(tmp_path: Path, clock: Fix
     service = SummaryService(
         container.tasks, SqliteMailRefRepository(container.db), container.mail, Generic(), rules
     )
+    first = service.run(max_batches=5)  # 일반 문구면 한 번 더 요청(결정기록 0021)
+    assert first.kept == 0 and first.done == 0 and len(service.pending()) == len(before)
     result = service.run(max_batches=5)
     assert result.kept == len(before) and result.done == 0
     after = {t.id: t.title for t in container.tasks.list_tasks([TaskStatus.SUGGESTED])}
@@ -222,7 +226,8 @@ def test_schema_migration_1_to_2_keeps_data(tmp_path: Path) -> None:
     assert [(r["title"], r["module_tag"], r["reasons"]) for r in rows] == [
         ("기존 업무", "FI", None)
     ]
-    assert db.query("PRAGMA user_version")[0][0] == SCHEMA_VERSION == 2
+    assert {"digest", "summary_tries"} <= set(columns["mail_ref"])  # 스키마 3(결정기록 0021)
+    assert db.query("PRAGMA user_version")[0][0] == SCHEMA_VERSION == 4  # 4: 결정기록 0027~0029
     db.close()
     again = Database(path)  # 두 번 열어도 안전
     assert len(again.query("SELECT * FROM task")) == 1

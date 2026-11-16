@@ -52,8 +52,10 @@ function quickCard(task) {
   const body = el("div", { class: "q-body" }, el("div", { class: "t-sub" }, "메일을 읽는 중…"));
   const card = el("article", { class: "q-card", id: "q-card", tabindex: "-1", "aria-label": "제안 " + position + ": " + task.title },
     el("div", { class: "q-top" }, el("span", { class: "q-pos" }, position), el("span", { class: "tm" }, receivedLabel(task.requested_at)), confidenceBar(task.confidence)),
+    // 요약 상태 칩(결정기록 0029)은 제목 바로 위에 둔다(제목 글자에 섞이지 않게)
+    summaryChip(task.summary_state),
     el("h3", { class: "q-title" }, task.title),
-    el("div", { class: "tr-line2" }, categoryChip(task), dueChip(task), task.requester_dept ? el("span", { class: "dept" }, task.requester_dept) : null),
+    el("div", { class: "tr-line2" }, categoryChip(task), dueChip(task), requesterNode(task, "dept")),
     body,
     el("div", { class: "tr-reasons" }, ...task.reasons.map((code) => el("span", { class: "tchip reason" }, REASON_LABELS[code] || "규칙 판별"))),
     el("div", { class: "q-hint q-hint-l", "aria-hidden": "true" }, "업무 아님"),

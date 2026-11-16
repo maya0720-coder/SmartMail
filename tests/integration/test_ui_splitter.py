@@ -205,7 +205,9 @@ def test_ui_dashboard_reflow_has_no_overflow(tmp_path: Path, detail_w: int) -> N
         meta_dept = page.locator("#todo tr.row .t-meta .m-dept").first
         if list_width < 900:  # ⑬ 숨긴 열은 보조 줄로
             assert not dept_column.is_visible()
-            assert meta_dept.is_visible() and meta_dept.inner_text() == "가상재무팀"
+            # 기본 정렬이 최근 메일순이라(결정기록 0028) 첫 행의 숨긴 '요청 부서' 칸과 비교한다
+            assert meta_dept.is_visible()
+            assert meta_dept.inner_text() == (dept_column.text_content() or "").replace("-", "")
             assert heights[0] > 45 and page.locator("#todo tr.row").count() < rows_before
             mod_chip = page.locator("#todo tr.row .t-meta .m-mod").first
             assert mod_chip.is_visible() == (list_width < 700)

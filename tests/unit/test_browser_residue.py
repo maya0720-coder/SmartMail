@@ -40,6 +40,31 @@ def test_context_call_runs_on_single_browser_thread() -> None:
         runtime.shutdown()
 
 
+def test_ai06_long_sibling_job_does_not_block_main_runtime() -> None:
+    """결정기록 0026: 그룹웨어 인증문자 대기처럼 오래 걸리는 작업을 형제 실행기에서 돌리면
+    본 실행기(AI-Ground)의 요청은 기다리지 않고 바로 처리된다. 종료하면 형제도 함께 정리된다."""
+    import threading
+
+    runtime = BrowserRuntime(backend_factory=FakeBackend)
+    sibling = runtime.sibling()
+    release = threading.Event()
+    try:
+        slow = sibling.open_context()
+        main = runtime.open_context()
+        blocker = threading.Thread(target=lambda: slow.call(lambda raw: release.wait(5)))
+        blocker.start()
+        # 형제가 막혀 있어도 본 실행기는 짧은 시간 안에 답한다
+        assert main.call(lambda raw: "ok", timeout=1.0) == "ok"
+        release.set()
+        blocker.join(timeout=5)
+        sibling_temp = sibling.temp_dir
+    finally:
+        release.set()
+        runtime.shutdown()
+    assert slow.closed and main.closed
+    assert sibling_temp is not None and not sibling_temp.exists()
+
+
 def _checker(tmp_path: Path, extra: tuple[Path, ...] = ()) -> ResidueChecker:
     (tmp_path / "project").mkdir(exist_ok=True)
     (tmp_path / "temp").mkdir(exist_ok=True)

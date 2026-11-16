@@ -1,0 +1,44 @@
+/* 대시보드 상세 패널 가운데 원본 메일 영역(결정기록 0022).
+   작업 버튼 행과 하단 상태 버튼 사이의 남은 높이를 채우고, 본문은 영역 안에서 스크롤한다.
+   남은 높이가 너무 작으면(검색 결과가 길 때 등) 최소 높이를 지키고 상세 본문(.d-body)이 스크롤한다. */
+.d-body > *{flex-shrink:0}  /* 제목·정보 표가 메일 영역에 눌려 잘리지 않게 */
+.d-body > .d-mail{flex:1 0 220px;min-height:220px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.d-mail.hidden{display:none}
+.d-mail > .empty{padding:14px}
+.dm-head{flex:none;display:flex;align-items:center;gap:8px;padding:7px 8px 7px 10px;border-bottom:1px solid var(--line-soft);background:var(--bg)}
+.dm-head > .ic{flex:none;width:15px;height:15px;color:var(--sub)}
+.dm-subject{flex:1;min-width:0;margin:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-meta{flex:none;display:flex;flex-wrap:wrap;gap:2px 18px;margin:0;padding:7px 10px;font-size:12px;color:var(--sub);border-bottom:1px solid var(--line-soft)}
+.dm-meta > div{display:flex;gap:8px;min-width:0}
+.dm-meta dt{color:var(--muted)}
+.dm-meta dd{margin:0;min-width:0;overflow-wrap:anywhere;color:var(--fg)}
+.dm-body{flex:1 1 0;min-height:120px;overflow:auto;padding:10px 12px;overscroll-behavior:contain}
+.dm-body .mail-full{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.65}
+.dm-body:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* '원본 보기'가 눌린(본문을 보여 주는) 상태 */
+.d-tools .btn.on{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+/* 한 화면 고정형이 아니면 상세 높이가 정해지지 않으므로 본문 높이만 제한한다 */
+@media not ((min-width:1025px) and (min-height:700px)){ .d-body > .d-mail{flex:none} .dm-body{flex:none;max-height:60vh} }
+/* 좁은 패널(280~339px): 도구 버튼을 한 줄에 둘씩(AI 해결 방안은 한 줄 전체) 놓아 메일 본문 자리를 늘린다 */
+@container detail (max-width:337px){
+  .d-tools .btn{flex:1 1 calc(50% - 3px)}
+  .d-tools .btn.ai{flex-basis:100%}
+}
+/* 업무 구분 열: 아이콘 배지가 들어가도록 조금 넓힌다 */
+.todo-card .w-mod{width:88px}
+/* 진행 요약·진행 경과 타임라인·이전/다음 메일(결정기록 0028) */
+.d-progress{border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 10px;font-size:12.5px}
+.d-progress > summary{cursor:pointer;font-weight:600;color:var(--sub);font-size:12px}
+.d-progress .pg-rule{margin:6px 0 4px;color:var(--fg)}
+.d-progress .pg-ai .ai-text{white-space:pre-wrap}
+.d-progress .pg-ai.stale .ai-label{color:var(--warn)}
+.d-timeline{list-style:none;margin:6px 0 2px;padding:0;max-height:180px;overflow:auto}
+.tl-row{display:flex;align-items:center;gap:6px;width:100%;min-width:0;padding:3px 4px;border:0;border-radius:6px;background:none;color:var(--fg);font:inherit;text-align:left;cursor:pointer}
+.tl-row:hover,.tl-row.on{background:var(--accent-soft)}
+.tl-dir{flex:none;width:16px;text-align:center;font-weight:700;color:var(--sub)}
+.tl-dir.out{color:var(--accent)}
+.tl-time{flex:none;font-size:11.5px;color:var(--sub)}
+.tl-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-who{flex:none;max-width:35%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;color:var(--muted)}
+li.missing .tl-title,li.missing .tl-who{color:var(--muted)}
+.dm-step{flex:none;display:inline-flex;align-items:center;gap:2px}

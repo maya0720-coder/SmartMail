@@ -1,0 +1,4 @@
+/* 그룹웨어 보안문자 영역(결정기록 0025). 시작 로그인 창의 인증문자(.otp) 스타일을 따른다. */
+.captcha-img{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+.captcha-img img{display:block;max-width:100%;height:auto;max-height:80px;background:#fff;border:1px solid var(--line,#d0d7de);border-radius:6px;padding:2px}
+.captcha .otp-row input{letter-spacing:.1em}

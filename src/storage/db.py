@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-SCHEMA_VERSION: Final = 2  # 2: 제안 트리아지 필드·학습 규칙 표(결정기록 0015)
+SCHEMA_VERSION: Final = 4  # 2: 제안 트리아지(0015), 3: 구조화 요약(0021), 4: 0027~0030
 
 # 사용자 데이터 테이블(전체 삭제 대상). 순서는 외래 키 의존의 역순.
 DATA_TABLES: Final = (
@@ -25,12 +25,16 @@ DATA_TABLES: Final = (
     "history_card",
     "mail_ref",
     "weekly_report",
+    "weekly_link",
+    "weekly_publish_cache",
     "ai_call_log",
     "metric_ledger",
     "task",
     "sync_state",
     "app_setting",
     "triage_rules",
+    "domain_company",
+    "weekly_draft",
 )
 
 SCHEMA: Final = """
@@ -110,6 +114,26 @@ CREATE TABLE IF NOT EXISTS weekly_report (
     published_at TEXT NOT NULL
 );
 
+-- 주간보고 참고 링크(결정기록 0024): https 주소·이름·양식 목차(머리글 줄)만. 개인정보 없음.
+CREATE TABLE IF NOT EXISTS weekly_link (
+    id INTEGER PRIMARY KEY,
+    url TEXT NOT NULL CHECK (length(url) <= 500),
+    name TEXT NOT NULL CHECK (length(name) <= 120),
+    platform TEXT NOT NULL CHECK (platform IN ('slack', 'wiki', 'web')),
+    outline TEXT NOT NULL DEFAULT '' CHECK (length(outline) <= 3000)
+);
+
+-- 주간보고 게시 캐시(결정기록 0024): 마스킹된 본문 스냅샷. 보관 기간이 지나면 삭제한다.
+CREATE TABLE IF NOT EXISTS weekly_publish_cache (
+    id INTEGER PRIMARY KEY,
+    week_start TEXT NOT NULL,
+    platform TEXT NOT NULL CHECK (platform IN ('slack', 'wiki', 'web')),
+    method TEXT NOT NULL CHECK (method IN ('api', 'clipboard')),
+    link TEXT CHECK (link IS NULL OR length(link) <= 2000),
+    published_at TEXT NOT NULL,
+    snapshot TEXT NOT NULL CHECK (length(snapshot) <= 60000)
+);
+
 CREATE TABLE IF NOT EXISTS ai_call_log (
     id INTEGER PRIMARY KEY,
     called_at TEXT NOT NULL,
@@ -154,6 +178,69 @@ CREATE TABLE IF NOT EXISTS triage_rules (
 """
 
 
+# 스키마 3(결정기록 0021): 메일 참조의 구조화 요약(마스킹된 AI 요약만, 원문 아님)과 요약 시도 횟수
+MIGRATION_3_MAIL_REF_COLUMNS: Final = (
+    ("digest", "TEXT CHECK (digest IS NULL OR length(digest) <= 1500)"),
+    ("summary_tries", "INTEGER NOT NULL DEFAULT 0 CHECK (summary_tries >= 0)"),
+)
+
+
+# 스키마 4(결정기록 0027~0029): 요약 상태·메일 방향, 스레드 최종 메일·진행 요약, 외부 회사 도메인.
+# 개인정보 아님: 방향은 받음/보냄 코드, 도메인은 회사 도메인(개인 메일 도메인은 저장하지 않음).
+SUMMARY_STATES: Final = ("pending", "done", "kept", "missing")
+MIGRATION_4_MAIL_REF_COLUMNS: Final = (
+    (
+        "summary_state",
+        "TEXT CHECK (summary_state IS NULL OR summary_state IN"
+        " ('pending', 'done', 'kept', 'missing'))",
+    ),
+    ("direction", "TEXT CHECK (direction IS NULL OR direction IN ('in', 'out'))"),
+)
+MIGRATION_4_TASK_COLUMNS: Final = (
+    ("last_mail_at", "TEXT"),
+    (
+        "last_mail_direction",
+        "TEXT CHECK (last_mail_direction IS NULL OR last_mail_direction IN ('in', 'out'))",
+    ),
+    ("progress_digest", "TEXT CHECK (progress_digest IS NULL OR length(progress_digest) <= 1000)"),
+    ("progress_ref_count", "INTEGER CHECK (progress_ref_count IS NULL OR progress_ref_count >= 0)"),
+    (
+        "requester_domain",
+        "TEXT CHECK (requester_domain IS NULL OR length(requester_domain) <= 253)",
+    ),
+    (
+        "requester_kind",
+        "TEXT CHECK (requester_kind IS NULL OR requester_kind IN"
+        " ('internal', 'external', 'freemail'))",
+    ),
+)
+MIGRATION_4_DOMAIN_COMPANY: Final = """
+CREATE TABLE IF NOT EXISTS domain_company (
+    domain TEXT PRIMARY KEY CHECK (length(domain) BETWEEN 1 AND 253),
+    company TEXT NOT NULL CHECK (length(company) BETWEEN 1 AND 50),
+    source TEXT NOT NULL CHECK (source IN ('rule', 'ai', 'user')),
+    resolved_at TEXT NOT NULL
+)
+"""
+# 주간보고 편집기 임시 저장(결정기록 0030): 정리·마스킹된 HTML 사본, 주차별 1개. 보관 기간 후 삭제
+MIGRATION_4_WEEKLY_DRAFT: Final = """
+CREATE TABLE IF NOT EXISTS weekly_draft (
+    week_start TEXT PRIMARY KEY,
+    snapshot TEXT NOT NULL CHECK (length(snapshot) <= 200000),
+    saved_at TEXT NOT NULL
+)
+"""
+# 기존 메일 참조의 요약 상태를 1회 계산한다(결정기록 0029). 이후에는 요약 작업이 기록한다.
+MIGRATION_4_SUMMARY_STATE: Final = """
+UPDATE mail_ref SET summary_state = CASE
+    WHEN summary IS NULL THEN 'pending'
+    WHEN digest IS NOT NULL
+         AND summary = (SELECT title FROM task WHERE task.id = mail_ref.task_id) THEN 'done'
+    ELSE 'kept' END
+WHERE summary_state IS NULL
+"""
+
+
 def to_db_time(value: datetime | None) -> str | None:
     """aware 시각을 UTC ISO 문자열로 바꾼다(문자열 비교로 시간 순서가 유지된다)."""
     if value is None:
@@ -186,17 +273,32 @@ class Database:
         self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION:d}")
 
     def _migrate(self) -> None:
-        """스키마 1 → 2: 기존 데이터를 보존하며 열을 더한다(새 DB도 같은 경로).
+        """스키마 1 → 2 → 3 → 4: 기존 데이터를 보존하며 열을 더한다(새 DB도 같은 경로).
 
         여러 번 실행해도 안전하다(이미 있는 열은 건너뜀).
         """
-        existing = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(task)")}
+
+        def columns(table: str) -> set[str]:
+            return {str(r["name"]) for r in self._conn.execute(f"PRAGMA table_info({table})")}
+
+        existing = {"task": columns("task"), "mail_ref": columns("mail_ref")}
+        plan = [
+            ("task", MIGRATION_2_TASK_COLUMNS),
+            ("mail_ref", MIGRATION_3_MAIL_REF_COLUMNS),
+            ("mail_ref", MIGRATION_4_MAIL_REF_COLUMNS),
+            ("task", MIGRATION_4_TASK_COLUMNS),
+        ]
         with self.transaction() as conn:
-            for name, ddl in MIGRATION_2_TASK_COLUMNS:
-                if name not in existing:
-                    # 열 이름·정의는 아래 상수에서만 온다(사용자 입력 아님)
-                    conn.execute(f"ALTER TABLE task ADD COLUMN {name} {ddl}")  # noqa: S608
+            for table, adds in plan:
+                for name, ddl in adds:
+                    if name not in existing[table]:
+                        # 표·열 이름·정의는 위 상수에서만 온다(사용자 입력 아님)
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")  # noqa: S608
             conn.execute(MIGRATION_2_TRIAGE_RULES)
+            conn.execute(MIGRATION_4_DOMAIN_COMPANY)
+            conn.execute(MIGRATION_4_WEEKLY_DRAFT)
+            if "summary_state" not in existing["mail_ref"]:
+                conn.execute(MIGRATION_4_SUMMARY_STATE)
 
     @classmethod
     def in_memory(cls) -> Database:

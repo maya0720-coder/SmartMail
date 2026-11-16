@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import hmac
+import re
+from functools import lru_cache
 from typing import Final
 
 from fastapi import APIRouter, Request
@@ -26,21 +28,34 @@ from security.credentials import (
     InvalidLoginInputError,
     LoginFailedError,
     LoginUnavailableError,
+    OtpFailedError,
     wipe,
 )
+from security.groupware_captcha import CaptchaFailedError, CaptchaPolicy, normalize, parse_policy
 from security.logging_policy import Site
+from security.login_flows import load_login_fields
 
 router = APIRouter(prefix="/api/login")
 
 # 일괄 로그인 대상. 그룹웨어는 자체 로그인(아이디만, 공통 암호) — 결정기록 0017
 COMPANY_SITES: Final = (Site.AIGROUND, Site.GKNOWLEDGE)
 COMPANY_LIMIT_KEY: Final = "company-account"  # 회사 계정 시도 횟수 공용 키
-ALL_SITES: Final = (*COMPANY_SITES, Site.WIKI, Site.GROUPWARE)
+# 시작 로그인 창이 한 번에 로그인하는 사이트. 그룹웨어는 빼고, 필요할 때 사용자가 직접
+# (설정·연결의 '로그인' 버튼 → only=groupware) 로그인한다(사용자 결정 2026-11-15, 결정기록 0026)
+AUTO_SITES: Final = (*COMPANY_SITES, Site.WIKI)
+MANUAL_SITES: Final = (Site.GROUPWARE,)
+ALL_SITES: Final = (*AUTO_SITES, *MANUAL_SITES)
 
 FAILED: Final = "로그인하지 못했습니다. 입력 내용을 확인해 주세요."
 NEEDS_INPUT: Final = "로그인 정보가 필요합니다."
 RATE_LIMITED: Final = "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요."
 UNAVAILABLE: Final = "이 사이트의 자동 로그인을 쓸 수 없습니다."
+OTP_FAILED: Final = "인증문자 확인을 완료하지 못했습니다. 다시 시도해 주세요."
+CAPTCHA_FAILED: Final = "보안문자 확인을 완료하지 못했습니다. 다시 시도해 주세요."
+CAPTCHA_NOT_WAITING: Final = "보안문자 입력을 기다리고 있지 않습니다."
+NO_STORE: Final = {"cache-control": "no-store"}
+OTP_NOT_WAITING: Final = "인증문자 입력을 기다리고 있지 않습니다."
+OTP_PATTERN: Final = r"^[0-9A-Za-z]{4,12}$"  # 인증문자 번호 형식(실제 자릿수 확인 필요)
 
 
 class LoginAllRequest(BaseModel):
@@ -65,13 +80,22 @@ def account_ids(user_id: str, domain: str) -> tuple[str, str]:
     return (plain if "@" in plain else f"{plain}@{domain}"), local
 
 
-def pending_sites(container: Container) -> list[Site]:
-    """자동 로그인 대상 중 아직 로그인되지 않은 사이트."""
+def _not_logged_in(container: Container, sites: tuple[Site, ...]) -> list[Site]:
     return [
         site
-        for site in ALL_SITES
+        for site in sites
         if container.login.supports_password(site) and container.sessions.current(site) is None
     ]
+
+
+def pending_sites(container: Container, only: Site | None = None) -> list[Site]:
+    """로그인할 사이트 중 아직 로그인되지 않은 것.
+
+    기본은 일괄 대상(AUTO_SITES)만. 직접 로그인 사이트(그룹웨어)는 그 사이트만 콕 집어
+    요청했을 때(only)만 넣는다.
+    """
+    sites = AUTO_SITES + (MANUAL_SITES if only in MANUAL_SITES else ())
+    return _not_logged_in(container, sites)
 
 
 def _login_one(
@@ -94,6 +118,10 @@ def _login_one(
         container.login.login(site, bytearray(user_id), bytearray(secret))
     except CredentialsRequiredError:
         return NEEDS_INPUT
+    except OtpFailedError:
+        return OTP_FAILED
+    except CaptchaFailedError:  # LoginFailedError보다 먼저(하위 클래스)
+        return CAPTCHA_FAILED
     except (InvalidLoginInputError, LoginFailedError):
         return FAILED
     except LoginUnavailableError:
@@ -102,19 +130,27 @@ def _login_one(
 
 
 @router.get("/pending")
-def pending(request: Request) -> JSONResponse:
+def pending(request: Request, site: SiteName | None = None) -> JSONResponse:
     """입력이 필요한 계정 묶음.
 
     회사 계정 사이트가 하나라도 로그인돼 있으면 회사 계정은 묻지 않는다(SSO로 연결).
+    site=groupware처럼 직접 로그인 사이트를 지정하면 그 사이트만 돌려준다.
     """
     container = get_container(request)
-    sites = pending_sites(container)
+    only = None if site is None else Site(site)
+    sites: list[Site]
+    if only in MANUAL_SITES:
+        sites = [s for s in pending_sites(container, only) if s is only]
+    else:
+        sites = pending_sites(container)
     company_live = any(container.sessions.current(s) is not None for s in COMPANY_SITES)
     return JSONResponse(
         {
             "sites": [s.value for s in sites],
             "need_company": any(s in COMPANY_SITES for s in sites) and not company_live,
             "need_wiki": Site.WIKI in sites,
+            # 일괄 로그인에서 뺀, 사용자가 직접 로그인하는 사이트(아직 로그인 안 된 것)
+            "manual_sites": [s.value for s in _not_logged_in(container, MANUAL_SITES)],
             "account_domain": container.account_domain,
             # '나중에'를 누르면 이번 실행 동안 시작 로그인 창을 자동으로 띄우지 않는다
             "dismissed": container.login_prompt_dismissed,
@@ -156,7 +192,7 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
             Site.WIKI: hmac.compare_digest(buffers[3], buffers[1]),
         }
         company_failed = False
-        for site in pending_sites(container):
+        for site in pending_sites(container, only):
             if only is not None and site is not only:
                 continue
             is_company = site in COMPANY_SITES
@@ -172,6 +208,8 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
         for buffer in buffers:
             wipe(buffer)
         container.login_progress.update("")
+        container.login_progress.cancel_otp()
+        container.login_progress.captcha.cancel()
     # AI-Ground에 로그인됐으면 밀린 업무 제목 요약을 바로 시작한다(결정기록 0014)
     if any(r["logged_in"] and r["site"] == Site.AIGROUND.value for r in results):
         container.summary_job.kick()
@@ -180,5 +218,78 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
 
 @router.get("/progress")
 def progress(request: Request) -> JSONResponse:
-    """2단계 인증 안내(승인 대기 여부·번호). 자격증명은 담지 않는다."""
-    return JSONResponse(get_container(request).login_progress.snapshot())
+    """2단계 인증 안내(승인 대기 여부·번호, 인증문자 입력 요청). 자격증명은 담지 않는다."""
+    return JSONResponse(get_container(request).login_progress.snapshot(), headers=NO_STORE)
+
+
+class OtpRequest(BaseModel):
+    """그룹웨어 인증문자 번호. cancel=true면 입력을 취소한다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(default="", max_length=12)
+    cancel: bool = False
+
+
+@router.post("/otp")
+def submit_otp(request: Request, body: OtpRequest) -> JSONResponse:
+    """로그인 중인 흐름에 인증문자 번호를 넘긴다. 번호는 저장·기록하지 않는다."""
+    if request.url.query:
+        return JSONResponse({"error": "번호는 주소에 넣을 수 없습니다."}, status_code=400)
+    progress = get_container(request).login_progress
+    if body.cancel:
+        progress.cancel_otp()
+        return JSONResponse({"accepted": True})
+    if not re.fullmatch(OTP_PATTERN, body.code):
+        return JSONResponse({"error": "번호 형식을 확인해 주세요."}, status_code=400)
+    if not progress.submit_otp(body.code):
+        return JSONResponse({"error": OTP_NOT_WAITING}, status_code=409)
+    return JSONResponse({"accepted": True})
+
+
+@lru_cache(maxsize=1)
+def _captcha_policy() -> CaptchaPolicy:
+    g = load_login_fields().groupware
+    return parse_policy(g.captcha_case, g.captcha_length, g.captcha_max_tries)
+
+
+class CaptchaRequest(BaseModel):
+    """보안문자 입력값. cancel=true면 취소, refresh=true면 새 이미지 요청."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(default="", max_length=40)
+    cancel: bool = False
+    refresh: bool = False
+
+
+@router.post("/captcha/image")
+def take_captcha_image(request: Request) -> JSONResponse:
+    """보안문자 이미지(data URL). 가져가면 버리는 동작이라 POST(CSRF 검사 대상)."""
+    image = get_container(request).login_progress.captcha.take_image_data_url()
+    if image is None:
+        return JSONResponse({"error": CAPTCHA_NOT_WAITING}, status_code=409, headers=NO_STORE)
+    return JSONResponse({"image": image}, headers=NO_STORE)
+
+
+@router.post("/captcha")
+def submit_captcha(request: Request, body: CaptchaRequest) -> JSONResponse:
+    """보안문자 값을 로그인 중인 흐름에 넘긴다. 값은 저장·기록·응답하지 않는다."""
+    if request.url.query:
+        return JSONResponse({"error": "값은 주소에 넣을 수 없습니다."}, status_code=400)
+    channel = get_container(request).login_progress.captcha
+    if body.cancel:
+        channel.cancel()
+        return JSONResponse({"accepted": True}, headers=NO_STORE)
+    if body.refresh:
+        if not channel.refresh():
+            return JSONResponse({"error": CAPTCHA_NOT_WAITING}, status_code=409, headers=NO_STORE)
+        return JSONResponse({"accepted": True}, headers=NO_STORE)
+    value = normalize(body.code, _captcha_policy())
+    if value is None:
+        return JSONResponse(
+            {"error": "보안문자 형식을 확인해 주세요."}, status_code=400, headers=NO_STORE
+        )
+    if not channel.submit(value):
+        return JSONResponse({"error": CAPTCHA_NOT_WAITING}, status_code=409, headers=NO_STORE)
+    return JSONResponse({"accepted": True}, headers=NO_STORE)

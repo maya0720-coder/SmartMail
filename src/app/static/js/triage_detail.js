@@ -31,8 +31,18 @@ function fieldCell(label, shown, makeEditor) {
 function titleNode(task) {
   const text = pendingEdit.title || task.title;
   return el("div", { class: "tr-dtitle", id: "tr-dtitle" },
+    summaryChip(task.summary_state),
     el("h3", { title: text }, text),
     el("button", { type: "button", class: "icon-btn sm", "aria-label": "제목 고치기 (E)", title: "제목 고치기 (E)", onclick: startTitleEdit }, icon("pen-line")));
+}
+
+// 요약이 끝나 제목·상태가 바뀌면 상세 제목도 바꾼다(편집 중이면 건드리지 않음)
+function refreshDetailTitle(task) {
+  const box = document.getElementById("tr-dtitle");
+  if (!detailTask || detailTask.id !== task.id || !box || box.querySelector("input")) return;
+  detailTask.title = task.title;
+  detailTask.summary_state = task.summary_state;
+  box.replaceWith(titleNode(detailTask));
 }
 
 function startTitleEdit() {
@@ -102,7 +112,7 @@ async function renderTriageDetail(task) {
     el("div", { class: "tr-fields" },
       fieldCell("구분", task.module_tag, catSelect),
       fieldCell("기한", task.due_at ? task.due_at.slice(0, 10) : "미정", dueInput),
-      fieldCell("요청 부서", task.requester_dept, deptInput),
+      fieldCell("요청 부서", task.requester_label || task.requester_dept, deptInput),
       fieldCell("주간보고 예상 위치", WEEKLY_LABELS[task.weekly_section || ""], weeklySelect)),
     el("div", { class: "tr-sec" }, el("div", { class: "tr-sec-h" }, icon("sparkles"), "왜 제안됐나요"),
       el("div", { class: "tr-reasons" }, ...(task.reasons.length ? task.reasons : ["none"]).map((code) =>

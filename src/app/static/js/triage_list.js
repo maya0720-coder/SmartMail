@@ -6,8 +6,10 @@
 const TR = {
   items: [], snoozedItems: [], selectedId: null, categories: [],
   summary: { visible: 0, snoozed: 0, decided_today: 0 },
-  tab: "all", snoozedOpen: false,
+  tab: "all", snoozedOpen: false, page: 1,
 };
+// 한 페이지에 보여 줄 제안 수(결정기록 0023). 목록은 패널 안에서 스크롤되므로 높이와 무관한 고정값
+const TRIAGE_PAGE_SIZE = 20;
 
 // 이유 코드 → 화면 문구(명세 3-2)
 const REASON_LABELS = {
@@ -20,6 +22,7 @@ const REASON_LABELS = {
   approval: "결재 키워드",
   ai_judged: "AI가 업무로 판단",
   learned_penalty: "비슷한 메일을 '업무 아님'으로 고른 적 있음",
+  ai_unavailable: "AI 판단 실패 · 직접 확인 필요",
 };
 const GROUP_LABELS = { today: "오늘", yesterday: "어제", week: "이번 주", older: "이전" };
 
@@ -61,9 +64,40 @@ function filteredItems() {
   return TR.items.filter((t) => inTab(t, TR.tab));
 }
 
-// ↑↓·다음 항목 선택에 쓰는 화면 순서(거른 목록 → 펼친 '나중에' 목록)
+// 현재 페이지(페이지 번호는 범위 안으로 맞춘다)
+function pageView() {
+  const view = paginate(filteredItems(), TR.page, TRIAGE_PAGE_SIZE);
+  TR.page = view.page;
+  return view;
+}
+
+// 펼친 '나중에' 목록은 마지막 페이지 끝에만 보인다
+function onLastPage() {
+  return TR.page === pageView().pages;
+}
+
+// 지금 화면에 보이는 항목 순서(현재 페이지 → 마지막 페이지면 펼친 '나중에' 목록)
 function visibleOrder() {
+  return [...pageView().items, ...(TR.snoozedOpen && onLastPage() ? TR.snoozedItems : [])];
+}
+
+// ↑↓·결정 후 다음 항목 선택에 쓰는 전체 순서(모든 페이지)
+function navOrder() {
   return [...filteredItems(), ...(TR.snoozedOpen ? TR.snoozedItems : [])];
+}
+
+// 항목이 있는 페이지 번호(펼친 '나중에' 항목은 마지막 페이지)
+function pageOf(id) {
+  const index = filteredItems().findIndex((t) => t.id === id);
+  if (index < 0) return paginate(filteredItems(), Number.MAX_SAFE_INTEGER, TRIAGE_PAGE_SIZE).page;
+  return Math.floor(index / TRIAGE_PAGE_SIZE) + 1;
+}
+
+function goPage(page) {
+  TR.page = page;
+  renderItems();
+  document.getElementById("tr-items").scrollTop = 0;
+  ensureSelection();
 }
 
 function findTask(id) {
@@ -75,7 +109,7 @@ function renderTabs() {
   fill(document.getElementById("tr-tabs"), ...tabs.map(([key, label]) => {
     const n = TR.items.filter((t) => inTab(t, key)).length;
     return el("button", { type: "button", class: key === TR.tab ? "on" : "", "aria-pressed": key === TR.tab ? "true" : "false",
-      onclick: () => { TR.tab = key; renderTabs(); renderItems(); ensureSelection(); } }, label + " " + n);
+      onclick: () => { TR.tab = key; TR.page = 1; renderTabs(); renderItems(); ensureSelection(); } }, label + " " + n);
   }));
 }
 
@@ -100,9 +134,9 @@ function itemNode(task, snoozedItem) {
   return el("li", { class: "tr-item" + (sel ? " sel" : "") + (snoozedItem ? " snoozed" : ""), role: "option",
     "aria-selected": sel ? "true" : "false", dataset: { id: String(task.id) }, tabindex: "-1",
     onclick: () => selectTriage(task.id, true, true) },
-    el("div", { class: "tr-line1" }, el("span", { class: "tr-title", title: task.title }, task.title), confidenceBar(task.confidence)),
+    el("div", { class: "tr-line1" }, summaryChip(task.summary_state), el("span", { class: "tr-title", title: task.title }, task.title), confidenceBar(task.confidence)),
     el("div", { class: "tr-line2" }, categoryChip(task), dueChip(task),
-      task.requester_dept ? el("span", { class: "dept" }, task.requester_dept) : null,
+      requesterNode(task, "dept"),
       task.thread_count >= 2 ? el("span", { class: "thr", title: "대화 " + task.thread_count + "통" }, icon("mail"), String(task.thread_count)) : null,
       snoozedItem && task.snooze_until ? receivedNode(task.snooze_until, "다시 보임 ") : receivedNode(task.requested_at, "")));
 }
@@ -115,9 +149,17 @@ function receivedNode(iso, prefix) {
     hasDate ? el("span", { class: "tm-d" }, label.split(" ")[0]) : null, el("span", { class: "tm-t" }, (hasDate ? " " : "") + label.split(" ").pop()));
 }
 
+function renderTriagePager(view) {
+  document.getElementById("tr-pg").classList.toggle("hidden", !view.total);
+  renderPager(document.getElementById("tr-pager"), document.getElementById("tr-pg-info"), view, TRIAGE_PAGE_SIZE, goPage);
+}
+
 function renderItems() {
   const list = document.getElementById("tr-items");
-  const items = filteredItems();
+  const view = pageView();
+  const items = view.items;
+  const lastPage = TR.page === view.pages;
+  renderTriagePager(view);
   if (!TR.items.length && !(TR.snoozedOpen && TR.snoozedItems.length)) {
     list.replaceChildren(el("li", { class: "tr-empty" },
       icon("check"), el("div", { class: "k" }, "정리할 제안이 없습니다"),
@@ -134,7 +176,7 @@ function renderItems() {
     nodes.push(...inGroup.map((t) => itemNode(t, false)));
   }
   if (!items.length) nodes.push(el("li", { class: "tr-group-empty", role: "presentation" }, "이 탭에 해당하는 제안이 없습니다"));
-  if (TR.snoozedOpen && TR.snoozedItems.length) {
+  if (TR.snoozedOpen && TR.snoozedItems.length && lastPage) {
     nodes.push(el("li", { class: "tr-group", role: "presentation" }, "나중에로 미룬 제안 " + TR.snoozedItems.length));
     nodes.push(...TR.snoozedItems.map((t) => itemNode(t, true)));
   }
@@ -173,9 +215,10 @@ async function loadTriage(keepId) {
   if (summary.ok) TR.summary = summary.data;
   renderCount();
   renderTabs();
-  const order = visibleOrder();
   const want = keepId !== undefined ? keepId : TR.selectedId;
-  const target = order.find((t) => t.id === want) || order[0];
+  const found = navOrder().find((t) => t.id === want);
+  if (found && keepId !== undefined) TR.page = pageOf(found.id);  // 지정한 항목이 있는 페이지로
+  const target = found || visibleOrder()[0];
   TR.selectedId = target ? target.id : null;
   renderItems();
   if (target) renderTriageDetail(target); else renderTriageEmpty();
@@ -204,16 +247,19 @@ function selectTriage(id, focus, open) {
 }
 
 function moveTriage(step) {
-  const order = visibleOrder();
+  const order = navOrder();
   if (!order.length) return;
   const index = order.findIndex((t) => t.id === TR.selectedId);
-  const next = Math.min(order.length - 1, Math.max(0, index + step));
-  selectTriage(order[next].id, true, false);
+  const next = order[Math.min(order.length - 1, Math.max(0, index + step))];
+  // 페이지 경계를 넘으면 페이지도 넘긴다
+  const page = pageOf(next.id);
+  if (page !== TR.page) { TR.page = page; renderItems(); }
+  selectTriage(next.id, true, false);
 }
 
 // 결정한 항목을 왼쪽으로 빼며 지우고(200ms) 다음 항목을 고른다
 function removeTriageItem(id) {
-  const order = visibleOrder();
+  const order = navOrder();
   const index = order.findIndex((t) => t.id === id);
   const wasSnoozed = TR.snoozedItems.some((t) => t.id === id);
   TR.items = TR.items.filter((t) => t.id !== id);
@@ -223,11 +269,12 @@ function removeTriageItem(id) {
   TR.summary.decided_today += 1;
   renderCount();
   renderTabs();
-  const rest = visibleOrder();
+  const rest = navOrder();
   const next = rest[Math.min(Math.max(index, 0), rest.length - 1)];
   const li = document.querySelector('#tr-items .tr-item[data-id="' + id + '"]');
   const finish = () => {
     TR.selectedId = next ? next.id : null;
+    if (next) TR.page = pageOf(next.id);  // 빠진 만큼 당겨진 다음 항목이 있는 페이지(범위 밖이면 자동 보정)
     renderItems();
     if (next) selectTriage(next.id, true, false); else renderTriageEmpty();
   };
@@ -260,3 +307,25 @@ document.addEventListener("keydown", (event) => {
   };
   if (actions[key]) { event.preventDefault(); actions[key](); }
 });
+
+// 요약 진행 중 칩·제목만 바꾼다(결정기록 0029). 목록을 다시 그리지 않아 선택·스크롤이 유지된다.
+async function patchSummaryStates() {
+  const list = await api("GET", "/api/tasks?status=suggested");
+  if (!list.ok) return;
+  const fresh = new Map(list.data.map((t) => [t.id, t]));
+  for (const task of TR.items) {
+    const now = fresh.get(task.id);
+    if (!now || (now.summary_state === task.summary_state && now.title === task.title)) continue;
+    task.summary_state = now.summary_state;
+    task.summary_pending = now.summary_pending;
+    task.title = now.title;
+    const node = document.querySelector('#tr-items li[data-id="' + task.id + '"] .tr-line1');
+    if (!node) continue;
+    const old = node.querySelector(".sum-chip");
+    const chip = summaryChip(task.summary_state);
+    if (old && chip) old.replaceWith(chip); else if (old) old.remove(); else if (chip) node.prepend(chip);
+    const title = node.querySelector(".tr-title");
+    if (title) { title.textContent = task.title; title.title = task.title; }
+    if (task.id === TR.selectedId && typeof refreshDetailTitle === "function") refreshDetailTitle(task);
+  }
+}

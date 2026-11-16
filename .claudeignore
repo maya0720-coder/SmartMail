@@ -1,0 +1,46 @@
+# 세션 컨텍스트 절약용 제외 목록(관례 파일).
+# 주의: Claude Code는 이 파일을 공식적으로 읽지 않는다. 실제로 효력이 있는 것은
+#   1) .gitignore (respectGitignore 기본값 true: 파일 검색·@멘션에서 제외)
+#   2) .claude/settings.json 의 permissions.deny 의 Read(...) 규칙
+# 이 목록은 위 두 곳에 반영할 기준으로 쓴다.
+
+# 의존성·캐시·빌드 산출물
+node_modules/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+.next/
+coverage/
+*.egg-info/
+
+# 버전 관리
+.git/
+
+# 비밀정보·로컬 데이터·로그
+.env*
+!.env.example
+data/
+logs/
+*.log
+*.db
+*.sqlite*
+
+# 잠금 파일
+*.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# 바이너리·에셋·배포 묶음
+*.zip
+*.docx
+*.png
+*.jpg
+*.woff2
+designMD/img/
+docs/기획서_그림/
+src/app/static/fonts/

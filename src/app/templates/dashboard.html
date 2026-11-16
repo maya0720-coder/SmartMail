@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block head %}<link rel="stylesheet" href="{{ asset('css/reflow.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('css/reflow.css') }}"><link rel="stylesheet" href="{{ asset('css/detail_mail.css') }}">{% endblock %}
 {% block page_title %}<h2>대시보드</h2>{% endblock %}
 {% block page_sub %}<span class="page-sub" id="sync-status" title="수집 경로: {{ collector_label }} · 완료 업무는 {{ retention_days }}일 후 자동 삭제">메일 자동 수집 확인 중</span>{% endblock %}
 {% block page_tools %}
@@ -39,12 +39,13 @@
     </div>
     <div class="table-wrap" id="todo-wrap" tabindex="0" aria-label="내 할 일 목록 (↑↓ 선택 · ←→ 페이지)">
       <table class="dense">
-        <colgroup><col class="w-cb"><col><col class="w-mod"><col class="w-dept"><col class="w-due"><col class="w-st"></colgroup>
+        <colgroup><col class="w-cb"><col><col class="w-mod"><col class="w-dept"><col class="w-last"><col class="w-due"><col class="w-st"></colgroup>
         <thead id="todo-head"><tr>
           <th class="c-cb"><input type="checkbox" class="cb" id="todo-all" aria-label="이 페이지 전체 선택"></th>
           <th data-sort="title" aria-sort="none"><button type="button" class="th-sort">업무<svg class="ic" aria-hidden="true"><use href="{{ ic }}arrow-up-down"></use></svg></button></th>
           <th class="c-mod">구분</th>
           <th class="c-dept">요청 부서</th>
+          <th data-sort="recent" aria-sort="none" class="c-last"><button type="button" class="th-sort">최근 메일<svg class="ic" aria-hidden="true"><use href="{{ ic }}arrow-up-down"></use></svg></button></th>
           <th data-sort="due" aria-sort="none" class="c-due"><button type="button" class="th-sort">기한<svg class="ic" aria-hidden="true"><use href="{{ ic }}arrow-up-down"></use></svg></button></th>
           <th class="c-st">상태</th>
         </tr></thead>
@@ -66,20 +67,12 @@
 {% block modals %}
 {% set ic = asset("img/icons.svg") ~ "#i-" %}
 {% include "partials/gk_modal.html" %}
-<!-- 원본 메일 보기(MAIL-08~10): 저장하지 않고 열 때마다 원본에서 다시 읽어 넓은 모달로 표시 -->
-<div class="dim" id="dlg-mail" role="dialog" aria-modal="true" aria-labelledby="mail-head">
-  <div class="modal xl mail-modal">
-    <button type="button" class="mail-x" id="mail-close" aria-label="원본 닫기"><svg class="ic" aria-hidden="true"><use href="{{ ic }}x"></use></svg></button>
-    <h3 id="mail-head">원본 메일</h3>
-    <div class="mail-view" id="mail-body"></div>
-    <div class="m-actions" id="mail-foot"></div>
-  </div>
-</div>
 <!-- 지표 표로 보기(화면을 밀어내지 않도록 모달) -->
 <div class="dim" id="dlg-mtbl" role="dialog" aria-modal="true" aria-labelledby="mtbl-head">
   <div class="modal wide">
     <h3 id="mtbl-head">성과 지표 표로 보기</h3>
     <p class="s" id="m-desc"></p>
+    <p class="s" id="m-ai"></p>
     <div class="tbl-wrap" id="m-tbl"></div>
     <div class="m-actions"><button type="button" class="btn" id="mtbl-close">닫기</button></div>
   </div>
@@ -89,8 +82,12 @@
 <script src="{{ asset('js/splitter.js') }}"></script>
 <script src="{{ asset('js/charts.js') }}"></script>
 <script src="{{ asset('js/gk.js') }}"></script>
+<script src="{{ asset('js/pager.js') }}"></script>
 <script src="{{ asset('js/todo_list.js') }}"></script>
 <script src="{{ asset('js/todo_actions.js') }}"></script>
+<script src="{{ asset('js/task_badges.js') }}"></script>
+<script src="{{ asset('js/detail_progress.js') }}"></script>
+<script src="{{ asset('js/detail_mail.js') }}"></script>
 <script src="{{ asset('js/dashboard_detail.js') }}"></script>
 <script src="{{ asset('js/dashboard.js') }}"></script>
 {% endblock %}

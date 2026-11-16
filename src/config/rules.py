@@ -11,6 +11,7 @@ from domain.errors import UserInputError
 from domain.mail_rules import ExclusionRules
 from domain.tasks.categories import CategoryRules
 from domain.tasks.summarize import TitleRules
+from domain.weekly.form import FormRules
 from domain.weekly.report import WikiTemplate
 from domain.weekly.title_rule import validate_title_rule
 
@@ -19,6 +20,7 @@ DEFAULT_MAIL_RULES: Final = RULES_DIR / "mail_exclusions.toml"
 DEFAULT_WIKI_TEMPLATE: Final = RULES_DIR / "wiki_template.toml"
 DEFAULT_CATEGORY_RULES: Final = RULES_DIR / "task_categories.toml"
 DEFAULT_TITLE_RULES: Final = RULES_DIR / "title_rules.toml"
+DEFAULT_WEEKLY_FORM_RULES: Final = RULES_DIR / "weekly_form.toml"
 MAX_RULE_ITEMS: Final = 500
 
 
@@ -126,3 +128,36 @@ def load_wiki_template(path: Path = DEFAULT_WIKI_TEMPLATE) -> WikiTemplate:
     except UserInputError as exc:
         raise ConfigError(f"{path.name}: 제목 규칙 오류 - {exc}") from None
     return template
+
+
+def load_weekly_form_rules(path: Path = DEFAULT_WEEKLY_FORM_RULES) -> FormRules:
+    """주간보고 양식 머리글 키워드 규칙(결정기록 0024). 형식 오류는 시작 시 실패."""
+    data = read_toml(path)
+    unknown = set(data) - {"issues", "planned", "done"}
+    if unknown:
+        raise ConfigError(f"{path.name}: 알 수 없는 키 {sorted(unknown)}")
+    defaults = FormRules()
+    return FormRules(
+        issues=str_list(data, "issues", path.name) or defaults.issues,
+        planned=str_list(data, "planned", path.name) or defaults.planned,
+        done=str_list(data, "done", path.name) or defaults.done,
+    )
+
+
+DEFAULT_COMPANY_DOMAINS: Final = RULES_DIR / "company_domains.toml"
+
+
+def load_company_domains(
+    path: Path = DEFAULT_COMPANY_DOMAINS,
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    """외부 회사 도메인 매핑과 개인 메일 도메인 목록(결정기록 0027)."""
+    data = read_toml(path)
+    companies = data.get("companies", {})
+    if not isinstance(companies, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in companies.items()
+    ):
+        raise ConfigError(f'{path.name}: [companies]는 "도메인" = "회사명" 형식이어야 합니다')
+    free = data.get("free_mail", {})
+    if not isinstance(free, dict):
+        raise ConfigError(f"{path.name}: [free_mail] 형식이 올바르지 않습니다")
+    return dict(companies), str_list(free, "domains", path.name)

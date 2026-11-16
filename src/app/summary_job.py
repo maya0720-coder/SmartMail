@@ -33,6 +33,9 @@ class SummaryState:
     running: bool = False
     done: int = 0
     failed: int = 0
+    # 이번 실행의 진행률(결정기록 0023): 전체 건수와 처리 끝난 건수(성공·제목 유지·실패 처리 포함)
+    total: int = 0
+    completed: int = 0
     message: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -51,6 +54,9 @@ class SummaryJob:
     def ready(self) -> bool:
         return self._always_ready or self._sessions.current(Site.AIGROUND) is not None
 
+    def _on_progress(self, total: int, completed: int) -> None:
+        self.state.total, self.state.completed = total, completed
+
     def run_once(self, max_batches: int = BATCHES_PER_RUN) -> None:
         if not self.ready():
             self.state.message = LOGIN_REQUIRED
@@ -59,7 +65,7 @@ class SummaryJob:
             return  # 이미 실행 중
         self.state.running = True
         try:
-            result = self._service.run(max_batches)
+            result = self._service.run(max_batches, self._on_progress)
             self.state.done += result.done
             self.state.failed += result.failed
             self.state.message = result.message
@@ -79,8 +85,16 @@ class SummaryJob:
     def pending_ids(self) -> set[int]:
         return self._service.pending_ids()
 
+    def running_ids(self) -> set[int]:
+        """지금 AI로 보내는 중인 업무(요약 중 표시, 결정기록 0029)."""
+        return self._service.running_task_ids()
+
     def status(self) -> dict[str, object]:
+        total, completed = self.state.total, min(self.state.completed, self.state.total)
         return {
+            "total": total,
+            "completed": completed,
+            "percent": round(completed * 100 / total) if total else 0,
             "pending": len(self._service.pending()),
             "running": self.state.running,
             "done": self.state.done,

@@ -22,6 +22,14 @@
   .mail-body{max-height:360px}
 }
 
+/* ---------- AI 요약·해결 방안(결정기록 0021) ---------- */
+.d-digest{border:1px solid var(--line);border-radius:var(--r-ctl);padding:8px 10px;font-size:12.5px}
+.d-digest .sec{margin:0 0 4px}
+.step .case{margin-top:6px}
+.step .case + .case{border-top:1px dashed var(--line-soft);padding-top:6px}
+
+/* 원본 메일 영역은 상세 패널 가운데로 옮겼다(detail_mail.css, 결정기록 0022) */
+
 /* ---------- 내 할 일 목록(.todo-card): 상세가 커지면 줄어든다 ---------- */
 .todo-card{container:todo / inline-size}
 .t-meta{display:none;font-size:11px;line-height:16px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
@@ -31,6 +39,8 @@
   /* 목록 700~899px: '요청 부서' 열을 숨기고 제목 아래 보조 줄로 내린다(행 높이 40 → 52px) */
   @container todo (max-width:897px){
     .todo-card col.w-dept,.todo-card .c-dept{display:none}
+    /* '최근 메일' 열도 숨긴다(결정기록 0028). 정렬은 그대로 마지막 메일 기준 */
+    .todo-card col.w-last,.todo-card .c-last{display:none}
     .todo-card td{height:52px}
     .todo-card .t-meta{display:block}
     .todo-card .t-meta .m-mod{display:none}

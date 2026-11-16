@@ -51,7 +51,8 @@ async function loadMetrics() {
 }
 
 // ---- 내 할 일 ----
-let todoSort = { key: "created", dir: -1 };
+// 기본 정렬: 스레드 마지막 메일이 최근인 순(결정기록 0028)
+let todoSort = { key: "recent", dir: -1 };
 let todoPage = 1;
 let perPage = 10;
 let currentView = { items: [], page: 1, pages: 1, total: 0 };
@@ -61,7 +62,7 @@ function filteredTasks() {
   const byStatus = (t) => currentFilter === "all" ? t.status !== "dismissed"
     : currentFilter === "todo" ? t.status !== "dismissed" && t.status !== "suggested"
     : currentFilter === "soon" ? Boolean(t.due_badge) : t.status === currentFilter;
-  const byTerm = (t) => !term || [t.title, t.requester_dept, t.module_tag].some((v) => v && v.toLowerCase().includes(term));
+  const byTerm = (t) => !term || [t.title, t.requester_label, t.requester_dept, t.module_tag].some((v) => v && v.toLowerCase().includes(term));
   return sortTasks(allTasks.filter((t) => byStatus(t) && byTerm(t)), todoSort);
 }
 
@@ -74,16 +75,31 @@ function todoRow(task) {
     onclick: (event) => openTask(task.id, event.currentTarget) },
     el("td", { class: "c-cb" }, box),
     el("td", { class: "c-title", title: task.title }, el("span", { class: "t-title" }, task.title),
-      task.summary_pending
-        ? el("span", { class: "t-sub wait", title: "AI 요청 요약 대기 중(지금은 메일 제목)" }, "요약 대기")
+      // 요약 상태는 'AI 요약'이 아닐 때만 작게 표시(결정기록 0029)
+      task.summary_state && task.summary_state !== "done"
+        ? summaryChip(task.summary_state)
         : el("span", { class: "t-sub" }, task.source === "manual" ? "수동" : "메일"),
       // 목록이 좁아져 열을 숨길 때만 보이는 보조 줄(reflow.css)
-      el("span", { class: "t-meta" }, task.module_tag ? el("span", { class: "tag m-mod" }, task.module_tag) : null,
-        el("span", { class: "m-dept" }, task.requester_dept || ""))),
-    el("td", { class: "c-mod" }, task.module_tag ? el("span", { class: "tag" }, task.module_tag) : "-"),
-    el("td", { class: "c-dept" }, task.requester_dept || "-"),
+      el("span", { class: "t-meta" }, categoryTag(task.module_tag, "m-mod"),
+        requesterNode(task, "m-dept") || el("span", { class: "m-dept" }, ""))),
+    el("td", { class: "c-mod" }, categoryTag(task.module_tag) || "-"),
+    el("td", { class: "c-dept" }, requesterNode(task, "") || "-"),
+    el("td", { class: "c-last" }, lastMailText(task)),
     el("td", { class: "c-due" }, dueText(task)),
     el("td", { class: "c-st" }, statusBadge(task)));
+}
+
+// 최근 메일: "11-16 14:05 · 받음/보냄". 내가 마지막으로 회신했으면 '회신함'(완료 후보 판단 보조)
+function lastMailText(task) {
+  if (!task.last_mail_at) return "-";
+  const d = new Date(task.last_mail_at);
+  const pad = (n) => String(n).padStart(2, "0");
+  const when = pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  const out = task.last_mail_direction === "out";
+  const dir = out ? "보냄" : task.last_mail_direction === "in" ? "받음" : "";
+  return el("span", { title: "스레드 메일 " + (task.mail_count || 0) + "통 · 마지막 메일 기준" }, when,
+    dir ? el("span", { class: out ? "dir-out" : "" }, " · " + dir) : null,
+    task.replied_last && task.status !== "done" ? el("span", { class: "replied" }, "회신함") : null);
 }
 
 function renderSortHeads() {
@@ -134,7 +150,7 @@ function renderTodo() {
   todoPage = currentView.page;
   const body = document.getElementById("todo");
   if (currentView.total) body.replaceChildren(...currentView.items.map(todoRow));
-  else body.replaceChildren(el("tr", { class: "empty-row" }, el("td", { colspan: "6" }, el("div", { class: "empty" },
+  else body.replaceChildren(el("tr", { class: "empty-row" }, el("td", { colspan: "7" }, el("div", { class: "empty" },
     searchTerm ? "검색 결과가 없습니다 · Esc로 지우기" : "해당하는 업무가 없습니다"))));
   renderSortHeads();
   renderHeadCheck();
@@ -296,7 +312,20 @@ document.getElementById("todo-all").addEventListener("change", (event) => {
 document.getElementById("toggle-table").addEventListener("click", (event) => {
   event.preventDefault();
   openDlg("dlg-mtbl");
+  showAiQuality();
 });
+
+// AI 품질(최근 30일): 해결 방안 '도움 됨' 비율·AI 호출 성공률(결정기록 0021)
+async function showAiQuality() {
+  const box = document.getElementById("m-ai");
+  const result = await api("GET", "/api/metrics/ai-quality");
+  if (!box || !result.ok) return;
+  const q = result.data;
+  const pct = (v) => (v === null ? "-" : Math.round(v * 100) + "%");
+  box.textContent = "AI 품질(최근 " + q.window_days + "일) · 해결 방안 '도움 됨' " + pct(q.helpful_rate)
+    + " (" + q.helpful + "/" + (q.helpful + q.not_helpful) + "건" + (q.reference_only ? ", 표본 적음·참고값" : "") + ")"
+    + " · AI 호출 성공 " + pct(q.ai_success_rate) + " (" + q.ai_success + "/" + (q.ai_success + q.ai_failure) + "회)";
+}
 document.getElementById("mtbl-close").addEventListener("click", () => closeDlg("dlg-mtbl"));
 
 // 백그라운드 자동 수집이 끝나면 화면을 새로 고친다(처음 30일 수집은 몇 분 걸릴 수 있음).
@@ -352,7 +381,8 @@ document.getElementById("btn-manual").addEventListener("click", async () => {
 
 loadSyncStatus();
 renderDetailEmpty();
-refresh();
+// 업무 구분 색(전자결재·기본 구분)을 정한 뒤 목록을 그린다. 읽지 못해도 기본값으로 그린다
+loadCategoryKinds().finally(refresh);
 
 // 상세 패널 크기 조절(결정기록 0016). 폭이 바뀌면 #todo-wrap의 ResizeObserver가 행 수를 다시 계산한다
 initSplitter({ handle: document.getElementById("split-detail"), panel: document.getElementById("detail"), other: document.querySelector(".todo-card"),

@@ -37,6 +37,7 @@ class PurgeResult:
     history_cards: int = 0
     ledger_rows: int = 0
     ai_calls: int = 0
+    weekly_cache: int = 0
 
     @property
     def total(self) -> int:
@@ -47,6 +48,7 @@ class PurgeResult:
             + self.history_cards
             + self.ledger_rows
             + self.ai_calls
+            + self.weekly_cache
         )
 
 
@@ -101,6 +103,14 @@ class RetentionJob:
                 ai_calls = conn.execute(
                     "DELETE FROM ai_call_log WHERE called_at <= ?", (cutoff,)
                 ).rowcount
+                # 주간보고 게시 캐시(마스킹 스냅샷)도 같은 보관 기간 후 지운다(WIKI-06).
+                weekly_cache = conn.execute(
+                    "DELETE FROM weekly_publish_cache WHERE published_at <= ?", (cutoff,)
+                ).rowcount
+                # 주간보고 편집기 임시 저장본(결정기록 0030)도 같은 보관 기간 후 지운다
+                weekly_cache += conn.execute(
+                    "DELETE FROM weekly_draft WHERE saved_at <= ?", (cutoff,)
+                ).rowcount
                 ledger = 0
                 if not self._keep_ledger:
                     ledger = conn.execute(
@@ -109,17 +119,19 @@ class RetentionJob:
         except Exception:
             log_event(EventType.RETENTION_PURGE, Site.APP, success=False)
             raise
-        result = PurgeResult(tasks, mails, events, cards, ledger, ai_calls)
+        result = PurgeResult(tasks, mails, events, cards, ledger, ai_calls, weekly_cache)
         if result.total:
             self._db.vacuum()
         logger.info(
-            "보관기간 삭제: 업무 %d, 메일참조 %d, 이벤트 %d, 히스토리 %d, 지표원장 %d, AI이력 %d",
+            "보관기간 삭제: 업무 %d, 메일참조 %d, 이벤트 %d, 히스토리 %d, 지표원장 %d, AI이력 %d,"
+            " 주간게시캐시 %d",
             tasks,
             mails,
             events,
             cards,
             ledger,
             ai_calls,
+            weekly_cache,
         )
         log_event(EventType.RETENTION_PURGE, Site.APP, success=True)
         return result

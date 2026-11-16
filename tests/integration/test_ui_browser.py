@@ -228,8 +228,12 @@ def test_ui_dashboard_app_shell_layout(server: tuple[str, object]) -> None:
 
 
 @pytest.mark.slow
-def test_ui_mail_original_opens_in_modal(server: tuple[str, object]) -> None:
-    """원본 보기(MAIL-08~10): 메일 업무 상세에서 원본을 넓은 모달로 열고 Esc로 닫는다."""
+def test_ui_mail_original_in_detail_center(server: tuple[str, object]) -> None:
+    """원본 보기(MAIL-08~10, 결정기록 0022).
+
+    원본 메일은 상세 패널 가운데(작업 버튼 행과 하단 상태 버튼 사이)에 보이고,
+    목록 아래 메일 영역은 없다. '원본 보기'로 숨기기/보이기를 바꾼다.
+    """
     base, _container = server
     playwright, browser = _browser_or_skip()
     try:
@@ -246,20 +250,75 @@ def test_ui_mail_original_opens_in_modal(server: tuple[str, object]) -> None:
         assert collected.ok  # 데모 메일 수집(가상 데이터) → 원본이 있는 업무 생성
         page.reload()
         page.wait_for_selector("#todo tr.row")
+        assert page.locator("#mail-pane").count() == 0  # 좌측 하단 메일 박스 제거
         page.locator("#todo tr.row").first.click()
         page.wait_for_selector("#d-body .d-tools")
-        opener = page.locator(".d-tools button", has_text="원본 보기")
-        assert opener.count() >= 1
-        opener.first.click()
-        # 넓은 줌 모달로 열리고 본문이 보인다
-        page.wait_for_selector("#dlg-mail.show #mail-body .mail-full")
-        assert page.inner_text("#mail-head").strip() != ""
-        # Esc로 닫힌다
-        page.keyboard.press("Escape")
-        page.wait_for_function(
-            "() => !document.getElementById('dlg-mail').classList.contains('show')"
-        )
+        # 업무를 고르면 팝업 없이 상세 가운데 영역에 발신자·수신 일시·본문이 보인다
+        page.wait_for_selector("#detail #d-mail:not(.hidden) .dm-body .mail-full")
+        assert page.locator("#d-mail .dm-meta dt", has_text="보낸 사람").count() == 1
+        assert page.locator("#d-mail .dm-meta dt", has_text="수신 일시").count() == 1
+        assert page.locator(".dim.show").count() == 0
+        # 배치: 작업 버튼 행 아래, 상세 본문(#d-body) 안 = 하단 상태 버튼(#d-foot) 위.
+        # 남은 높이가 작으면 상세 본문이 스크롤되므로 메일 끝이 아니라 본문 영역 끝을 비교한다.
+        tools_box = page.locator("#d-body .d-tools").bounding_box()
+        mail_box = page.locator("#d-mail").bounding_box()
+        body_box = page.locator("#d-body").bounding_box()
+        foot_box = page.locator("#d-foot").bounding_box()
+        assert tools_box and mail_box and body_box and foot_box
+        assert tools_box["y"] + tools_box["height"] <= mail_box["y"]
+        assert page.locator("#d-body > #d-mail").count() == 1
+        assert body_box["y"] + body_box["height"] <= foot_box["y"] + 1
+        # 본문은 영역 안에서 스크롤한다
+        overflow = page.eval_on_selector("#d-mail .dm-body", "e => getComputedStyle(e).overflowY")
+        assert overflow == "auto"
+        # '원본 보기' 버튼이 가운데 영역 보이기/숨기기와 연동된다
+        toggle = page.locator(".d-tools button[aria-controls='d-mail']")
+        assert toggle.get_attribute("aria-pressed") == "true"
+        toggle.click()
+        page.wait_for_selector("#d-mail.hidden", state="attached")
+        assert toggle.get_attribute("aria-pressed") == "false"
+        assert "원본 보기" in toggle.inner_text()
+        toggle.click()
+        page.wait_for_selector("#d-mail:not(.hidden) .dm-body .mail-full")
+        assert toggle.get_attribute("aria-pressed") == "true"
         assert errors == []
+    finally:
+        browser.close()  # type: ignore[attr-defined]
+        playwright.stop()  # type: ignore[attr-defined]
+
+
+@pytest.mark.slow
+def test_ui_status_and_category_badges_distinct(server: tuple[str, object]) -> None:
+    """상태·업무 구분 배지 색(결정기록 0022): 상태마다, 구분마다 색이 서로 다르다."""
+    base, _container = server
+    playwright, browser = _browser_or_skip()
+    try:
+        page = browser.new_page(viewport={"width": 1440, "height": 900})  # type: ignore[attr-defined]
+        page.goto(base + "/")
+        _dismiss_login(page, base)
+        page.wait_for_selector("#todo")
+        colors = page.evaluate(
+            """() => {
+              const probe = (cls) => {
+                const n = document.createElement('span');
+                n.className = cls;
+                n.textContent = 'x';
+                document.body.append(n);
+                const s = getComputedStyle(n);
+                const dot = getComputedStyle(n, '::before').backgroundColor;
+                const out = [s.backgroundColor, s.color, dot].join('|');
+                n.remove();
+                return out;
+              };
+              const st = ['b-prop','b-wait','b-prog','b-cand','b-done','b-hold']
+                .map(c => probe('badge ' + c));
+              const cat = ['cat-tag cat-appr','cat-tag cat-gen'].map(probe);
+              return { st, cat };
+            }"""
+        )
+        assert len(set(colors["st"])) == 6
+        assert len(set(colors["cat"])) == 2
+        assert not set(colors["cat"]) & set(colors["st"])
     finally:
         browser.close()  # type: ignore[attr-defined]
         playwright.stop()  # type: ignore[attr-defined]
@@ -352,14 +411,27 @@ def test_ui_startup_login_modal(server: tuple[str, object]) -> None:
         page.goto(base + "/")
         page.wait_for_selector("#dlg-start.show")
         assert page.inner_text("#st-suffix") == "@golfzon.com"
-        # AI-Ground·G-Knowledge·위키·그룹웨어(결정기록 0017)
-        assert page.locator("#st-sites li").count() == 4
+        # AI-Ground·G-Knowledge·위키. 그룹웨어는 일괄 로그인에서 뺐다(결정기록 0026)
+        assert page.locator("#st-sites li").count() == 3
+        assert "그룹웨어" not in page.inner_text("#st-sites")
         page.fill("#st-id", "tester01")
         page.fill("#st-pw", "x" * 12)  # 합성 값(데모: 가짜 로그인)
         page.click("#st-submit")
         page.wait_for_selector("#dlg-start.show", state="hidden")
         assert page.input_value("#st-pw") == "" and page.input_value("#st-id") == ""
+        assert page.locator("#conn .chip.on").count() == 3  # 그룹웨어는 아직 로그인 안 됨
+        # 그룹웨어는 설정·연결에서 직접 로그인한다(그 사이트만 묻는 창)
+        page.goto(base + "/settings")
+        page.locator(".set-row", has_text="그룹웨어").locator("button", has_text="로그인").click()
+        page.wait_for_selector("#dlg-start.show")
+        assert "그룹웨어 로그인" in page.inner_text("#st-title")
+        assert page.locator("#st-sites li").count() == 1
+        page.fill("#st-id", "tester01")
+        page.fill("#st-pw", "x" * 12)
+        page.click("#st-submit")
+        page.wait_for_selector("#dlg-start.show", state="hidden")
         assert page.locator("#conn .chip.on").count() == 4
+        page.goto(base + "/")
         # 상태 칩을 누르면 사이트를 새 탭으로 연다(https 주소, 결정기록 0017)
         chip = page.locator("#conn a.chip").first
         assert (chip.get_attribute("href") or "").startswith("https://")

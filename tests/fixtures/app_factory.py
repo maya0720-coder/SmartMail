@@ -61,6 +61,8 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "db_path": tmp_path / "data" / "test.db",
         "log_dir": tmp_path / "logs",
         "demo_mode": True,
+        # 시연용 가상 과거 사례는 넣지 않는다(테스트 기댓값 고정). 필요한 테스트만 켠다
+        "demo_seed": False,
         # 데모가 아닐 때도 실제 아웃룩 COM에 연결하지 않도록 그룹웨어(미연동) 경로로 고정한다.
         "mail_source": "groupware",
     }

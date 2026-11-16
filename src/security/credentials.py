@@ -40,6 +40,10 @@ class CredentialsRequiredError(LoginFailedError):
     """SSO만으로 로그인되지 않아 ID·암호가 필요함."""
 
 
+class OtpFailedError(LoginFailedError):
+    """추가 인증(인증문자)을 완료하지 못함: 취소·시간 초과·여러 번 틀림."""
+
+
 class LoginUnavailableError(Exception):
     """연동 규격이 확인되지 않아 로그인할 수 없음(확인 필요)."""
 

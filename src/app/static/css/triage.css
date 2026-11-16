@@ -6,6 +6,15 @@
 .tr-keys kbd{margin:0 1px}
 .sum-bar{flex:none;flex-wrap:nowrap;min-height:36px;padding-block:3px}
 .sum-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 요청 요약 진행률(결정기록 0023): 퍼센트 · 막대(.tr-progress와 같은 모양) · 완료 n / 전체 m */
+.sum-prog{display:flex;align-items:center;gap:8px;flex:none}
+.sum-bar .sum-prog span{flex:none}
+.sum-pct{font-family:var(--mono);font-size:12px;min-width:3.2em;text-align:right}
+.sum-track{display:inline-block;width:120px;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+.sum-track i{display:block;height:100%;width:0;background:var(--ai);transition:width .3s}
+.sum-count{font-family:var(--mono);font-size:12px;color:var(--sub)}
+.tr-pg{flex:none;padding:8px 12px;border-top:1px solid var(--line)}
+@media (max-width:640px){.sum-count{display:none}.sum-track{width:72px}}
 :root{--tr-list-w:380px}
 .triage{display:grid;grid-template-columns:var(--tr-list-w) var(--gap) minmax(0,1fr);align-items:start}
 .tr-list{padding:0;overflow:hidden}
@@ -95,6 +104,8 @@ mark{background:#fef08a;color:inherit;border-radius:3px;padding:0 2px}
 .tr-list{container:trlist / inline-size}
 .tr-detail{container:trdetail / inline-size}
 .tr-line2 .tm{white-space:nowrap}
+/* 요청부서(외부면 '외부' 배지 + 회사명, 결정기록 0027)는 한 줄로 줄여 행 높이를 고르게 둔다 */
+.tr-line2 .dept{min-width:0;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 mark{-webkit-box-decoration-break:clone;box-decoration-break:clone}
 /* 목록 좁음(280~339px): 제목 2줄, 구분·기한 칩만, 받은 시각은 날짜만 */
 @container trlist (max-width:337px){
@@ -120,7 +131,7 @@ mark{-webkit-box-decoration-break:clone;box-decoration-break:clone}
   .tr-actions{flex-wrap:wrap}
   .tr-actions .tr-keys{display:none}
 }
-@media (prefers-reduced-motion:reduce){.tr-item,.tr-progress i,.tr-detail{transition:none!important}}
+@media (prefers-reduced-motion:reduce){.tr-item,.tr-progress i,.sum-track i,.tr-detail{transition:none!important}}
 @media (max-width:900px){
   .triage{grid-template-columns:minmax(0,1fr)}
   .tr-items{max-height:none}

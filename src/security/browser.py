@@ -123,6 +123,19 @@ class BrowserRuntime:
         self._backend: BrowserBackend | None = None
         self._temp_dir: Path | None = None
         self._contexts: set[EphemeralContext] = set()
+        self._siblings: list[BrowserRuntime] = []
+
+    def sibling(self) -> BrowserRuntime:
+        """별도 스레드·별도 브라우저로 도는 실행기(결정기록 0026).
+
+        오래 기다리는 작업(그룹웨어 인증문자 입력 대기 최대 180초)이 이 실행기의 유일한 스레드를
+        잡고 있으면 AI-Ground 요청이 줄을 서다 시간 초과된다. 그런 작업은 형제 실행기에서 돌린다.
+        종료·임시 폴더 삭제는 이 실행기의 shutdown()이 함께 처리한다.
+        """
+        child = BrowserRuntime(self._factory, self._timeout)
+        with self._lock:
+            self._siblings.append(child)
+        return child
 
     @property
     def temp_dir(self) -> Path | None:
@@ -155,9 +168,12 @@ class BrowserRuntime:
             self._contexts.discard(context)
 
     def shutdown(self) -> None:
-        """모든 컨텍스트·브라우저를 닫고 임시 폴더(쿠키·캐시 포함)를 지운다."""
+        """모든 컨텍스트·브라우저를 닫고 임시 폴더(쿠키·캐시 포함)를 지운다(형제 실행기 포함)."""
         with self._lock:
             contexts = list(self._contexts)
+            siblings, self._siblings = self._siblings, []
+        for child in siblings:
+            child.shutdown()
         for context in contexts:
             try:
                 context.close()

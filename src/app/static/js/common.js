@@ -122,3 +122,33 @@ function errorText(result, fallback) {
 }
 
 const SITE_LABELS = { "wiki": "위키", "g-knowledge": "G-Knowledge", "ai-ground": "AI-Ground", "groupware": "그룹웨어" };
+
+// 요약 상태 칩(결정기록 0029). 색만으로 구분하지 않도록 글자를 함께 넣는다(textContent로만).
+const SUMMARY_CHIPS = {
+  done: { label: "AI 요약", icon: "sparkles", tip: "AI-Ground 요청 요약으로 바꾼 제목" },
+  running: { label: "요약 중", icon: "refresh-cw", tip: "AI-Ground로 요청 요약을 만드는 중" },
+  pending: { label: "요약 대기", icon: null, tip: "AI 요청 요약 대기 중(지금은 메일 제목)" },
+  kept: { label: "메일 제목", icon: "alert-triangle", tip: "AI 요약 실패 · 메일 제목 유지" },
+  missing: { label: "원문 없음", icon: null, tip: "원본 메일이 없어 요약할 수 없음" },
+};
+
+function summaryChip(state) {
+  const def = SUMMARY_CHIPS[state];
+  if (!def) return null;
+  return el("span", { class: "sum-chip s-" + state, title: def.tip, "aria-label": "요약 상태: " + def.label, dataset: { state } },
+    def.icon ? icon(def.icon) : null, el("span", {}, def.label));
+}
+
+// 요청자 표시(결정기록 0027): 외부면 '외부' 배지 + 회사명. AI 추정은 회색 기울임, 툴팁에 출처.
+const REQUESTER_SOURCES = { rule: "매핑", ai: "AI 추정", user: "사용자 확정", domain: "도메인", freemail: "개인 메일" };
+
+function requesterNode(task, cls) {
+  const label = task.requester_label || task.requester_dept;
+  if (!label) return null;
+  const external = task.requester_kind === "external" || task.requester_kind === "freemail";
+  if (!external) return el("span", { class: cls }, label);
+  const source = REQUESTER_SOURCES[task.requester_source] || "";
+  return el("span", { class: cls + " req-ext" + (task.requester_source === "ai" ? " guess" : ""),
+    title: "외부 · " + label + (source ? " · 출처: " + source : "") },
+    el("span", { class: "ext-badge" }, "외부"), " ", label);
+}

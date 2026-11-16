@@ -1,16 +1,38 @@
-"""데모 모드·테스트용 합성 메일. 이름·주소·내용은 모두 가상이다(실제 인물·메일 아님)."""
+"""데모 모드·테스트용 합성 메일. 이름·주소·내용은 모두 가상이다(실제 인물·메일 아님).
+
+기본 9건(DEMO-T1~T7)은 기존 테스트 호환을 위해 그대로 두고, 확장 시나리오는
+`demo_scenarios`·`demo_scenarios2`의 명세(MailSpec)를 조립해 덧붙인다.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from collectors.demo_scenarios import DOMAIN, SCENARIO_MAILS_1, MailSpec
+from collectors.demo_scenarios2 import SCENARIO_MAILS_2
 from domain.mail import MailKey, MailMessage
 from domain.models import MailSource
 
-DOMAIN = "example.invalid"
-
 # 합성 메일 중 업무로 승인해야 할 스레드(추출 정확도 측정용 정답)
-DEMO_TASK_THREADS = frozenset({"DEMO-T1", "DEMO-T2", "DEMO-T3", "DEMO-T4", "DEMO-T7"})
+DEMO_TASK_THREADS = frozenset(
+    {
+        "DEMO-T1",
+        "DEMO-T2",
+        "DEMO-T3",
+        "DEMO-T4",
+        "DEMO-T7",
+        "DEMO-T8",
+        "DEMO-T9",
+        "DEMO-T10",
+        "DEMO-T11",
+        "DEMO-T12",
+        "DEMO-T13",
+        "DEMO-T14",
+        "DEMO-T15",
+        "DEMO-T16",
+        "DEMO-T17",
+    }
+)
 
 
 def _message(
@@ -45,8 +67,31 @@ def _message(
     )
 
 
+def _from_spec(week_start: datetime, spec: MailSpec) -> MailMessage:
+    return _message(
+        spec.n,
+        spec.thread,
+        spec.subject,
+        spec.sender,
+        week_start + spec.at,
+        spec.body,
+        sent_by_me=spec.sent_by_me,
+        to_me=spec.to_me,
+        cc_me=spec.cc_me,
+        address=spec.address,
+        is_auto=spec.is_auto,
+        attachments=spec.attachments,
+    )
+
+
 def demo_messages(week_start: datetime) -> list[MailMessage]:
-    """week_start(목 00:00) 기준 한 주 분량의 합성 메일."""
+    """week_start(목 00:00) 기준 한 주 분량(6일 안)의 합성 메일."""
+    scenarios = [_from_spec(week_start, s) for s in (*SCENARIO_MAILS_1, *SCENARIO_MAILS_2)]
+    return _base_messages(week_start) + scenarios
+
+
+def _base_messages(week_start: datetime) -> list[MailMessage]:
+    """기존 기본 합성 메일 9건(DEMO-T1~T7). 통합 테스트가 제목·본문에 의존하므로 바꾸지 않는다."""
     d = week_start
     return [
         _message(

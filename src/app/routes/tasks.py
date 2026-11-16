@@ -11,10 +11,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.deps import get_container
+from app.routes.task_fields import first_ref, last_mail, requester_fields, thread_fields
 from domain.clock import KST
 from domain.errors import UserInputError
-from domain.models import STATUS_LABELS, Task, TaskStatus
+from domain.models import STATUS_LABELS, Task, TaskStatus, summary_state_of
 from domain.retention_rules import retention_info
+from domain.tasks.progress import progress_stale, ref_title, rule_summary
 from domain.tasks.service import TaskEdit, TaskNotFoundError, TransitionError, due_badge
 from domain.tasks.triage_view import is_low_confidence, received_group
 from security.links import safe_link
@@ -66,10 +68,13 @@ def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.astimezone(KST).isoformat()
 
 
-def task_json(request: Request, task: Task) -> dict[str, Any]:
+def task_json(request: Request, task: Task, running: set[int] | None = None) -> dict[str, Any]:
     container = get_container(request)
     now = container.clock.now()
     info = retention_info(task, now, container.retention.retention)
+    refs = container.mail.refs_for_task(task.id) if task.id else []
+    if running is None:
+        running = container.summary_job.running_ids()
     return {
         "id": task.id,
         "title": task.title,
@@ -91,7 +96,11 @@ def task_json(request: Request, task: Task) -> dict[str, Any]:
         "weekly_section": task.weekly_section,
         "snoozed": container.tasks.is_snoozed(task),
         "snooze_until": _iso(task.snooze_until),
-        "thread_count": len(container.mail.refs_for_task(task.id)) if task.id else 0,
+        "thread_count": len(refs),
+        # 요약 상태·스레드 최종 메일(결정기록 0028·0029). 기존 필드는 그대로 둔다
+        **thread_fields(task, refs, running, _iso),
+        # 요청자 구분·외부 회사명(결정기록 0027). requester_dept는 그대로 둔다
+        **requester_fields(container.companies, task),
     }
 
 
@@ -116,19 +125,26 @@ def list_tasks(
         tasks = [t for t in tasks if container.tasks.is_snoozed(t) == want]
     # 아직 AI 요청 요약을 만들지 않은 업무(제목이 메일 제목에서 온 임시 제목)
     pending = container.summary_job.pending_ids()
+    running = container.summary_job.running_ids()
     now = container.clock.now()
     return JSONResponse(
         [
             {
-                **task_json(request, t),
+                **task_json(request, t, running),
                 "summary_pending": t.id in pending,
-                # 받은 시각 묶음(오늘·어제·이번 주·이전)과 확신도 낮음 표시(2단계)
-                "group": received_group(t.requested_at or t.created_at, now),
+                # 받은 시각 묶음(오늘·어제·이번 주·이전): 스레드 마지막 메일 기준(결정기록 0028)
+                "group": received_group(_group_time(container, t), now),
                 "low_confidence": is_low_confidence(t.confidence),
             }
             for t in tasks
         ]
     )
+
+
+def _group_time(container: Any, task: Task) -> datetime:
+    refs = container.mail.refs_for_task(task.id) if task.id else []
+    at, _ = last_mail(task, refs)
+    return at or task.created_at
 
 
 @router.get("/{task_id}")
@@ -140,10 +156,26 @@ def get_task(request: Request, task_id: int) -> JSONResponse:
         return _error("요청한 항목을 찾을 수 없습니다.", 404)
     body = task_json(request, task)
     body["evidence"] = container.tasks.evidence(task_id)
+    refs = container.mail.refs_for_task(task_id)
     body["mail_refs"] = [
-        {"id": ref.id, "received_at": _iso(ref.received_at), "summary": ref.summary}
-        for ref in container.mail.refs_for_task(task_id)
+        {
+            "id": ref.id,
+            "received_at": _iso(ref.received_at),
+            "summary": ref.summary,
+            # 방향·요약 상태(결정기록 0028·0029). title은 AI 요약이 끝난 메일만
+            "direction": ref.direction,
+            "summary_state": summary_state_of(ref),
+            "title": ref_title(ref),
+        }
+        for ref in refs
     ]
+    # 구조화 요약(요청 사항·기한·필요 조치, 마스킹된 AI 요약, 결정기록 0021). 첫 메일 기준
+    first = first_ref(refs)
+    body["digest"] = first.digest if first is not None else None
+    # 진행 경과(결정기록 0028): 규칙 요약 + 저장된 AI 진행 요약(마스킹)과 새 메일 여부
+    body["progress"] = rule_summary(refs)
+    body["progress_digest"] = task.progress_digest
+    body["progress_stale"] = progress_stale(task, refs)
     return JSONResponse(body)
 
 

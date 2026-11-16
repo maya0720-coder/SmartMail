@@ -1,4 +1,4 @@
-// 내 할 일 목록 도우미: 정렬·페이지 크기·페이저·상태 분포 도넛(디자인 명세 01·03).
+// 내 할 일 목록 도우미: 정렬·페이지 크기·상태 분포 도넛(디자인 명세 01·03). 페이저(paginate·renderPager)는 pager.js.
 // 정렬·페이지·선택 상태는 메모리 변수에만 둔다(브라우저 저장소 금지). 모든 글자는 el()/textContent로만 넣는다.
 "use strict";
 
@@ -14,10 +14,14 @@ function isShell() {
   return document.body.dataset.page === "dashboard" && window.matchMedia(SHELL_QUERY).matches;
 }
 
-// 정렬: key = "created"(기본, 최근 생성순) | "title" | "due", dir = 1(오름) | -1(내림)
+// 정렬: key = "recent"(기본, 스레드 마지막 메일 최근순) | "title" | "due", dir = 1(오름) | -1(내림)
+// 마지막 메일 시각이 없으면 요청일, 그것도 없으면 생성 순서(ID)로 둔다(결정기록 0028)
+const recentOf = (t) => String(t.last_mail_at || t.requested_at || "");
 function sortTasks(list, sort) {
   const copy = list.slice();
-  if (sort.key === "title") {
+  if (sort.key === "recent") {
+    copy.sort((a, b) => -sort.dir * (recentOf(b).localeCompare(recentOf(a)) || b.id - a.id));
+  } else if (sort.key === "title") {
     copy.sort((a, b) => sort.dir * a.title.localeCompare(b.title, "ko"));
   } else if (sort.key === "due") {
     // 기한 없는 업무는 방향과 관계없이 맨 뒤
@@ -32,15 +36,7 @@ function sortTasks(list, sort) {
 function nextSort(sort, key) {
   if (sort.key !== key) return { key, dir: 1 };
   if (sort.dir === 1) return { key, dir: -1 };
-  return { key: "created", dir: -1 };
-}
-
-function paginate(list, page, perPage) {
-  const total = list.length;
-  const pages = Math.max(1, Math.ceil(total / perPage));
-  const current = Math.min(Math.max(1, page), pages);
-  const start = (current - 1) * perPage;
-  return { items: list.slice(start, start + perPage), page: current, pages, start, end: Math.min(start + perPage, total), total };
+  return { key: "recent", dir: -1 };
 }
 
 // 페이지 크기. 앱 셸: 목록 영역(#todo-wrap)의 실제 높이 기준. 문서형: 창 높이 − 표 위치 기준.
@@ -55,27 +51,6 @@ function computePerPage(wrap, tbody) {
   const top = tbody.getBoundingClientRect().top + window.scrollY;
   const room = window.innerHeight - Math.min(top, window.innerHeight * 0.6) - DOC_PAGER_RESERVE - DOC_BOTTOM_GAP;
   return Math.max(MIN_PER_PAGE_DOC, Math.floor(room / rowHeight));
-}
-
-// ‹ 1 2 … n › 형태. 현재 페이지는 aria-current="page"
-function pageNumbers(page, pages) {
-  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
-  const nums = [...new Set([1, pages, page - 1, page, page + 1])].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
-  const out = [];
-  nums.forEach((n, i) => { if (i && n - nums[i - 1] > 1) out.push("…"); out.push(n); });
-  return out;
-}
-
-function renderPager(nav, info, view, perPage, onGo) {
-  info.textContent = view.total ? (view.start + 1) + "–" + view.end + " / " + view.total + "건 · 페이지당 " + perPage + "건" : "0건";
-  if (view.pages <= 1) { nav.replaceChildren(); return; }
-  const button = (label, target, attrs) => el("button", { type: "button", class: "pg-btn", onclick: () => onGo(target), ...attrs }, label);
-  nav.replaceChildren(
-    button(icon("chevron-left"), view.page - 1, { "aria-label": "이전 페이지", disabled: view.page === 1 }),
-    ...pageNumbers(view.page, view.pages).map((n) => n === "…"
-      ? el("span", { class: "pg-gap", "aria-hidden": "true" }, "…")
-      : button(String(n), n, n === view.page ? { "aria-current": "page", "aria-label": n + "페이지(현재)" } : { "aria-label": n + "페이지" })),
-    button(icon("chevron-right"), view.page + 1, { "aria-label": "다음 페이지", disabled: view.page === view.pages }));
 }
 
 // 상태 분포 도넛(새 API 없이 allTasks로 계산). 범례 6개를 항상 보여 주고(0건은 흐리게), 누르면 필터를 바꾼다.

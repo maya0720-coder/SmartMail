@@ -253,12 +253,21 @@ def test_auth05_idle_expiry_discards_bundle(clock: FixedClock) -> None:
 
 def test_login_progress_has_no_credentials() -> None:
     progress = LoginProgress()
+    # 기존 필드는 그대로, 보안문자 필드(결정기록 0025)는 하위 호환으로 추가됨
+    idle = {
+        "otp_waiting": False,
+        "otp_retry": False,
+        "kind": None,
+        "captcha_waiting": False,
+        "captcha_retry": False,
+        "captcha_seq": 0,
+    }
     progress.update("37")
-    assert progress.snapshot() == {"mfa_waiting": True, "mfa_number": "37"}
+    assert progress.snapshot() == {"mfa_waiting": True, "mfa_number": "37", **idle}
     progress.update("<script>")  # 숫자가 아니면 번호로 쓰지 않음
     assert progress.snapshot()["mfa_number"] is None
     progress.update("")
-    assert progress.snapshot() == {"mfa_waiting": False, "mfa_number": None}
+    assert progress.snapshot() == {"mfa_waiting": False, "mfa_number": None, **idle}
 
 
 class SsoAuthenticator(FakePasswordAuthenticator):
@@ -299,19 +308,21 @@ def test_auth01_login_all_api(tmp_path: Path, clock: FixedClock) -> None:
         pending = client.get("/api/login/pending").json()
         assert pending["need_company"] and pending["need_wiki"]
         assert pending["account_domain"] == "golfzon.com" and pending["dismissed"] is False
-        assert "groupware" in pending["sites"]  # 그룹웨어도 일괄 로그인 대상(결정기록 0017)
+        # 그룹웨어는 일괄 로그인에서 빼고, 사용자가 직접 로그인한다(결정기록 0026)
+        assert "groupware" not in pending["sites"] and pending["manual_sites"] == ["groupware"]
         body = {"user_id": "tester01", "pass" + "word": value}
         done = client.post("/api/login/all", json=body)
         assert value not in done.text and "tester01" not in done.text
         assert all(r["logged_in"] for r in done.json()["results"])
-        assert {r["site"] for r in done.json()["results"]} == {
-            "ai-ground",
-            "g-knowledge",
-            "wiki",
-            "groupware",
-        }
-        # 이미 로그인된 사이트는 다시 묻지 않는다
+        assert {r["site"] for r in done.json()["results"]} == {"ai-ground", "g-knowledge", "wiki"}
+        # 이미 로그인된 사이트는 다시 묻지 않는다. 그룹웨어는 아직 직접 로그인 대상으로 남는다
         assert client.get("/api/login/pending").json()["sites"] == []
+        assert client.get("/api/login/pending").json()["manual_sites"] == ["groupware"]
+        only = client.get("/api/login/pending", params={"site": "groupware"}).json()
+        assert only["sites"] == ["groupware"]
+        manual = client.post("/api/login/all", json={**body, "only": "groupware"}).json()
+        assert [(r["site"], r["logged_in"]) for r in manual["results"]] == [("groupware", True)]
+        assert client.get("/api/login/pending").json()["manual_sites"] == []
         assert client.post("/api/login/all", json={}).json()["results"] == []
         assert client.post("/api/login/all?u=x", json={}).status_code == 400
         assert client.post("/api/login/all", json={"remember": True}).status_code == 422

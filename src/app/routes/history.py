@@ -40,6 +40,8 @@ class SearchBody(BaseModel):
     task_id: int | None = Field(default=None, ge=1)
     start_from: Literal["app", "gk", "ai"] = "app"
     module: ModuleTag | None = None
+    # False면 사례 찾기만(AI 호출 없음). True면 찾은 사례를 근거로 AI 해결 방안까지(결정기록 0021)
+    suggest: bool = False  # AI 호출은 사용자가 명시할 때만(보안검토 0021)
 
 
 class FeedbackBody(BaseModel):
@@ -93,6 +95,7 @@ def outcome_json(outcome: SearchOutcome) -> dict[str, Any]:
                 {"title": h.title, "link": h.link, "snippet": h.snippet} for h in stage.gk_hits
             ],
             "ai_answer": None,
+            "cases_used": stage.cases_used,
         }
         if stage.ai_answer is not None:
             item["ai_answer"] = {
@@ -152,7 +155,11 @@ def search(request: Request, body: SearchBody) -> JSONResponse:
         return _error("요청한 항목을 찾을 수 없습니다.", 404)
     try:
         outcome = container.search.search(
-            body.query, task_id=body.task_id, start_from=body.start_from, module=body.module
+            body.query,
+            task_id=body.task_id,
+            start_from=body.start_from,
+            module=body.module,
+            suggest=body.suggest,
         )
     except UserInputError as exc:
         return _error(str(exc), 400)

@@ -114,3 +114,15 @@ def test_ai03_plain_str_rejected_for_knowledge_ai(
         ]
     )
     assert status != 0 and "arg-type" in stdout
+
+
+def test_ai_call_log_keeps_no_mail_content(db: Database, clock: FixedClock) -> None:
+    """AI 호출 기록에는 메일 내용 없이 호출 종류·건수만 남긴다(보안검토 0021)."""
+    gateway = _gateway(db, clock, FakeKnowledgeAI())
+    marker = "합성거래처가나다"
+    gateway.classify_task(mask(f"{marker} 전표 확인 요청"))
+    gateway.suggest_solution(mask(f"{marker} 오류"), [mask(f"{marker} 사례")])
+    gateway.summarize_requests([mask(f"제목: {marker}" + chr(10) + "본문: 확인 부탁드립니다")])
+    records = SqliteAiCallLog(db).list_recent()
+    assert len(records) == 3
+    assert all(marker not in r.request_summary.value for r in records)

@@ -17,7 +17,7 @@
           <input id="st-id" name="x-id" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="100" required aria-describedby="st-id-hint">
           <span class="id-suffix" id="st-suffix">@golfzon.com</span>
         </div>
-        <p class="hint" id="st-id-hint">AI-Ground·G-Knowledge는 <b>아이디<span id="st-domain">@golfzon.com</span></b>, 위키·그룹웨어는 <b>아이디</b>만으로 로그인합니다.</p>
+        <p class="hint" id="st-id-hint">AI-Ground·G-Knowledge는 <b>아이디<span id="st-domain">@golfzon.com</span></b>, 위키는 <b>아이디</b>만으로 로그인합니다. 그룹웨어는 필요할 때 설정·연결에서 따로 로그인합니다.</p>
       </div>
       <div class="field">
         <label for="st-pw">암호</label>
@@ -31,6 +31,29 @@
         </div>
       </details>
       <p class="mfa" id="st-mfa" aria-live="polite"></p>
+      <!-- 그룹웨어 인증문자(결정기록 0020): 로그인 중 요청이 오면 보인다. 번호는 전송 직후 지운다. -->
+      <div class="otp hidden" id="st-otp">
+        <label for="st-otp-code" id="st-otp-msg">그룹웨어 인증문자로 받은 번호를 입력해 주세요.</label>
+        <div class="otp-row">
+          <input id="st-otp-code" name="x-otp" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" maxlength="12">
+          <button type="button" class="btn primary" id="st-otp-ok">확인</button>
+          <button type="button" class="btn" id="st-otp-cancel">취소</button>
+        </div>
+      </div>
+      <!-- 그룹웨어 보안문자(결정기록 0025): 로그인 중인 같은 화면에서 캡처한 이미지(서버가 만든 data URL만).
+           값은 전송 직후 지운다. -->
+      <div class="otp captcha hidden" id="st-captcha">
+        <label for="st-captcha-code" id="st-captcha-msg">그룹웨어 보안문자를 입력해 주세요.</label>
+        <div class="captcha-img">
+          <img id="st-captcha-img" alt="그룹웨어 보안문자 이미지" width="200" height="60">
+          <button type="button" class="btn" id="st-captcha-refresh">새 이미지</button>
+        </div>
+        <div class="otp-row">
+          <input id="st-captcha-code" name="x-captcha" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40">
+          <button type="button" class="btn primary" id="st-captcha-ok">확인</button>
+          <button type="button" class="btn" id="st-captcha-cancel">취소</button>
+        </div>
+      </div>
       <p class="err" id="st-err" role="alert"></p>
       <div class="m-actions">
         <button type="button" class="btn" id="st-later">나중에</button>
