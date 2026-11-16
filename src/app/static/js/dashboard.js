@@ -386,4 +386,4 @@ loadCategoryKinds().finally(refresh);
 
 // 상세 패널 크기 조절(결정기록 0016). 폭이 바뀌면 #todo-wrap의 ResizeObserver가 행 수를 다시 계산한다
 initSplitter({ handle: document.getElementById("split-detail"), panel: document.getElementById("detail"), other: document.querySelector(".todo-card"),
-  cssVar: "--detail-w", prefKey: "detail_w", side: "right", min: 280, max: 640, otherMin: 520 });
+  cssVar: "--detail-w", prefKey: "detail_w", side: "right", min: 280, maxRatio: 0.6, otherMin: 520 });

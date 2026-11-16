@@ -11,9 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.deps import get_container
 from app.ui_prefs import (
+    ALL_KEYS,
     MAX_PANEL_WIDTH,
     MIN_PANEL_WIDTH,
-    PREF_KEYS,
     load_ui_prefs,
     reset_ui_prefs,
     save_ui_prefs,
@@ -23,12 +23,13 @@ router = APIRouter(prefix="/api/ui-prefs")
 
 
 class UiPrefsBody(BaseModel):
-    """바꿀 값만 보낸다. 허용 키 2개 외에는 거부한다."""
+    """바꿀 값만 보낸다. 허용 키(폭 2개·넓게 보기 1개) 외에는 거부한다."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     detail_w: int | None = Field(default=None, ge=MIN_PANEL_WIDTH, le=MAX_PANEL_WIDTH)
     triage_list_w: int | None = Field(default=None, ge=MIN_PANEL_WIDTH, le=MAX_PANEL_WIDTH)
+    triage_wide: bool | None = None  # 제안 상세 넓게 보기(결정기록 0033)
 
 
 @router.get("")
@@ -53,8 +54,8 @@ def delete_prefs(request: Request) -> JSONResponse:
 
 @router.delete("/{key}")
 def delete_pref(request: Request, key: str) -> JSONResponse:
-    """패널 하나만 기본 폭으로 되돌린다(손잡이 더블클릭·Enter)."""
-    if key not in PREF_KEYS:
+    """설정 하나만 기본값으로 되돌린다(손잡이 더블클릭·Enter, 넓게 보기 끄기)."""
+    if key not in ALL_KEYS:
         return JSONResponse({"error": "알 수 없는 설정입니다."}, status_code=400)
     store = get_container(request).app_settings
     reset_ui_prefs(store, [key])

@@ -187,6 +187,8 @@ class SqliteAppSettings:
             # 화면 패널 폭(px 숫자만, 결정기록 0016)
             "ui_detail_w",
             "ui_triage_list_w",
+            # 제안 상세 넓게 보기 켬 표시("1"만, 결정기록 0033)
+            "ui_triage_wide",
         }
     )
 

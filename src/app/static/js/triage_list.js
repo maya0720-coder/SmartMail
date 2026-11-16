@@ -302,6 +302,7 @@ document.addEventListener("keydown", (event) => {
     s: () => decideTriage("snooze"),
     d: () => decideTriage("dismiss"),
     e: () => startTitleEdit(),
+    w: () => toggleTriageWide(),  // 상세 넓게 보기(결정기록 0033)
     q: () => { if (typeof startQuickMode === "function") startQuickMode(); },
     Enter: () => openTriageDrawer(document.querySelector("#tr-items .tr-item.sel")),
   };

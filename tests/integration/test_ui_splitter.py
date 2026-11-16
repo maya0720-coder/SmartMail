@@ -15,6 +15,12 @@ from fixtures.ui_server import chromium, csrf_post, demo_server
 from storage.repositories import SqliteTaskRepository
 
 WIDTH = "(s) => Math.round(document.querySelector(s).getBoundingClientRect().width)"
+# 손잡이 최대 폭: min(두 패널 합계 × 비율, 합계 − 맞은편 최소 폭)(splitter.js maxNow와 같은 계산)
+MAX_OF = """([a, b, ratio, otherMin]) => {
+  const all = document.querySelector(a).getBoundingClientRect().width
+    + document.querySelector(b).getBoundingClientRect().width;
+  return Math.floor(Math.min(all * ratio, all - otherMin));
+}"""
 # 패널 안에 가로 스크롤이 없고, 보이는 자식이 패널 밖으로 나가지 않는다
 FITS = """(s) => {
   const panel = document.querySelector(s);
@@ -91,8 +97,11 @@ def test_ui_dashboard_splitter_drag_keyboard_and_persist(tmp_path: Path) -> None
         _drag(page, "#split-detail", -100)  # 왼쪽으로 끌면 상세가 커진다
         assert abs(page.evaluate(WIDTH, "#detail") - 420) <= 2
         assert not page.evaluate("document.body.classList.contains('resizing')")
-        _drag(page, "#split-detail", -900)  # 최대 640px에서 멈춘다
-        assert page.evaluate(WIDTH, "#detail") == 640
+        _drag(
+            page, "#split-detail", -900
+        )  # 최대(합계의 60%, 목록 520px 보장)에서 멈춘다(결정기록 0033)
+        detail_max = page.evaluate(MAX_OF, ["#detail", ".todo-card", 0.6, 520])
+        assert page.evaluate(WIDTH, "#detail") == detail_max
         _drag(page, "#split-detail", 900)  # 최소 280px에서 멈춘다
         assert page.evaluate(WIDTH, "#detail") == 280
         assert page.locator("#split-detail").get_attribute("aria-valuenow") == "280"
@@ -107,7 +116,7 @@ def test_ui_dashboard_splitter_drag_keyboard_and_persist(tmp_path: Path) -> None
         assert page.evaluate(WIDTH, "#detail") == 344
         assert page.locator("#split-detail").get_attribute("aria-valuenow") == "344"
         page.keyboard.press("End")
-        assert page.evaluate(WIDTH, "#detail") == 640
+        assert page.evaluate(WIDTH, "#detail") == detail_max
         page.keyboard.press("Home")
         assert page.evaluate(WIDTH, "#detail") == 280
         page.keyboard.press("ArrowLeft")
@@ -126,7 +135,7 @@ def test_ui_dashboard_splitter_drag_keyboard_and_persist(tmp_path: Path) -> None
         page.set_viewport_size({"width": 1120, "height": 900})
         page.wait_for_timeout(200)
         assert page.evaluate(WIDTH, ".todo-card") >= 520
-        assert page.evaluate(WIDTH, "#detail") < 640
+        assert page.evaluate(WIDTH, "#detail") < detail_max
         page.set_viewport_size({"width": 1000, "height": 900})  # 서랍 구간: 손잡이 숨김
         assert not page.locator("#split-detail").is_visible()
 
@@ -153,11 +162,15 @@ def test_ui_settings_resets_layout(tmp_path: Path) -> None:
         assert page.evaluate(WIDTH, "#tr-list") == 380
         _drag(page, "#split-list", 100)  # 오른쪽으로 끌면 목록이 커진다
         assert abs(page.evaluate(WIDTH, "#tr-list") - 480) <= 2
-        _drag(page, "#split-list", 900)
-        assert page.evaluate(WIDTH, "#tr-list") == 560
+        _drag(
+            page, "#split-list", 900
+        )  # 고정 상한 없이 합계의 70%·상세 420px 보장까지(결정기록 0033)
+        list_max = page.evaluate(MAX_OF, ["#tr-list", "#tr-detail", 0.7, 420])
+        assert list_max > 560
+        assert page.evaluate(WIDTH, "#tr-list") == list_max
         page.reload()
         page.wait_for_selector("#tr-items .tr-item.sel")
-        assert page.evaluate(WIDTH, "#tr-list") == 560
+        assert page.evaluate(WIDTH, "#tr-list") == list_max
 
         page.goto(base + "/settings")
         page.click("#btn-ui-reset")

@@ -439,7 +439,11 @@ def test_ui_prefs_ignores_non_ascii_digits(tmp_path: Path, clock: FixedClock) ->
     store.set("ui_triage_list_w", "9" * 150)
     with app_client(container) as client:
         assert client.get("/").status_code == 200
-        assert client.get("/api/ui-prefs").json() == {"detail_w": None, "triage_list_w": None}
+        assert client.get("/api/ui-prefs").json() == {
+            "detail_w": None,
+            "triage_list_w": None,
+            "triage_wide": False,
+        }
 
 
 def test_auth01_groupware_wrong_input_wins_over_visible_otp_box() -> None:

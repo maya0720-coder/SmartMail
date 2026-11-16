@@ -1,6 +1,6 @@
-"""화면 배치 설정 API 테스트(결정기록 0016, 디자인 명세 06 7장 ⑦⑧).
+"""화면 배치 설정 API 테스트(결정기록 0016·0033, 디자인 명세 06 7장 ⑦⑧).
 
-패널 폭 숫자만 저장한다. 허용 키·범위 밖 값과 CSRF 없는 변경을 거부한다.
+패널 폭 숫자와 넓게 보기 켬/끔만 저장한다. 허용 키·범위 밖 값과 CSRF 없는 변경을 거부한다.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from domain.clock import FixedClock
 from fixtures.app_factory import app_client, make_container
 from storage.repositories import SqliteAppSettings
 
+EMPTY = {"detail_w": None, "triage_list_w": None, "triage_wide": False}
+
 
 def _delete(client: TestClient, url: str) -> Any:
     """화면 스크립트(api 도우미)처럼 JSON 본문을 붙여 보낸다(보안 미들웨어가 JSON 요청만 받는다)."""
@@ -25,35 +27,65 @@ def test_ui_prefs_save_load_and_reset(tmp_path: Path, clock: FixedClock) -> None
     """⑦ 저장한 폭이 다음 화면 렌더링에 내려오고, 초기화하면 사라진다."""
     container = make_container(tmp_path, clock)
     with app_client(container) as client:
-        assert client.get("/api/ui-prefs").json() == {"detail_w": None, "triage_list_w": None}
+        assert client.get("/api/ui-prefs").json() == EMPTY
         assert "data-detail-w" not in client.get("/").text
         saved = client.put("/api/ui-prefs", json={"detail_w": 480})
         assert saved.status_code == 200
-        assert saved.json() == {"detail_w": 480, "triage_list_w": None}
+        assert saved.json() == {**EMPTY, "detail_w": 480}
         client.put("/api/ui-prefs", json={"triage_list_w": 300})
         assert 'data-detail-w="480"' in client.get("/").text
         assert 'data-tr-list-w="300"' in client.get("/suggestions").text
         # 패널 하나만 기본 폭으로
         assert _delete(client, "/api/ui-prefs/detail_w").json() == {
-            "detail_w": None,
+            **EMPTY,
             "triage_list_w": 300,
         }
         assert _delete(client, "/api/ui-prefs/nope").status_code == 400
         # 전체 초기화
-        assert _delete(client, "/api/ui-prefs").json() == {"detail_w": None, "triage_list_w": None}
+        assert _delete(client, "/api/ui-prefs").json() == EMPTY
         assert "data-tr-list-w" not in client.get("/suggestions").text
+
+
+def test_ui_prefs_wide_screen_width_allowed(tmp_path: Path, clock: FixedClock) -> None:
+    """N1(결정기록 0033): 넓은 모니터에서 넓힌 폭(800px 초과)도 저장·복원한다. 상한은 2400px."""
+    container = make_container(tmp_path, clock)
+    with app_client(container) as client:
+        assert client.put("/api/ui-prefs", json={"triage_list_w": 1300}).status_code == 200
+        assert client.put("/api/ui-prefs", json={"detail_w": 2400}).status_code == 200
+        assert client.get("/api/ui-prefs").json() == {
+            **EMPTY,
+            "detail_w": 2400,
+            "triage_list_w": 1300,
+        }
+        assert 'data-tr-list-w="1300"' in client.get("/suggestions").text
+
+
+def test_ui_prefs_triage_wide_toggle(tmp_path: Path, clock: FixedClock) -> None:
+    """U3(결정기록 0033): 넓게 보기 켬/끔을 서버 설정에 저장하고 화면에 내려준다."""
+    container = make_container(tmp_path, clock)
+    with app_client(container) as client:
+        assert "data-tr-wide" not in client.get("/suggestions").text
+        assert client.put("/api/ui-prefs", json={"triage_wide": True}).json()["triage_wide"]
+        assert 'data-tr-wide="1"' in client.get("/suggestions").text
+        assert client.put("/api/ui-prefs", json={"triage_wide": False}).json() == EMPTY
+        client.put("/api/ui-prefs", json={"triage_wide": True})
+        assert _delete(client, "/api/ui-prefs/triage_wide").json() == EMPTY
+        client.put("/api/ui-prefs", json={"triage_wide": True})
+        assert _delete(client, "/api/ui-prefs").json() == EMPTY
 
 
 @pytest.mark.parametrize(
     "body",
     [
         {"detail_w": 199},  # 범위 아래
-        {"detail_w": 801},  # 범위 위
+        {"detail_w": 2401},  # 범위 위
         {"triage_list_w": -1},
         {"detail_w": "480"},  # 숫자만 허용
         {"detail_w": 480.5},
         {"detail_w": True},
-        {"other_w": 300},  # 허용 키 2개 외 거부
+        {"triage_wide": 1},  # 켬/끔은 참·거짓만
+        {"triage_wide": "true"},
+        {"other_w": 300},  # 허용 키 외 거부
         {"detail_w": 480, "note": "메모"},
     ],
 )
@@ -64,7 +96,7 @@ def test_ui_prefs_rejects_bad_values(
     container = make_container(tmp_path, clock)
     with app_client(container) as client:
         assert client.put("/api/ui-prefs", json=body).status_code in (400, 422)
-        assert client.get("/api/ui-prefs").json() == {"detail_w": None, "triage_list_w": None}
+        assert client.get("/api/ui-prefs").json() == EMPTY
 
 
 def test_ui_prefs_change_requires_csrf(tmp_path: Path, clock: FixedClock) -> None:
@@ -74,8 +106,9 @@ def test_ui_prefs_change_requires_csrf(tmp_path: Path, clock: FixedClock) -> Non
         client.put("/api/ui-prefs", json={"detail_w": 400})
         client.headers.pop("X-CSRF-Token")
         assert client.put("/api/ui-prefs", json={"detail_w": 500}).status_code == 403
+        assert client.put("/api/ui-prefs", json={"triage_wide": True}).status_code == 403
         assert _delete(client, "/api/ui-prefs").status_code == 403
-        assert client.get("/api/ui-prefs").json()["detail_w"] == 400
+        assert client.get("/api/ui-prefs").json() == {**EMPTY, "detail_w": 400}
 
 
 def test_ui_prefs_ignores_tampered_stored_value(tmp_path: Path, clock: FixedClock) -> None:
@@ -84,6 +117,8 @@ def test_ui_prefs_ignores_tampered_stored_value(tmp_path: Path, clock: FixedCloc
     store = SqliteAppSettings(container.db)
     store.set("ui_detail_w", '480" onload="x')
     store.set("ui_triage_list_w", "99999")
+    store.set("ui_triage_wide", '1" onload="x')
     with app_client(container) as client:
-        assert client.get("/api/ui-prefs").json() == {"detail_w": None, "triage_list_w": None}
-        assert "onload" not in client.get("/").text
+        assert client.get("/api/ui-prefs").json() == EMPTY
+        page = client.get("/suggestions").text
+        assert "onload" not in page and "data-tr-wide" not in page

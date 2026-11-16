@@ -64,6 +64,7 @@ function quickCard(task) {
   api("GET", "/api/tasks/" + task.id + "/context").then((ctx) => {
     if (!document.body.contains(card)) return;
     body.replaceChildren(ctx.ok ? contextBody(ctx.data) : el("div", { class: "empty" }, errorText(ctx, "메일을 읽지 못했습니다")));
+    revealHighlight(body);
   });
   enableDrag(card);
   return card;

@@ -18,7 +18,7 @@
 </head>
 {% set nav_icons = {"dashboard": "layout-grid", "suggestions": "inbox", "weekly": "file-text", "history": "history", "settings": "settings"} %}
 {% set short_labels = {"dashboard": "홈", "suggestions": "제안", "weekly": "주간보고", "history": "히스토리", "settings": "설정"} %}
-<body data-page="{{ active }}"{% if ui_prefs.detail_w %} data-detail-w="{{ ui_prefs.detail_w }}"{% endif %}{% if ui_prefs.triage_list_w %} data-tr-list-w="{{ ui_prefs.triage_list_w }}"{% endif %}>
+<body data-page="{{ active }}"{% if ui_prefs.detail_w %} data-detail-w="{{ ui_prefs.detail_w }}"{% endif %}{% if ui_prefs.triage_list_w %} data-tr-list-w="{{ ui_prefs.triage_list_w }}"{% endif %}{% if ui_prefs.triage_wide %} data-tr-wide="1"{% endif %}>
 {% if demo_mode %}
 <div class="demo">데모 모드입니다 · 실제 메일·사이트와 연동되지 않으며 모든 데이터는 가상입니다</div>
 {% endif %}

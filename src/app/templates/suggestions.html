@@ -27,6 +27,11 @@
 </div>
 <div class="triage">
   <section class="card tr-list" id="tr-list" aria-label="제안 목록">
+    <!-- 넓게 보기(결정기록 0033)일 때만 보이는 접힌 목록 열 -->
+    <button type="button" class="tr-rail" id="tr-rail" data-wide-toggle="1" aria-pressed="true" title="목록 다시 펼치기 (W)" aria-label="목록 다시 펼치기 (W)">
+      <svg class="ic" aria-hidden="true"><use href="{{ ic }}chevron-right"></use></svg>
+      <span class="tr-rail-text" aria-hidden="true">목록</span>
+    </button>
     <ul class="tr-items" id="tr-items" role="listbox" aria-label="제안된 업무 (↑↓ 이동)" tabindex="0"></ul>
     <div class="pg tr-pg" id="tr-pg"><span class="pg-info" id="tr-pg-info"></span><nav class="pager" id="tr-pager" aria-label="제안 목록 페이지"></nav></div>
   </section>
@@ -44,6 +49,16 @@
 </section>
 {% endblock %}
 {% block overlays %}<div class="scrim tr-scrim" id="tr-scrim" aria-hidden="true"></div>{% endblock %}
+{% block modals %}
+<!-- 원본 메일 크게 보기(결정기록 0033): 상세에 이미 읽어 온 내용만 복제해 보여 준다 -->
+<div class="dim" id="dlg-mail" role="dialog" aria-modal="true" aria-labelledby="mail-full-head">
+  <div class="modal xl mail-full-modal">
+    <h3 id="mail-full-head">원본 메일 크게 보기</h3>
+    <div class="mail-full" id="mail-full"></div>
+    <div class="m-actions"><button type="button" class="btn" id="mail-full-close">닫기</button></div>
+  </div>
+</div>
+{% endblock %}
 {% block scripts %}
 <script src="{{ asset('js/splitter.js') }}"></script>
 <script src="{{ asset('js/pager.js') }}"></script>

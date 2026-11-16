@@ -55,6 +55,7 @@ document.getElementById("sum-run").addEventListener("click", async () => {
 loadSummaryStatus();
 loadTriage();
 
-// 제안 목록 패널 크기 조절(결정기록 0016)
+// 제안 목록 패널 크기 조절(결정기록 0016·0033): 고정 상한 없이 화면 폭의 70%까지.
+// 상세는 420px 아래로 줄지 않는다(상세 필드가 2열로 바뀌는 지점 고려)
 initSplitter({ handle: document.getElementById("split-list"), panel: document.getElementById("tr-list"), other: document.getElementById("tr-detail"),
-  cssVar: "--tr-list-w", prefKey: "triage_list_w", side: "left", min: 280, max: 560, otherMin: 520 });
+  cssVar: "--tr-list-w", prefKey: "triage_list_w", side: "left", min: 280, maxRatio: 0.7, otherMin: 420 });
