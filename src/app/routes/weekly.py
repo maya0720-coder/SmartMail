@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
@@ -88,8 +88,8 @@ class DraftBody(BaseModel):
     draft_html: str | None = Field(default=None, max_length=MAX_HTML_FIELD_CHARS)
     page_title: str | None = Field(default=None, max_length=200)  # 되돌려 보낸 값(쓰지 않음)
     own_heading: str | None = Field(default=None, max_length=200)  # 되돌려 보낸 값(쓰지 않음)
-    # 초안 응답의 양식 구조(결정기록 0037)를 되돌려 보낸 값. 쓰지 않는다(서버 저장값이 기준)
-    profile: dict[str, Any] | None = None
+    # 초안 응답을 그대로 되돌려 보낼 때의 호환용. null만 받는다(양식 구조는 서버 저장값이 기준)
+    profile: None = None
 
     def to_draft(self) -> WeeklyDraft:
         if self.week_start.tzinfo is None or week_start(self.week_start) != self.week_start:

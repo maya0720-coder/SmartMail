@@ -4,8 +4,9 @@
   사용자가 붙여넣은 HTML을 받는다.
   어느 쪽이든 **내 영역**만 구조로 바꿔 저장한다(값·다른 팀원 영역·이름은 저장하지 않음).
   - 위키에서 읽을 때 내 영역 머리글(h2, 본인 이름)을 못 찾으면 거부한다(다른 팀원 영역 보호).
-  - 붙여넣기에서 내 영역 머리글이 없으면 붙여넣은 전체를 내 영역으로 본다. 이때 h1·h2 머리글은
-    양식 키워드(실적·계획·이슈)와 맞을 때만 남긴다(이름일 수 있는 머리글은 버림).
+  - 붙여넣기에서 내 영역 머리글이 없으면 붙여넣은 전체를 내 영역으로 본다. 이때 머리글은
+    단계와 관계없이 양식 키워드(실적·계획·이슈)와 맞을 때만 글자를 남기고, 나머지는
+    '머리글 N'으로 바꾼다(이름일 수 있는 머리글을 저장하지 않음, 보안 검토 반영).
 - 양식 바뀜 확인: 위키 세션이 **이미 있을 때만** 다시 읽어 구조 지문을 비교한다
   (로그인 창 없음, 0034).
 - 상태(작업 센터용)는 메모리에만 둔다.
@@ -25,16 +26,18 @@ from domain.models import Task
 from domain.ports import Clock
 from domain.weekly.form import FormRules, classify_heading
 from domain.weekly.links import Platform, ReferenceLink
+from domain.weekly.profile_render import render_profile
 from domain.weekly.sections import find_own_section
+from domain.weekly.service import WikiUnavailableError
 from domain.weekly.template_profile import (
     Bindings,
     ProfileBlock,
     bindings_from_json,
     blocks_from_json,
     blocks_json,
+    check_source_size,
     extract_blocks,
     rebind,
-    render_profile,
     structure_hash,
     suggest_bindings,
     validate_bindings,
@@ -153,12 +156,19 @@ class WeeklyProfileService:
         stored = self._store.get(link_id)
         if stored is None:
             return None
-        blocks = blocks_from_json(stored.blocks_json)
+        try:
+            blocks = blocks_from_json(stored.blocks_json)
+        except UserInputError:
+            return None  # 저장값이 범위를 벗어나면 쓰지 않는다(화면은 '양식 없음' → 다시 등록)
+        try:
+            bindings = bindings_from_json(blocks, stored.bindings_json)
+        except UserInputError:
+            bindings = suggest_bindings(blocks, self._rules)  # 연결이 어긋나면 다시 제안
         return Profile(
             stored.link_id,
             stored.name,
             blocks,
-            bindings_from_json(blocks, stored.bindings_json),
+            bindings,
             stored.source_hash,
             stored.source,
             stored.fetched_at,
@@ -174,8 +184,8 @@ class WeeklyProfileService:
         return link
 
     # ---- 가져오기 ----
-    def _keep_heading(self, level: int, text: str) -> bool:
-        return level >= 3 or classify_heading(text, self._rules) is not None
+    def _heading_ok(self, _level: int, text: str) -> bool:
+        return classify_heading(text, self._rules) is not None
 
     def _save(self, link: ReferenceLink, blocks: list[ProfileBlock], source: str) -> Profile:
         old = self.get(link.id)
@@ -216,6 +226,7 @@ class WeeklyProfileService:
             )
         try:
             source = self._wiki.read_page_html(link.url)
+            check_source_size(source)
             region, _found = own_region(source, self._own_heading(), strict=True)
             blocks = extract_blocks(region)
         except Exception as exc:
@@ -239,9 +250,10 @@ class WeeklyProfileService:
 
     def import_from_paste(self, link_id: int, source: str) -> Profile:
         link = self._link(link_id)
+        check_source_size(source)
         region, found = own_region(source, self._own_heading(), strict=False)
-        keep = None if found else self._keep_heading
-        return self._save(link, extract_blocks(region, keep_heading=keep), "paste")
+        heading_ok = None if found else self._heading_ok
+        return self._save(link, extract_blocks(region, heading_ok=heading_ok), "paste")
 
     # ---- 칸 연결 ----
     def save_bindings(self, link_id: int, raw: Mapping[str, Any]) -> Profile:
@@ -275,8 +287,8 @@ class WeeklyProfileService:
             return profile, False, False
         try:
             blocks = self._read_wiki(link)
-        except Exception:  # noqa: BLE001 - 확인 실패는 저장 프로필로 계속(상태에 사유 코드 기록)
-            return profile, False, False
+        except (WikiUnavailableError, UserInputError):
+            return profile, False, False  # 확인 실패는 저장 프로필로 계속(상태에 사유 코드 기록)
         if structure_hash(blocks) == profile.source_hash:
             return profile, False, True
         return self._save(link, blocks, "wiki"), True, True

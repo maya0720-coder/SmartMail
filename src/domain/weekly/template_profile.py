@@ -2,40 +2,39 @@
 
 - 위키에서 읽거나 붙여넣은 양식 HTML에서 **구조만** 뽑는다(순수 로직, 저장·외부 호출 없음).
   - heading(level, text): 머리글 글자는 마스킹 후 60자까지
-  - table(columns, header_rows, sample_rows): 열 이름만 남기고 데이터 행은 개수만 센다
+  - table(columns, header_rows, sample_rows): 열 이름만 남기고 데이터 행은 개수만 센다.
+    th 줄이 없으면 첫 줄 칸 중 열 이름 키워드와 맞는 것만 남기고 나머지는 '열N'으로 바꾼다
   - list(style): 목록 종류만(항목 글자는 버림)
   - paragraph(text): '※'·'참고' 같은 고정 안내 문구만(그 밖의 문단은 내용이라 버림)
 - 칸 연결(바인딩): 머리글마다 넣을 데이터(금주 실적·차주 계획·이슈·고정 문구·비움),
   표 열마다 넣을 업무 필드. 처음에는 키워드 규칙으로 자동 제안하고 사용자가 고친다.
-- 초안은 블록 순서·열 순서 그대로 만든다. 모든 글자는 마스킹·이스케이프한다.
+- 초안 만들기는 `profile_render.py`에 있다(블록·열 순서 그대로, 마스킹·이스케이프).
 """
 
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any, Final
 
-from domain.clock import KST
 from domain.errors import UserInputError
-from domain.models import STATUS_LABELS, Task
 from domain.weekly.form import FormRules, classify_heading
 from domain.weekly.rich import DROP_WITH_CONTENT
 from security.masking import mask
 
-MAX_SOURCE_BYTES: Final = 500_000  # 읽거나 붙여넣는 양식 HTML 상한
+MAX_SOURCE_BYTES: Final = 500_000  # 위키에서 읽는 양식 HTML 상한
+MAX_PASTE_CHARS: Final = 80_000  # 붙여넣기 상한(한글 3바이트여도 요청 본문 256KB 안)
+MAX_TAGS: Final = 20_000  # 태그 수 상한(파서·영역 탐색 비용 제한)
+MAX_SAMPLE_ROWS: Final = 10_000
 MAX_BLOCKS: Final = 80
 MAX_COLUMNS: Final = 12
 MAX_HEADING_CHARS: Final = 60
 MAX_COLUMN_CHARS: Final = 40
 MAX_FIXED_CHARS: Final = 200
 MAX_BLOCKS_JSON: Final = 65_536  # DB CHECK와 같은 값
-MAX_CELL_CHARS: Final = 300
 MIN_LEVEL: Final = 3  # 내 영역 안 머리글(h1·h2는 영역 경계라 h3으로 낮춘다)
 MAX_LEVEL: Final = 4  # 편집기·정리기가 허용하는 가장 작은 머리글
 
@@ -43,10 +42,9 @@ SOURCES: Final = ("done", "planned", "issues", "fixed", "none")
 DATA_SOURCES: Final = ("done", "planned", "issues")
 ROW_FIELDS: Final = ("title", "module", "dept", "status", "due", "closed", "progress", "note")
 # 고정 안내 문구로 볼 문단 시작(그 밖의 문단은 지난 보고 내용이라 저장하지 않는다)
+# ('*'는 목록·강조 글머리로도 쓰여 내용 문단이 섞일 수 있어 제외)
 FIXED_MARKERS: Final = (
     "※",
-    "＊",
-    "*",
     "주)",
     "주:",
     "참고",
@@ -106,6 +104,21 @@ def is_fixed_text(text: str) -> bool:
     return text.startswith(FIXED_MARKERS)
 
 
+def is_column_name(text: str) -> bool:
+    """열 이름 키워드(COLUMN_RULES)와 맞는 짧은 글자인지(데이터 칸을 열 이름으로 저장하지 않음).
+
+    키워드를 포함하고 키워드보다 2자까지만 긴 경우만 인정한다(예: '업무명'은 열 이름,
+    '홍길동 담당 업무'는 데이터).
+    """
+    compact = "".join(text.lower().split())
+    for _name, words in COLUMN_RULES:
+        for word in words:
+            key = "".join(word.lower().split())
+            if key in compact and len(compact) <= len(key) + 2:
+                return True
+    return False
+
+
 # ---- 구조 추출 ----
 _HEADING_TAGS: Final = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 
@@ -113,9 +126,10 @@ _HEADING_TAGS: Final = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 class _Extractor(HTMLParser):
     """양식 HTML을 한 번 훑으며 구조 블록만 모은다(스크립트 실행·외부 요청 없음)."""
 
-    def __init__(self, keep_heading: Callable[[int, str], bool] | None = None) -> None:
+    def __init__(self, heading_ok: Callable[[int, str], bool] | None = None) -> None:
         super().__init__(convert_charrefs=True)
-        self._keep_heading = keep_heading
+        self._heading_ok = heading_ok
+        self._renamed = 0
         self.blocks: list[ProfileBlock] = []
         self._skip = 0
         self._text: list[str] | None = None  # 머리글·문단·칸 글자 모으는 중
@@ -192,9 +206,13 @@ class _Extractor(HTMLParser):
         self._text = None
         if self._kind == "heading":
             text = _clean(raw, MAX_HEADING_CHARS)
-            if text and (self._keep_heading is None or self._keep_heading(self._level, text)):
-                level = min(max(self._level, MIN_LEVEL), MAX_LEVEL)
-                self._add(ProfileBlock("heading", level=level, text=text))
+            if not text:
+                return
+            if self._heading_ok is not None and not self._heading_ok(self._level, text):
+                self._renamed += 1  # 이름일 수 있는 머리글: 글자 대신 자리 이름만 남긴다
+                text = f"머리글 {self._renamed}"
+            level = min(max(self._level, MIN_LEVEL), MAX_LEVEL)
+            self._add(ProfileBlock("heading", level=level, text=text))
         else:
             text = _clean(raw, MAX_FIXED_CHARS)
             if text and is_fixed_text(text):
@@ -208,14 +226,17 @@ class _Extractor(HTMLParser):
             if not all_th:
                 break
             header += 1
-        header = max(header, 1)  # th가 없으면 첫 줄을 열 이름으로 본다
-        columns = tuple(c or f"열{n + 1}" for n, c in enumerate(self._rows[header - 1][0]))
+        names = self._rows[header - 1][0] if header else self._rows[0][0]
+        if header == 0:  # th가 없으면 첫 줄은 데이터일 수 있다: 열 이름 키워드만 남긴다
+            names = [c if is_column_name(c) else "" for c in names]
+        header = max(header, 1)
+        columns = tuple(c or f"열{n + 1}" for n, c in enumerate(names))
         self._add(
             ProfileBlock(
                 "table",
                 columns=columns[:MAX_COLUMNS],
                 header_rows=1,  # 열 이름 줄 하나만 다시 만든다(여러 줄 머리는 마지막 줄 기준)
-                sample_rows=len(self._rows) - header,
+                sample_rows=min(len(self._rows) - header, MAX_SAMPLE_ROWS),
             )
         )
         self._rows = []
@@ -233,16 +254,24 @@ class _Extractor(HTMLParser):
         self.blocks.append(block)
 
 
+def check_source_size(source_html: str) -> None:
+    """양식 HTML 크기·태그 수 상한(파서·영역 탐색 전에 먼저 확인)."""
+    if len(source_html.encode("utf-8")) > MAX_SOURCE_BYTES:
+        raise UserInputError("양식이 너무 큽니다(500KB 이하)")
+    if source_html.count("<") > MAX_TAGS:
+        raise UserInputError(f"양식 태그가 너무 많습니다({MAX_TAGS}개 이하)")
+
+
 def extract_blocks(
-    source_html: str, keep_heading: Callable[[int, str], bool] | None = None
+    source_html: str, heading_ok: Callable[[int, str], bool] | None = None
 ) -> list[ProfileBlock]:
     """양식 HTML → 구조 블록. 크기 초과·구조 없음은 UserInputError.
 
-    keep_heading(원래 단계, 글자)가 거짓이면 그 머리글은 버린다(이름일 수 있는 머리글 제외용).
+    heading_ok(원래 단계, 글자)가 거짓이면 그 머리글 글자는 '머리글 N'으로 바꿔 저장한다
+    (내 영역 머리글이 없는 붙여넣기에서 이름일 수 있는 머리글을 남기지 않기 위함).
     """
-    if len(source_html.encode("utf-8")) > MAX_SOURCE_BYTES:
-        raise UserInputError("양식이 너무 큽니다(500KB 이하)")
-    parser = _Extractor(keep_heading)
+    check_source_size(source_html)
+    parser = _Extractor(heading_ok)
     parser.feed(source_html)
     parser.close()
     if not parser.blocks:
@@ -257,20 +286,52 @@ def blocks_json(blocks: list[ProfileBlock]) -> str:
     return text
 
 
+BAD_STORED: Final = "저장된 양식 구조가 올바르지 않습니다. 양식을 다시 등록해 주세요"
+_TEXT_LIMITS: Final = {"heading": MAX_HEADING_CHARS, "paragraph": MAX_FIXED_CHARS}
+
+
+def _stored_block(b: Any) -> ProfileBlock:
+    """저장값 한 블록을 추출 결과와 같은 범위로 검증한다(DB 값도 믿지 않음)."""
+    if not isinstance(b, dict):
+        raise UserInputError(BAD_STORED)
+    block = ProfileBlock(
+        str(b["kind"]),
+        int(b["level"]),
+        str(b["text"]),
+        tuple(str(c) for c in b["columns"]),
+        int(b["header_rows"]),
+        int(b["sample_rows"]),
+        str(b["style"]),
+    )
+    ok = {
+        "heading": MIN_LEVEL <= block.level <= MAX_LEVEL and bool(block.text),
+        "paragraph": block.level == 0 and is_fixed_text(block.text),
+        "table": block.level == 0
+        and 0 < len(block.columns) <= MAX_COLUMNS
+        and all(0 < len(c) <= MAX_COLUMN_CHARS for c in block.columns)
+        and block.header_rows == 1
+        and 0 <= block.sample_rows <= MAX_SAMPLE_ROWS,
+        "list": block.level == 0 and block.style in ("ul", "ol"),
+    }.get(block.kind, False)
+    if not ok or len(block.text) > _TEXT_LIMITS.get(block.kind, 0):
+        raise UserInputError(BAD_STORED)
+    if block.kind != "table" and (block.columns or block.header_rows or block.sample_rows):
+        raise UserInputError(BAD_STORED)
+    if block.kind != "list" and block.style:
+        raise UserInputError(BAD_STORED)
+    return block
+
+
 def blocks_from_json(text: str) -> list[ProfileBlock]:
-    raw = json.loads(text)
-    return [
-        ProfileBlock(
-            str(b["kind"]),
-            int(b["level"]),
-            str(b["text"]),
-            tuple(str(c) for c in b["columns"]),
-            int(b["header_rows"]),
-            int(b["sample_rows"]),
-            str(b["style"]),
-        )
-        for b in raw
-    ]
+    try:
+        raw = json.loads(text)
+        if not isinstance(raw, list) or not 0 < len(raw) <= MAX_BLOCKS:
+            raise UserInputError(BAD_STORED)
+        return [_stored_block(b) for b in raw]
+    except (KeyError, TypeError, ValueError) as exc:
+        if isinstance(exc, UserInputError):
+            raise
+        raise UserInputError(BAD_STORED) from None
 
 
 def structure_hash(blocks: list[ProfileBlock]) -> str:
@@ -283,6 +344,8 @@ def structure_hash(blocks: list[ProfileBlock]) -> str:
 # ---- 칸 연결 ----
 def suggest_field(column: str) -> str:
     lowered = column.lower()
+    if column.startswith("열") and column[1:].isdigit():
+        return "note"  # 이름을 알 수 없는 열
     for name, words in COLUMN_RULES:
         if any(word.lower() in lowered for word in words):
             return name
@@ -309,6 +372,8 @@ def _index(key: object, blocks: list[ProfileBlock], kind: str) -> int:
 
 def validate_bindings(blocks: list[ProfileBlock], raw: Mapping[str, Any]) -> Bindings:
     """화면이 보낸 칸 연결을 양식 구조에 맞춰 검증한다. 빠진 칸은 비움으로 둔다."""
+    if not isinstance(raw, Mapping):
+        raise UserInputError("칸 연결 정보 형식이 올바르지 않습니다")
     heads = raw.get("headings") or {}
     cols = raw.get("columns") or {}
     if not isinstance(heads, Mapping) or not isinstance(cols, Mapping):
@@ -335,7 +400,11 @@ def validate_bindings(blocks: list[ProfileBlock], raw: Mapping[str, Any]) -> Bin
 
 
 def bindings_from_json(blocks: list[ProfileBlock], text: str) -> Bindings:
-    return validate_bindings(blocks, json.loads(text))
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        raise UserInputError("칸 연결 정보 형식이 올바르지 않습니다") from None
+    return validate_bindings(blocks, raw)
 
 
 def rebind(
@@ -359,93 +428,3 @@ def rebind(
             columns[index] = tuple(known.get(c, "note") for c in block.columns)
             table_no += 1
     return Bindings(headings, columns)
-
-
-# ---- 초안 만들기 ----
-def _date(value: datetime | None) -> str:
-    return "-" if value is None else value.astimezone(KST).strftime("%m/%d")
-
-
-def row_value(task: Task, name: str) -> str:
-    values = {
-        "title": task.title,
-        "module": task.module_tag or "기타",
-        "dept": task.requester_dept or "-",
-        "status": STATUS_LABELS[task.status],
-        "due": _date(task.due_at),
-        "closed": _date(task.closed_at),
-        "progress": task.progress_digest or "",
-        "note": "",
-    }
-    text = " ".join(values[name].split())
-    return mask(text).value[:MAX_CELL_CHARS]
-
-
-def _esc(text: str) -> str:
-    return html.escape(text, quote=False)
-
-
-def _empty_rows(count: int, width: int) -> str:
-    cells = "<td><br /></td>" * width
-    return f"<tr>{cells}</tr>" * max(1, min(count, 3))
-
-
-def _table(block: ProfileBlock, fields: tuple[str, ...], tasks: list[Task] | None) -> str:
-    head = "<tr>" + "".join(f"<th>{_esc(c)}</th>" for c in block.columns) + "</tr>"
-    if tasks:
-        body = "".join(
-            "<tr>"
-            + "".join(f"<td>{_esc(row_value(t, f)) or '<br />'}</td>" for f in fields)
-            + "</tr>"
-            for t in tasks
-        )
-    else:
-        body = _empty_rows(block.sample_rows, len(block.columns))
-    return f"<table><thead>{head}</thead><tbody>{body}</tbody></table>"
-
-
-def _list(style: str, items: list[str]) -> str:
-    tag = "ol" if style == "ol" else "ul"
-    inner = "".join(f"<li>{_esc(i)}</li>" for i in items) or "<li><br /></li>"
-    return f"<{tag}>{inner}</{tag}>"
-
-
-def render_profile(
-    blocks: list[ProfileBlock],
-    bindings: Bindings,
-    sections: Mapping[str, list[Task]],
-    item_text: Callable[[Task], str],
-) -> str:
-    """양식 블록 순서대로 초안 HTML을 만든다(내 영역 본문, 본인 머리글 제외).
-
-    머리글에 연결된 데이터는 그 머리글 아래 첫 표(행) 또는 첫 목록(항목)에 넣는다.
-    아래에 표·목록이 없으면 머리글 바로 뒤에 목록을 만든다.
-    """
-    parts: list[str] = []
-    source: str | None = None
-    filled = True
-
-    def close_section() -> None:
-        if source in DATA_SOURCES and not filled:
-            parts.append(_list("ul", [item_text(t) for t in sections.get(source, [])]))
-
-    for index, block in enumerate(blocks):
-        if block.kind == "heading":
-            close_section()
-            source = bindings.headings.get(index, "none")
-            filled = False
-            parts.append(f"<h{block.level}>{_esc(block.text)}</h{block.level}>")
-        elif block.kind == "paragraph":
-            parts.append(f"<p>{_esc(block.text)}</p>")
-        else:
-            data = None
-            if source in DATA_SOURCES and not filled:
-                data = list(sections.get(source, []))
-                filled = True
-            if block.kind == "table":
-                fields = bindings.columns.get(index, ("note",) * len(block.columns))
-                parts.append(_table(block, fields, data))
-            else:
-                parts.append(_list(block.style, [item_text(t) for t in data or []]))
-    close_section()
-    return "".join(parts)

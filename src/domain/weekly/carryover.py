@@ -22,7 +22,7 @@ from domain.calendar import week_start
 from domain.models import Task, TaskStatus
 from domain.weekly.form import FormRules, classify_heading
 from domain.weekly.rich import blocks, sanitize
-from domain.weekly.sections import find_own_section
+from domain.weekly.sections import OwnSectionError, find_own_section
 from domain.weekly.service import WikiApi, WikiUnavailableError
 from security.masking import mask
 
@@ -157,7 +157,10 @@ class CarryoverService:
             return None
         if page is None:
             return None
-        span = find_own_section(page.body, self._own_heading())
+        try:
+            span = find_own_section(page.body, self._own_heading())
+        except OwnSectionError:
+            return None  # 내 영역 제목이 여러 개면 위키 대신 캐시를 쓴다
         if span is None:
             return None
         return planned_from_html(page.body[span.start : span.end], self._rules)

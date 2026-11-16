@@ -40,10 +40,11 @@ def _text(fragment: str) -> str:
 def _headings(body: str, heading: str) -> list[Span]:
     """제목 텍스트(안쪽 태그 제거)가 heading과 같은 h2의 [시작, 닫는 태그 끝)."""
     found = []
+    lowered = body.lower()  # 한 번만 만든다(머리글마다 다시 만들면 제곱 시간)
     for match in _TAG.finditer(body):
         if match.group(1) or match.group(2).lower() != "h2":
             continue
-        close = body.lower().find("</h2>", match.end())
+        close = lowered.find("</h2>", match.end())
         if close < 0:
             continue
         if _text(body[match.end() : close]) == heading:

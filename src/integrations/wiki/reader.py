@@ -28,7 +28,8 @@ LOGIN_REQUIRED: Final = "위키 로그인이 필요합니다"
 FOREIGN_LINK: Final = "위키 기준 주소와 다른 링크라 조회하지 않습니다"
 TOO_LARGE: Final = "위키 본문이 너무 커서 읽지 않았습니다(500KB 이하)"
 READ_FAILED: Final = "위키 페이지 본문을 읽지 못했습니다(본문 선택자 확인 필요)"
-HTML_SCRIPT: Final = "e => e.innerHTML"
+# 브라우저 안에서 길이를 먼저 보고 너무 크면 가져오지 않는다(메모리·전송량 제한)
+HTML_SCRIPT: Final = "(e, n) => (e.innerHTML.length > n ? null : e.innerHTML)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +101,12 @@ class BrowserWikiReader:
                 element = page.wait_for_selector(rules.content_selector, timeout=wait_ms)
                 if element is None:
                     raise WikiUnavailableError(READ_FAILED)
-                return str(element.evaluate(HTML_SCRIPT))
+                if safe_link(str(page.url), [base]) is None:
+                    raise WikiUnavailableError(FOREIGN_LINK)  # 기다리는 동안 다른 사이트로 이동됨
+                body = element.evaluate(HTML_SCRIPT, rules.max_bytes)
+                if body is None:
+                    raise WikiUnavailableError(TOO_LARGE)
+                return str(body)
             finally:
                 page.close()
 

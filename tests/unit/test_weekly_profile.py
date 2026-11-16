@@ -13,12 +13,12 @@ from domain.clock import KST
 from domain.errors import UserInputError
 from domain.models import Task, TaskSource, TaskStatus
 from domain.weekly.form import FormRules
+from domain.weekly.profile_render import render_profile
 from domain.weekly.profile_service import own_region
 from domain.weekly.template_profile import (
     blocks_json,
     extract_blocks,
     rebind,
-    render_profile,
     structure_hash,
     suggest_bindings,
     validate_bindings,
@@ -97,18 +97,19 @@ def test_wiki02_three_level_heading_form_from_paste() -> None:
     from domain.weekly.form import classify_heading
 
     blocks = extract_blocks(
-        region,
-        keep_heading=lambda level, text: level >= 3 or classify_heading(text, rules) is not None,
+        region, heading_ok=lambda _level, text: classify_heading(text, rules) is not None
     )
     assert [(b.kind, b.level, b.text, b.style) for b in blocks] == [
         ("heading", 3, "금주 실적", ""),
-        ("heading", 3, "개발", ""),
-        ("heading", 4, "세부 진행", ""),
+        ("heading", 3, "머리글 1", ""),
+        ("heading", 4, "세부 진행", ""),  # 양식 키워드('진행')와 맞음
         ("list", 0, "", "ul"),
         ("heading", 3, "차주 계획", ""),
         ("list", 0, "", "ol"),
+        ("heading", 3, "머리글 2", ""),
     ]
-    assert "홍길동" not in blocks_json(blocks)  # 이름일 수 있는 h2는 버림
+    # 양식 키워드가 아닌 머리글은 단계와 관계없이 글자를 남기지 않는다(이름일 수 있음)
+    assert "홍길동" not in blocks_json(blocks) and "개발" not in blocks_json(blocks)
 
 
 def test_wiki02_fixed_text_form() -> None:

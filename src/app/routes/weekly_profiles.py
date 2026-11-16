@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.deps import get_container
 from domain.errors import UserInputError
 from domain.weekly.service import WikiLoginRequiredError, WikiUnavailableError
-from domain.weekly.template_profile import MAX_BLOCKS, MAX_COLUMNS, MAX_SOURCE_BYTES
+from domain.weekly.template_profile import MAX_BLOCKS, MAX_COLUMNS, MAX_PASTE_CHARS
 from security.logging_policy import EventType, Site, log_event
 
 router = APIRouter(prefix="/api/weekly/links")
@@ -52,7 +52,7 @@ BlockKey = Annotated[str, Field(pattern=r"^\d{1,3}$")]
 class PasteBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    html: str = Field(min_length=1, max_length=MAX_SOURCE_BYTES)
+    html: str = Field(min_length=1, max_length=MAX_PASTE_CHARS)
 
 
 class BindingsBody(BaseModel):
@@ -101,11 +101,13 @@ def import_profile(request: Request, link_id: int) -> JSONResponse:
     try:
         get_container(request).weekly_profiles.import_from_wiki(link_id)
     except WikiLoginRequiredError as exc:
+        log_event(EventType.WIKI_READ, Site.WIKI, success=False)
         return _error(str(exc), 503, "login_required")
     except WikiUnavailableError as exc:
         log_event(EventType.WIKI_READ, Site.WIKI, success=False)
         return _error(str(exc), 503)
     except UserInputError as exc:
+        log_event(EventType.WIKI_READ, Site.WIKI, success=False)
         return _error(str(exc), 400)
     log_event(EventType.WIKI_READ, Site.WIKI, success=True)
     return _profile_response(request, link_id)
@@ -137,7 +139,11 @@ def save_bindings(request: Request, link_id: int, body: BindingsBody) -> JSONRes
 def check_profile(request: Request, link_id: int) -> JSONResponse:
     if (missing := _known_link(request, link_id)) is not None:
         return missing
-    _profile, changed, checked = get_container(request).weekly_profiles.check(link_id)
+    service = get_container(request).weekly_profiles
+    before = service.status.at
+    _profile, changed, checked = service.check(link_id)
+    if service.status.at != before:  # 실제로 위키를 읽었을 때만 기록(성공·실패)
+        log_event(EventType.WIKI_READ, Site.WIKI, success=service.status.state == "done")
     return _profile_response(request, link_id, changed=changed, checked=checked)
 
 

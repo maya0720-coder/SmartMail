@@ -116,8 +116,9 @@ def test_wiki02_paste_bindings_and_validation(tmp_path: Path, clock: FixedClock)
         url = f"/api/weekly/links/{link['id']}/profile"
         pasted = client.post(url + "/paste", json={"html": PAGE})
         assert pasted.status_code == 200
-        # 500KB 초과 붙여넣기는 요청 크기 제한(413) 또는 입력 검증(422)에서 거부
-        assert client.post(url + "/paste", json={"html": "x" * 500_001}).status_code in (413, 422)
+        # 붙여넣기 상한(8만 자) 초과는 입력 검증(422), 요청 본문 상한 초과는 413
+        assert client.post(url + "/paste", json={"html": "x" * 80_001}).status_code == 422
+        assert client.post(url + "/paste", json={"html": "x" * 500_001}).status_code == 413
         saved = client.put(
             url + "/bindings",
             json={"headings": {"0": "planned"}, "columns": {"1": ["title", "module", "due"]}},

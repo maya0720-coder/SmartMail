@@ -6,7 +6,8 @@
 
 const PF = { link: null, pasted: "", data: null };
 const PF_KIND = { heading: "머리글", table: "표", list: "목록", paragraph: "고정 문구" };
-const PF_MAX_BYTES = 500000;
+const PF_MAX_CHARS = 80000;  // 서버 MAX_PASTE_CHARS와 같은 값
+const PF_MAX_BODY = 250000;  // 요청 본문 상한(256KB) 안
 
 function pfButton(label, onclick) {
   return el("button", { class: "btn sm", type: "button", onclick }, label);
@@ -53,8 +54,8 @@ document.getElementById("pf-paste").addEventListener("paste", (event) => {
   const html = (event.clipboardData && event.clipboardData.getData("text/html")) || "";
   const info = document.getElementById("pf-paste-info");
   if (!html) { PF.pasted = ""; info.textContent = "서식이 있는 내용이 아닙니다. 위키 페이지에서 내 영역을 선택해 복사해 주세요"; return; }
-  const size = new TextEncoder().encode(html).length;
-  if (size > PF_MAX_BYTES) { PF.pasted = ""; info.textContent = "너무 큽니다(500KB 이하)"; return; }
+  const size = new TextEncoder().encode(JSON.stringify({ html })).length;
+  if (html.length > PF_MAX_CHARS || size > PF_MAX_BODY) { PF.pasted = ""; info.textContent = "너무 큽니다(8만 자 이하) · 내 영역만 복사해 주세요"; return; }
   PF.pasted = html;
   info.textContent = "붙여넣음 " + Math.max(1, Math.round(size / 1024)) + "KB · 등록하면 구조만 저장합니다";
   document.getElementById("pf-paste-ok").disabled = false;
