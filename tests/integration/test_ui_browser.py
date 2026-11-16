@@ -402,24 +402,47 @@ def test_ui_todo_sort_cycle_and_keyboard(server: tuple[str, object]) -> None:
 
 
 @pytest.mark.slow
-def test_ui_startup_login_modal(server: tuple[str, object]) -> None:
-    """앱을 열면 시작 로그인 창이 자동으로 뜨고, ID 1개 + 암호로 로그인한다(결정기록 0014)."""
+def test_ui_no_login_window_at_start_and_chip_login(server: tuple[str, object]) -> None:
+    """N3·U8(결정기록 0034): 앱을 열어도 로그인 창이 뜨지 않는다.
+
+    로그인 안 된 연결 칩은 버튼이고, 누르면 그 사이트 로그인 창이 열린다.
+    '모두 연결'은 로그인 안 된 사이트에 한 번에 로그인하고, 로그인된 칩은 사이트 링크가 된다.
+    """
     base, _container = server
     playwright, browser = _browser_or_skip()
     try:
         page = browser.new_page(viewport={"width": 1440, "height": 900})  # type: ignore[attr-defined]
+        for path in ("/", "/suggestions", "/weekly"):
+            page.goto(base + path)
+            page.wait_for_selector("#conn .chip")
+            page.wait_for_timeout(500)
+            assert page.locator("#dlg-start.show").count() == 0
         page.goto(base + "/")
+        page.wait_for_selector("#conn button.chip-login")
+        assert page.locator("#conn a.chip").count() == 0
+        page.locator("#conn button.chip-login", has_text="AI-Ground").click()
         page.wait_for_selector("#dlg-start.show")
+        assert "AI-Ground 연결" in page.inner_text("#st-title")
         assert page.inner_text("#st-suffix") == "@golfzon.com"
-        # AI-Ground·G-Knowledge·위키. 그룹웨어는 일괄 로그인에서 뺐다(결정기록 0026)
+        # 기본은 '다른 사이트도 함께' 켬: AI-Ground + G-Knowledge·위키. 끄면 AI-Ground만
         assert page.locator("#st-sites li").count() == 3
+        page.uncheck("#st-also")
+        assert page.locator("#st-sites li").count() == 1
+        page.click("#st-later")  # 닫기: 로그인하지 않음
+        page.wait_for_selector("#dlg-start.show", state="hidden")
+        assert page.locator("#conn .chip.on").count() == 0
+
+        page.click("#conn-all")  # 모두 연결(그룹웨어는 이번 실행에 필요할 때만)
+        page.wait_for_selector("#dlg-start.show")
         assert "그룹웨어" not in page.inner_text("#st-sites")
         page.fill("#st-id", "tester01")
         page.fill("#st-pw", "x" * 12)  # 합성 값(데모: 가짜 로그인)
         page.click("#st-submit")
         page.wait_for_selector("#dlg-start.show", state="hidden")
         assert page.input_value("#st-pw") == "" and page.input_value("#st-id") == ""
-        assert page.locator("#conn .chip.on").count() == 3  # 그룹웨어는 아직 로그인 안 됨
+        page.wait_for_selector("#conn a.chip.on >> nth=2")
+        assert page.locator("#conn .chip.on").count() == 3
+        assert page.locator("#conn-all").count() == 0
         # 그룹웨어는 설정·연결에서 직접 로그인한다(그 사이트만 묻는 창)
         page.goto(base + "/settings")
         page.locator(".set-row", has_text="그룹웨어").locator("button", has_text="로그인").click()
@@ -432,32 +455,14 @@ def test_ui_startup_login_modal(server: tuple[str, object]) -> None:
         page.wait_for_selector("#dlg-start.show", state="hidden")
         assert page.locator("#conn .chip.on").count() == 4
         page.goto(base + "/")
-        # 상태 칩을 누르면 사이트를 새 탭으로 연다(https 주소, 결정기록 0017)
+        # 로그인된 칩은 사이트를 새 탭으로 연다(https 주소, 결정기록 0017)
         chip = page.locator("#conn a.chip").first
         assert (chip.get_attribute("href") or "").startswith("https://")
         assert chip.get_attribute("target") == "_blank"
         assert chip.get_attribute("rel") == "noopener noreferrer"
-        # 설정 화면에는 로그인 입력 칸이 없다(시작 로그인 창으로 통일)
+        # 설정 화면에는 로그인 입력 칸이 없다(일괄 로그인 창으로 통일)
         page.goto(base + "/settings")
         assert page.locator("#login-all-form").count() == 0
-    finally:
-        browser.close()  # type: ignore[attr-defined]
-        playwright.stop()  # type: ignore[attr-defined]
-
-
-@pytest.mark.slow
-def test_ui_startup_login_later(server: tuple[str, object]) -> None:
-    base, _container = server
-    playwright, browser = _browser_or_skip()
-    try:
-        page = browser.new_page()  # type: ignore[attr-defined]
-        page.goto(base + "/")
-        page.wait_for_selector("#dlg-start.show")
-        page.click("#st-later")
-        page.wait_for_selector("#dlg-start.show", state="hidden")
-        page.goto(base + "/suggestions")  # 이번 실행 동안 다시 뜨지 않음
-        page.wait_for_timeout(500)
-        assert page.locator("#dlg-start.show").count() == 0
     finally:
         browser.close()  # type: ignore[attr-defined]
         playwright.stop()  # type: ignore[attr-defined]

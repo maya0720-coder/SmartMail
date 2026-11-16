@@ -134,6 +134,8 @@ def connections(request: Request) -> JSONResponse:
                 "site": status.site.value,
                 "logged_in": status.logged_in,
                 "browser_login": container.login.uses_browser_login(status.site),
+                # 이번 실행에서 연동 기능에 로그인이 필요한지(가짜 어댑터면 false, 결정기록 0034)
+                "needs_login": status.site not in container.login_free_sites,
                 "url": site_urls.get(status.site, ""),
                 # 로그인 안 됨일 때 마지막 종료 사유(결정기록 0031). 코드 값만 담는다
                 "ended_reason": None if status.ended_reason is None else status.ended_reason.value,

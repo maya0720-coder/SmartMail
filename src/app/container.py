@@ -26,6 +26,7 @@ from integrations.ai.gateway import AiGateway
 from security.browser import BrowserRuntime
 from security.credentials import LoginService
 from security.keepalive import SessionKeepAlive
+from security.logging_policy import Site
 from security.residue_check import ResidueChecker
 from security.sessions import SessionStore
 from security.site_login import LoginProgress
@@ -74,5 +75,8 @@ class Container:
     weekly_drafts: WeeklyDraftStore  # 주간보고 편집기 자동 보관·임시 저장(결정기록 0030)
     # 메일 수집 + 업무 반영을 한 번에 하나만 실행(자동 수집과 화면 버튼이 겹치지 않게)
     mail_lock: threading.Lock = field(default_factory=threading.Lock)
-    # 시작 로그인 창에서 '나중에'를 눌렀는지(이번 실행 동안만, 메모리)
+    # 시작 로그인 창에서 '나중에'를 눌렀는지(이번 실행 동안만, 메모리). 화면은 더 쓰지 않음(0034)
     login_prompt_dismissed: bool = False
+    # 이번 실행에서 로그인 없이 동작하는 사이트(가짜 어댑터·쓰지 않는 수집 경로, 결정기록 0034).
+    # 화면의 '필요할 때 로그인'은 이 사이트들에 대해 로그인 창을 띄우지 않는다.
+    login_free_sites: frozenset[Site] = field(default_factory=frozenset)

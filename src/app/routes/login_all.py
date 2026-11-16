@@ -45,6 +45,7 @@ COMPANY_LIMIT_KEY: Final = "company-account"  # 회사 계정 시도 횟수 공�
 AUTO_SITES: Final = (*COMPANY_SITES, Site.WIKI)
 MANUAL_SITES: Final = (Site.GROUPWARE,)
 ALL_SITES: Final = (*AUTO_SITES, *MANUAL_SITES)
+SITE_ORDER: Final = tuple(s.value for s in ALL_SITES)
 
 FAILED: Final = "로그인하지 못했습니다. 입력 내용을 확인해 주세요."
 NEEDS_INPUT: Final = "로그인 정보가 필요합니다."
@@ -67,6 +68,8 @@ class LoginAllRequest(BaseModel):
     password: str = Field(default="", max_length=MAX_SECRET_BYTES)
     wiki_password: str = Field(default="", max_length=MAX_SECRET_BYTES)  # 비우면 공통 암호
     only: SiteName | None = None  # 이 사이트만 로그인(다른 화면에서 필요할 때)
+    # 이 사이트들만 로그인(필요할 때 일괄 로그인 창, 결정기록 0034). only와 함께 쓰지 않는다
+    sites: list[SiteName] | None = Field(default=None, min_length=1, max_length=len(SITE_ORDER))
 
 
 def account_ids(user_id: str, domain: str) -> tuple[str, str]:
@@ -169,7 +172,18 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
     if request.url.query:
         return JSONResponse({"error": "로그인 정보는 주소에 넣을 수 없습니다."}, status_code=400)
     container = get_container(request)
+    if body.only is not None and body.sites is not None:
+        return JSONResponse({"error": "로그인할 사이트 지정이 잘못되었습니다."}, status_code=400)
     only = None if body.only is None else Site(body.only)
+    # 로그인할 사이트: only 1개 · sites 목록(직접 로그인 사이트 포함 가능) · 지정 없음(일괄 대상)
+    targets: tuple[Site, ...]
+    if only is not None:
+        targets = tuple(pending_sites(container, only))
+    elif body.sites is not None:
+        wanted = {Site(s) for s in body.sites}
+        targets = tuple(s for s in _not_logged_in(container, ALL_SITES) if s in wanted)
+    else:
+        targets = tuple(pending_sites(container))
     buffers: list[bytearray] = []
     results = []
     try:
@@ -192,7 +206,7 @@ def login_all(request: Request, body: LoginAllRequest) -> JSONResponse:
             Site.WIKI: hmac.compare_digest(buffers[3], buffers[1]),
         }
         company_failed = False
-        for site in pending_sites(container, only):
+        for site in targets:
             if only is not None and site is not only:
                 continue
             is_company = site in COMPANY_SITES

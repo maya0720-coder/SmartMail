@@ -191,7 +191,10 @@ async function loadLastSync() {
   }
 }
 
-async function collectFromEmpty() {
+function collectFromEmpty() {
+  ensureLogin(["groupware"], sendCollectFromEmpty, { label: "메일 수집" });  // 그룹웨어 경로일 때만 로그인(0034)
+}
+async function sendCollectFromEmpty() {
   const result = await api("POST", "/api/mail/collect", { period: "sync" });
   toast(result.ok ? "새 제안 " + result.data.suggested + "건" : errorText(result, "수집하지 못했습니다"), { kind: result.ok ? "ok" : "error" });
   loadTriage();

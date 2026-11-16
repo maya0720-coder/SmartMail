@@ -349,7 +349,11 @@ async function loadSyncStatus() {
 }
 setInterval(loadSyncStatus, SYNC_POLL_MS);
 
-async function collectMail(body) {
+// 그룹웨어 경로로 수집할 때만 그룹웨어 로그인을 먼저 확인한다(아웃룩 경로면 바로 수집, 결정기록 0034)
+function collectMail(body) {
+  ensureLogin(["groupware"], () => sendCollect(body), { label: "메일 수집" });
+}
+async function sendCollect(body) {
   const result = await api("POST", "/api/mail/collect", body);
   if (!result.ok) { toast(errorText(result, "수집하지 못했습니다"), { kind: "error" }); return; }
   toast("새 메일 " + result.data.new_messages + "건 · 제안 " + result.data.suggested + "건 · 제외 " + result.data.excluded_messages + "건");

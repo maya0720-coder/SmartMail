@@ -329,7 +329,18 @@ def build_container(
         link_bases=(str(settings.gknowledge_base_url),),
     )
 
+    # 로그인 없이 동작하는 사이트(결정기록 0034)
+    # 가짜 AI, 데모 G-Knowledge·위키, 그룹웨어가 아닌 메일 수집 경로
+    login_free: set[Site] = set()
+    if isinstance(ai_adapter, FakeKnowledgeAI):
+        login_free.add(Site.AIGROUND)
+    if settings.demo_mode:
+        login_free.update((Site.GKNOWLEDGE, Site.WIKI))
+    if detection.kind is not CollectorKind.GROUPWARE:
+        login_free.add(Site.GROUPWARE)
+
     return Container(
+        login_free_sites=frozenset(login_free),
         settings=settings,
         clock=clock,
         db=db,

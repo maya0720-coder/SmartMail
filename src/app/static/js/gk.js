@@ -27,7 +27,10 @@ async function submitGk() {
   const send = async () => {
     const result = await api("POST", "/api/gk/register/" + encodeURIComponent(gkTaskId), payload);
     if (!result.ok) {
-      if (result.status === 503 && /로그인/.test(errorText(result, ""))) { requireLogin("g-knowledge", send); return; }
+      if (result.status === 503 && /로그인/.test(errorText(result, ""))) {
+        ensureLogin(["g-knowledge"], send, { force: true, label: "지식 등록" });
+        return;
+      }
       document.getElementById("gk-err").textContent = errorText(result, "등록하지 못했습니다");
       return;
     }
@@ -35,7 +38,7 @@ async function submitGk() {
     toast("G-Knowledge에 등록했습니다");
     if (gkDone) gkDone(result.data);
   };
-  await send();
+  ensureLogin(["g-knowledge"], send, { label: "지식 등록" });  // 필요할 때만 로그인(결정기록 0034)
 }
 
 document.getElementById("gk-cancel").addEventListener("click", () => closeDlg("dlg-gk"));

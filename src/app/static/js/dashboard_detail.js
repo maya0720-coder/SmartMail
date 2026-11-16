@@ -56,7 +56,12 @@ function companyConfirmButton(task, onChanged) {
 }
 
 // suggest: false = 비슷한 사례 찾기만, true = 사례를 근거로 AI 해결 방안까지
-async function runTaskSearch(task, suggest, box) {
+// 유사 이력(G-Knowledge 검색)·AI 해결 방안은 필요한 사이트 로그인을 먼저 확인한다(결정기록 0034)
+function runTaskSearch(task, suggest, box) {
+  ensureLogin(suggest ? ["ai-ground"] : ["g-knowledge"], () => searchTask(task, suggest, box),
+    { label: suggest ? "AI 해결 방안" : "유사 이력 찾기" });
+}
+async function searchTask(task, suggest, box) {
   box.replaceChildren(el("div", { class: "empty" }, suggest ? "비슷한 사례를 찾고 해결 방안을 만드는 중…" : "찾는 중…"));
   const result = await api("POST", "/api/search", { query: task.title, task_id: task.id, start_from: "app", suggest });
   if (!result.ok) { box.replaceChildren(el("div", { class: "empty" }, errorText(result, "검색하지 못했습니다"))); return; }

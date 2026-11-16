@@ -35,7 +35,6 @@ async function loadSummaryStatus() {
   else if (!s.ready) text.textContent = "요약 대기 " + s.pending + "건 · AI-Ground에 로그인하면 메일 제목 대신 요청 요약을 보여 줍니다.";
   else text.textContent = "요약 대기 " + s.pending + "건 · 2분마다 조금씩 자동으로 바꿉니다" + (s.message ? " (" + s.message + ")" : "");
   button.disabled = !s.pending || s.running;
-  button.textContent = s.ready ? "AI로 일괄 요약" : "AI-Ground 로그인";
   // 요약 진행·완료 시 보이는 항목의 칩·제목만 갱신(전체 다시 그리기 없음, 결정기록 0029)
   const progressKey = s.done + ":" + s.completed + ":" + s.running;
   if (lastDone !== null && progressKey !== lastDone) patchSummaryStates();
@@ -43,14 +42,14 @@ async function loadSummaryStatus() {
   clearTimeout(sumTimer);
   sumTimer = setTimeout(loadSummaryStatus, s.running ? SUMMARY_POLL_RUNNING_MS : SUMMARY_POLL_IDLE_MS);
 }
-document.getElementById("sum-run").addEventListener("click", async () => {
-  const status = await api("GET", "/api/summaries/status");
-  if (status.ok && !status.data.ready) { requireLogin("ai-ground", loadSummaryStatus); return; }
+async function runSummaries() {
   const result = await api("POST", "/api/summaries/run");
   if (!result.ok) { toast(errorText(result, "시작하지 못했습니다"), { kind: "error" }); return; }
   toast("요청 요약을 시작했습니다. 많으면 몇 분에 걸쳐 나눠 처리합니다.");
   setTimeout(loadSummaryStatus, 800);
-});
+}
+// 로그인이 필요하면 일괄 로그인 창을 띄우고, 로그인되면 요약을 바로 시작한다(결정기록 0034)
+document.getElementById("sum-run").addEventListener("click", () => ensureLogin(["ai-ground"], runSummaries, { label: "AI 일괄 요약" }));
 
 loadSummaryStatus();
 loadTriage();

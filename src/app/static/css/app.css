@@ -98,6 +98,13 @@ main{max-width:var(--page-max);margin:0 auto;padding:var(--page-top) var(--page-
 .chip.on::before{background:var(--success)}
 a.chip,.site-link{text-decoration:none;transition:var(--ease)}
 a.chip:hover{color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
+/* 로그인 안 된 연결 칩·'모두 연결'(결정기록 0034): 누르면 로그인하는 버튼 */
+button.chip{border:0;font-family:inherit;cursor:pointer;transition:var(--ease)}
+button.chip:hover{color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
+button.chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.chip.conn-all{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-soft)}
+.lm-also{display:flex;align-items:center;gap:6px;margin:-6px 0 12px;font-size:12.5px;color:var(--sub)}
+.lm-also.hidden{display:none}
 .site-link{color:inherit;display:inline-flex;align-items:center;gap:2px}.site-link:hover{color:var(--accent)}.site-link .ic{width:14px;height:14px}
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}

@@ -172,7 +172,8 @@ async function publish() {
   const send = async () => {
     const result = await api("POST", "/api/weekly/publish", body);
     if (!result.ok) {
-      if (result.status === 503 && /로그인/.test(errorText(result, ""))) { requireLogin("wiki", send); return; }
+      // 서버가 위키 로그인이 필요하다고 할 때만 묻는다(클립보드 폴백은 로그인 없이 동작, 결정기록 0034)
+      if (result.status === 503 && /로그인/.test(errorText(result, ""))) { ensureLogin(["wiki"], send, { force: true, label: "위키 게시" }); return; }
       document.getElementById("wiki-err").textContent = errorText(result, "게시하지 못했습니다");
       return;
     }

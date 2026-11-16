@@ -10,6 +10,8 @@
       </div>
     </div>
     <ul class="lm-sites" id="st-sites" aria-label="로그인할 사이트"></ul>
+    <!-- 필요할 때 로그인(결정기록 0034): 이번 작업에 필요 없는 미로그인 사이트도 함께 로그인할지 -->
+    <label class="lm-also hidden" id="st-also-row"><input type="checkbox" id="st-also" checked> 아직 로그인 안 된 다른 사이트도 함께 로그인</label>
     <form id="st-form" autocomplete="off">
       <div class="field">
         <label for="st-id">아이디</label>
@@ -56,7 +58,7 @@
       </div>
       <p class="err" id="st-err" role="alert"></p>
       <div class="m-actions">
-        <button type="button" class="btn" id="st-later">나중에</button>
+        <button type="button" class="btn" id="st-later">닫기</button>
         <button class="btn primary" id="st-submit"><svg class="ic" aria-hidden="true"><use href="{{ ic }}log-out"></use></svg><span>로그인</span></button>
       </div>
       <p class="lm-note">입력한 아이디·암호는 로그인에 한 번만 쓰고 바로 지웁니다. 파일·로그·브라우저 어디에도 저장하지 않으며, '로그인 상태 유지'는 쓰지 않습니다.</p>

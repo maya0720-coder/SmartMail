@@ -29,14 +29,16 @@ function progressSection(task) {
   drawAi(task.progress_digest, task.progress_stale);
   const button = el("button", { type: "button", class: "btn sm ai" }, icon("sparkles"),
     task.progress_digest ? "AI로 다시 요약" : "AI로 진행 요약");
-  button.addEventListener("click", async () => {
+  // AI 진행 요약은 AI-Ground 로그인을 먼저 확인한다(결정기록 0034)
+  button.addEventListener("click", () => ensureLogin(["ai-ground"], summarize, { label: "AI 진행 요약" }));
+  async function summarize() {
     button.disabled = true;
     const result = await api("POST", "/api/tasks/" + task.id + "/progress-summary");
     button.disabled = false;
     if (!result.ok) { toast(errorText(result, "진행 요약을 만들지 못했습니다"), { kind: "error" }); return; }
     drawAi(result.data.progress_digest, result.data.progress_stale);
     button.replaceChildren(icon("sparkles"), "AI로 다시 요약");
-  });
+  }
   const details = el("details", { class: "d-progress", open: PROGRESS.open ? "" : null },
     el("summary", {}, "현재까지 진행 요약"),
     el("div", { class: "pg-rule" }, task.progress || "-"),
