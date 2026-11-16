@@ -41,6 +41,16 @@
   </form>
   <div class="hdr-right">
     <div class="conn" id="conn"></div>
+    <!-- 작업 센터(결정기록 0035): 백그라운드 작업 진행·실패 확인 -->
+    <div class="jobs-wrap" id="jobs-wrap">
+      <button type="button" class="icon-btn jobs-btn" id="jobs-btn" aria-expanded="false" aria-controls="jobs-panel" aria-label="작업 센터" title="작업 센터">
+        <svg class="ic" aria-hidden="true"><use href="{{ ic }}refresh-cw"></use></svg><span class="jobs-badge hidden" id="jobs-badge">0</span>
+      </button>
+      <div class="jobs-panel hidden" id="jobs-panel" role="dialog" aria-label="작업 센터" tabindex="-1">
+        <div class="jobs-head">작업 센터 <span class="t-sub">이번 실행 동안의 작업 · 앱을 끄면 지워짐</span></div>
+        <ul class="jobs-list" id="jobs-list"></ul>
+      </div>
+    </div>
     <a class="btn cta" href="/weekly"><svg class="ic" aria-hidden="true"><use href="{{ ic }}pen-line"></use></svg><span>주간보고 초안</span></a>
   </div>
 </header>
@@ -69,6 +79,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="{{ asset('js/common.js') }}"></script>
 <script src="{{ asset('js/login.js') }}"></script>
+<script src="{{ asset('js/jobs.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

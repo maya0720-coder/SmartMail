@@ -385,6 +385,21 @@ document.getElementById("btn-manual").addEventListener("click", async () => {
 
 loadSyncStatus();
 renderDetailEmpty();
+
+// 작업 센터에서 등록 상태가 바뀌면 열린 상세를 다시 그린다(결정기록 0035)
+document.addEventListener("jobs-changed", (event) => {
+  if (selectedId === null) return;
+  if (event.detail.some((job) => job.kind === "gk" && job.task_id === selectedId)) selectTask(selectedId, { keepFocus: true });
+});
+document.addEventListener("gk-changed", (event) => { if (event.detail.taskId === selectedId) selectTask(selectedId, { keepFocus: true }); });
+// 다른 화면의 작업 센터에서 '다시 시도'를 누르면 ?gk=업무번호로 와서 그 업무의 등록 창을 연다
+(() => {
+  const params = new URLSearchParams(location.search);
+  const id = Number(params.get("gk"));
+  if (!Number.isInteger(id) || id <= 0) return;
+  history.replaceState(null, "", location.pathname);
+  selectTask(id).then(() => (params.get("retry") ? retryGkUnknown(id, refresh) : openGkPreview(id, refresh)));
+})();
 // 업무 구분 색(전자결재·기본 구분)을 정한 뒤 목록을 그린다. 읽지 못해도 기본값으로 그린다
 loadCategoryKinds().finally(refresh);
 

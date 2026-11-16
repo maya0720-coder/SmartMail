@@ -11,6 +11,7 @@ from pathlib import Path
 
 from domain.clock import FixedClock
 from fixtures.app_factory import app_client, make_container
+from fixtures.gk_wait import wait_gk
 
 
 def test_end_to_end_with_fakes(tmp_path: Path, clock: FixedClock) -> None:
@@ -49,7 +50,8 @@ def test_end_to_end_with_fakes(tmp_path: Path, clock: FixedClock) -> None:
         # 6) G-Knowledge 등록
         preview = client.get(f"/api/gk/preview/{fi['id']}").json()
         payload = {"title": preview["title"], "body": preview["body"], "tags": preview["tags"]}
-        assert client.post(f"/api/gk/register/{fi['id']}", json=payload).status_code == 200
+        assert client.post(f"/api/gk/register/{fi['id']}", json=payload).status_code == 202
+        assert wait_gk(client, fi["id"])["state"] == "requested"  # 백그라운드 등록(0035)
 
         # 7) 주간보고 초안 → 미리보기 → 승인 후 게시
         weekly = client.post("/api/weekly/draft", json={}).json()

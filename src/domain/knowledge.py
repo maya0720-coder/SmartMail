@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
@@ -23,6 +24,29 @@ MAX_TAG_CHARS: Final = 30
 
 class KnowledgeUnavailableError(Exception):
     """G-Knowledge 사용 불가(필드 미확인, 로그인 필요, 제출 실패). 메시지는 사용자 안내용."""
+
+
+class RegisterNotSentError(KnowledgeUnavailableError):
+    """등록요청을 누르기 **전에** 멈춤(로그인 필요·입력 확인·분석 시간 초과 등, 결정기록 0035).
+
+    G-Knowledge에 아무것도 보내지 않았으므로 다시 시도해도 중복 등록이 생기지 않는다.
+    code는 화면 문구로 바꾸는 코드 값이다(메시지·개인정보를 담지 않음).
+    """
+
+    def __init__(self, message: str, code: str = "failed") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class RegisterResultUnknownError(KnowledgeUnavailableError):
+    """등록요청을 누른 **뒤** 결과를 확인하지 못함(결정기록 0035). 자동으로 다시 보내지 않는다."""
+
+
+# 등록 진행 단계(화면 문구: 화면 여는 중 / AI 분석 중 / 등록요청 중)
+STEP_OPEN: Final = "open"
+STEP_ANALYZE: Final = "analyze"
+STEP_SUBMIT: Final = "submit"
+StepCallback = Callable[[str], None]
 
 
 class DuplicateRegistrationError(Exception):
@@ -56,7 +80,9 @@ class KnowledgeHit:
 class KnowledgeStore(Protocol):
     name: str
 
-    def register(self, draft: MaskedDraft) -> RegisterResult: ...
+    def register(
+        self, draft: MaskedDraft, on_step: StepCallback | None = None
+    ) -> RegisterResult: ...
 
     def search(self, query: MaskedText) -> list[KnowledgeHit]: ...
 

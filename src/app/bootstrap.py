@@ -9,6 +9,7 @@ from typing import Final
 from app.company_job import CompanyJob
 from app.container import Container
 from app.demo_seed import seed_demo
+from app.gk_job import GkRegisterQueue
 from app.ratelimit import RateLimiter
 from app.summary_job import SummaryJob
 from app.title_rule import apply_saved_rule
@@ -79,6 +80,7 @@ from security.site_login import (
 )
 from storage.company_repo import SqliteCompanyDirectory
 from storage.db import Database
+from storage.gk_state_repo import SqliteGkStates
 from storage.knowledge_repos import (
     SqliteAiCallLog,
     SqliteHistoryRepository,
@@ -263,7 +265,13 @@ def build_container(
             str(settings.gknowledge_base_url), sessions, register_fields, search_fields
         )
     history = SqliteHistoryRepository(db)
-    knowledge = KnowledgeService(store, tasks, history, settings.user_display_name)
+    knowledge = KnowledgeService(
+        store,
+        tasks,
+        history,
+        settings.user_display_name,
+        home_link=str(settings.gknowledge_base_url),
+    )
     history_service = HistoryService(history, tasks, mail, clock)
     if settings.demo_mode and settings.demo_seed:
         seed_demo(tasks, history_service, store)  # 가상 과거 사례·문서(결정기록 0021)
@@ -391,4 +399,5 @@ def build_container(
             clock,
             (str(settings.wiki_base_url), str(settings.gknowledge_base_url)),
         ),
+        gk_queue=GkRegisterQueue(knowledge, SqliteGkStates(db), clock),
     )

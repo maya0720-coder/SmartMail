@@ -19,6 +19,7 @@ from domain.knowledge import (
     KnowledgeStore,
     KnowledgeUnavailableError,
     MaskedDraft,
+    StepCallback,
     build_draft,
 )
 from domain.models import Task
@@ -42,8 +43,10 @@ class KnowledgeService:
         tasks: TaskService,
         history: HistoryRepository,
         assignee: str,
+        home_link: str = "",
     ) -> None:
         self.store = store
+        self._home = home_link  # G-Knowledge 첫 화면(수동 확인 표시 때 남길 링크)
         self._tasks = tasks
         self._history = history
         self._assignee = assignee
@@ -54,7 +57,25 @@ class KnowledgeService:
         task = self._tasks.get(task_id)
         return build_draft(task, self._history.get_for_task(task_id), self._assignee, None)
 
-    def register(self, task_id: int, draft: MaskedDraft) -> Task:
+    def check_can_register(self, task_id: int) -> Task:
+        """큐에 넣기 전 확인(결정기록 0035): 없는 업무·이미 등록·등록 중이면 예외."""
+        task = self._tasks.get(task_id)
+        if task.gk_registered:
+            raise DuplicateRegistrationError(ALREADY_REGISTERED)
+        with self._lock:
+            if task_id in self._in_progress:
+                raise DuplicateRegistrationError("같은 업무를 등록하는 중입니다")
+        return task
+
+    def mark_registered_manually(self, task_id: int) -> Task:
+        """사용자가 G-Knowledge에서 직접 확인한 뒤 '등록됨으로 표시'(결과 미확인 건만, 0035)."""
+        if self._tasks.get(task_id).gk_registered:
+            raise DuplicateRegistrationError(ALREADY_REGISTERED)
+        return self._tasks.mark_gk_registered(task_id, self._home)
+
+    def register(
+        self, task_id: int, draft: MaskedDraft, on_step: StepCallback | None = None
+    ) -> Task:
         if self._tasks.get(task_id).gk_registered:
             raise DuplicateRegistrationError(ALREADY_REGISTERED)
         with self._lock:
@@ -66,7 +87,8 @@ class KnowledgeService:
             if self._tasks.get(task_id).gk_registered:
                 raise DuplicateRegistrationError(ALREADY_REGISTERED)
             self._reject_same_title(draft)
-            result = self.store.register(draft)
+            # 단계 콜백이 없으면 예전 호출 형태 그대로(콜백을 모르는 저장소 대역과 호환)
+            result = self.store.register(draft, on_step) if on_step else self.store.register(draft)
             try:
                 return self._tasks.mark_gk_registered(task_id, result.link)
             except Exception:

@@ -90,6 +90,31 @@ async function cardEditor(task, box) {
     } }, "카드 저장")));
 }
 
+// G-Knowledge 등록 버튼(결정기록 0035): 진행 중이면 막고, 결과 미확인이면 확인·표시·재시도를 고르게 한다
+function gkButtons(task, onChanged, b) {
+  const st = task.gk_state ? task.gk_state.state : null;
+  if (!task.gk_link && (st === "queued" || st === "running")) {
+    const busy = b("gk main", "refresh-cw", gkStateText(task.gk_state), null);
+    busy.disabled = true;
+    return [busy];
+  }
+  if (!task.gk_link && st === "unknown") {
+    return [b("gk main", "alert-triangle", "등록됨으로 표시", () => markGkRegistered(task.id, onChanged)),
+      b("", null, "다시 시도", () => retryGkUnknown(task.id, onChanged))];
+  }
+  if (task.gk_link) return [];  // 중복 등록 불가(GK-06)
+  return [b("gk main", "book-open", st === "failed_unsent" ? "G-Knowledge 다시 등록" : "G-Knowledge 지식 등록", () => openGkPreview(task.id, onChanged))];
+}
+
+// 상세 '지식 등록' 칸: 등록 링크 또는 진행 상태(텍스트로만)
+function gkStateNode(task) {
+  const st = task.gk_state;
+  const link = task.gk_link ? el("a", { class: "link", href: task.gk_link, target: "_blank", rel: "noopener noreferrer" }, "등록됨") : null;
+  if (!st) return link || "미등록";
+  const chip = el("span", { class: "gk-st s-" + st.state }, st.state === "running" ? icon("refresh-cw") : null, gkStateText(st));
+  return link ? el("span", {}, link, " ", chip) : chip;
+}
+
 // 상태별 하단 고정 버튼: [주요(전체 폭)] + 보조
 function footButtons(task, resultBox, onChanged) {
   const act = (action) => () => applyAction(task, action, onChanged);
@@ -105,8 +130,7 @@ function footButtons(task, resultBox, onChanged) {
     case "done_candidate":
       return [b("primary main", "check", "완료 확정", act("done")), b("", null, "보류", act("on_hold"))];
     case "done":
-      return [b("gk main", "book-open", task.gk_link ? "G-Knowledge 재등록" : "G-Knowledge 지식 등록", () => openGkPreview(task.id, onChanged)),
-        b("", "file-text", "히스토리 카드", () => cardEditor(task, resultBox))];
+      return [...gkButtons(task, onChanged, b), b("", "file-text", "히스토리 카드", () => cardEditor(task, resultBox))];
     default:
       return [];
   }
@@ -142,7 +166,7 @@ async function renderDetail(taskId, onChanged) {
       el("div", {}, "기한"), el("div", {}, dueText(task)),
       el("div", {}, "수신"), el("div", { class: "mono" }, received),
       el("div", { class: "ev" }, "근거"), el("div", { class: "ev" }, task.evidence ? "“" + task.evidence + "”" : "-"),
-      el("div", {}, "지식 등록"), el("div", {}, task.gk_link ? el("a", { class: "link", href: task.gk_link, target: "_blank", rel: "noopener noreferrer" }, "등록됨") : "미등록")),
+      el("div", {}, "지식 등록"), el("div", { id: "d-gk-state" }, gkStateNode(task))),
     // 진행 요약(맨 위, 접기 가능) → 구조화 요약 → 진행 경과 타임라인(결정기록 0028)
     progressSection(task),
     digestView(task),

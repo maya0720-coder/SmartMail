@@ -56,6 +56,13 @@ class CompanyJob:
         self._always_ready = always_ready
         self._skipped: dict[str, datetime] = {}  # 답을 못 받은 도메인 → 시각(메모리)
         self._lock = threading.Lock()
+        # 작업 센터 표시용(결정기록 0035): 마지막 실행 시각·저장 건수(메모리)
+        self.last_run_at: datetime | None = None
+        self.last_saved = 0
+
+    @property
+    def running(self) -> bool:
+        return self._lock.locked()
 
     def ready(self) -> bool:
         return self._always_ready or self._sessions.current(Site.AIGROUND) is not None
@@ -95,5 +102,6 @@ class CompanyJob:
                 else:
                     self._skipped[domain] = self._clock.now()
         finally:
+            self.last_run_at, self.last_saved = self._clock.now(), saved
             self._lock.release()
         return saved

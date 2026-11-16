@@ -20,6 +20,7 @@ from app.routes import (
     data,
     gk,
     history,
+    jobs,
     login_all,
     mail,
     metrics,
@@ -81,6 +82,8 @@ def create_app(
         company_job = PeriodicJob(
             "company", container.company_job.run_once, SUMMARY_INTERVAL_SECONDS
         )
+        # G-Knowledge 등록 큐는 사용자가 누른 작업만 처리하므로 항상 켠다(결정기록 0035)
+        container.gk_queue.start()
         if run_background_jobs:
             job.start()
             sweeper.start()
@@ -92,6 +95,7 @@ def create_app(
         try:
             yield
         finally:
+            container.gk_queue.stop()
             await keepalive_job.stop()
             await company_job.stop()
             await summary_job.stop()
@@ -137,6 +141,7 @@ def create_app(
     app.include_router(task_progress.router)
     app.include_router(tasks.router)
     app.include_router(gk.router)
+    app.include_router(jobs.router)
     app.include_router(history.router)
     app.include_router(title_rule.router)
     app.include_router(ui_prefs.router)

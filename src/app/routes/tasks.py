@@ -68,6 +68,11 @@ def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.astimezone(KST).isoformat()
 
 
+def gk_state_json(container: Any, task_id: int | None) -> dict[str, Any] | None:
+    status = None if task_id is None else container.gk_queue.status_of(task_id)
+    return None if status is None else status.as_json()
+
+
 def task_json(request: Request, task: Task, running: set[int] | None = None) -> dict[str, Any]:
     container = get_container(request)
     now = container.clock.now()
@@ -88,6 +93,8 @@ def task_json(request: Request, task: Task, running: set[int] | None = None) -> 
         "module_tag": task.module_tag,
         "closed_at": _iso(task.closed_at),
         "gk_link": safe_link(task.gk_link or "", [str(container.settings.gknowledge_base_url)]),
+        # 백그라운드 등록 상태(결정기록 0035). 없으면 None
+        "gk_state": gk_state_json(container, task.id),
         "retention_days_left": info.days_left if info else None,
         "retention_alert": bool(info and info.alert),
         # 제안 트리아지(결정기록 0015): 이유는 코드값, 문장은 담지 않는다

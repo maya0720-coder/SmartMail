@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-SCHEMA_VERSION: Final = 4  # 2: 제안 트리아지(0015), 3: 구조화 요약(0021), 4: 0027~0030
+SCHEMA_VERSION: Final = 5  # 2: 트리아지(0015), 3: 구조화 요약(0021), 4: 0027~0030, 5: 0035
 
 # 사용자 데이터 테이블(전체 삭제 대상). 순서는 외래 키 의존의 역순.
 DATA_TABLES: Final = (
@@ -214,6 +214,21 @@ MIGRATION_4_TASK_COLUMNS: Final = (
         " ('internal', 'external', 'freemail'))",
     ),
 )
+# G-Knowledge 백그라운드 등록 상태(결정기록 0035). reason은 코드 값(단계·실패 사유)만 담는다
+GK_STATES: Final = ("queued", "running", "requested", "failed_unsent", "unknown")
+MIGRATION_5_TASK_COLUMNS: Final = (
+    (
+        "gk_state",
+        "TEXT CHECK (gk_state IS NULL OR gk_state IN"
+        " ('queued', 'running', 'requested', 'failed_unsent', 'unknown'))",
+    ),
+    ("gk_state_at", "TEXT"),
+    (
+        "gk_state_reason",
+        "TEXT CHECK (gk_state_reason IS NULL OR (length(gk_state_reason) <= 32"
+        " AND gk_state_reason NOT GLOB '*[^a-z_]*'))",
+    ),
+)
 MIGRATION_4_DOMAIN_COMPANY: Final = """
 CREATE TABLE IF NOT EXISTS domain_company (
     domain TEXT PRIMARY KEY CHECK (length(domain) BETWEEN 1 AND 253),
@@ -287,6 +302,7 @@ class Database:
             ("mail_ref", MIGRATION_3_MAIL_REF_COLUMNS),
             ("mail_ref", MIGRATION_4_MAIL_REF_COLUMNS),
             ("task", MIGRATION_4_TASK_COLUMNS),
+            ("task", MIGRATION_5_TASK_COLUMNS),
         ]
         with self.transaction() as conn:
             for table, adds in plan:

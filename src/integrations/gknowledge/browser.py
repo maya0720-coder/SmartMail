@@ -28,10 +28,16 @@ from urllib.parse import quote, urljoin, urlsplit
 from config.rules import RULES_DIR, read_toml
 from config.settings import ConfigError
 from domain.knowledge import (
+    STEP_ANALYZE,
+    STEP_OPEN,
+    STEP_SUBMIT,
     KnowledgeHit,
     KnowledgeUnavailableError,
     MaskedDraft,
+    RegisterNotSentError,
     RegisterResult,
+    RegisterResultUnknownError,
+    StepCallback,
 )
 from security.browser import EphemeralContext
 from security.links import safe_link
@@ -198,14 +204,23 @@ class BrowserKnowledgeStore:
         # https + 같은 호스트·포트만 허용(javascript:, http 다운그레이드, 다른 포트 거부)
         return safe_link(link, [self._base], base_for_relative=self._base) or ""
 
-    def register(self, draft: MaskedDraft) -> RegisterResult:
+    def register(self, draft: MaskedDraft, on_step: StepCallback | None = None) -> RegisterResult:
+        """등록요청 전 실패는 RegisterNotSentError, 등록요청 뒤 미확인은
+        RegisterResultUnknownError(결정기록 0035)."""
         fields_ = self._register
+        step = on_step or (lambda _name: None)
         if not fields_.ready:
             # 어떤 설정이 비었는지 이름만 알린다(gknowledge_fields.toml [register])
             missing = ", ".join(fields_.missing())
-            raise KnowledgeUnavailableError(f"{NOT_CONFIRMED} — 미설정: {missing}")
-        context = self._context()
-        url = self._url(fields_.path)
+            raise RegisterNotSentError(f"{NOT_CONFIRMED} — 미설정: {missing}", "not_configured")
+        try:
+            context = self._context()
+        except KnowledgeUnavailableError as exc:
+            raise RegisterNotSentError(str(exc), "login_required") from None
+        try:
+            url = self._url(fields_.path)
+        except KnowledgeUnavailableError as exc:
+            raise RegisterNotSentError(str(exc), "not_configured") from None
         register_path = urlsplit(url).path.rstrip("/")
         tags = ", ".join(t.value for t in draft.tags)
         body = draft.body.value
@@ -227,18 +242,20 @@ class BrowserKnowledgeStore:
 
         def drive(raw: Any) -> str:
             if self._now() >= deadline:
-                raise KnowledgeUnavailableError(NOT_SENT)
+                raise RegisterNotSentError(NOT_SENT, "busy")
+            step(STEP_OPEN)
             page = raw.new_page()
             try:
                 page.goto(url, timeout=PAGE_TIMEOUT_MS)
                 page.fill(fields_.title, draft.title.value)
                 page.fill(fields_.body, body)
                 if _compact(str(page.inner_text(fields_.body))) != _compact(body):
-                    raise KnowledgeUnavailableError(BODY_NOT_ENTERED)  # 보내기 전이므로 안전
+                    raise RegisterNotSentError(BODY_NOT_ENTERED, "body_check")  # 보내기 전
                 if fields_.tags and tags:
                     page.fill(fields_.tags, tags)
                 if fields_.analyze:
                     # 2단계 화면: 'AI 분석' 결과는 G-Knowledge가 채운 그대로 둔다(사용자 결정)
+                    step(STEP_ANALYZE)
                     page.click(fields_.analyze)
                     started = self._now()
                     try:
@@ -251,9 +268,10 @@ class BrowserKnowledgeStore:
                             FILLED_SCRIPT, arg=fields_.analysis_ready, timeout=left_ms
                         )
                     except Exception:
-                        raise KnowledgeUnavailableError(ANALYZE_FAILED) from None
+                        raise RegisterNotSentError(ANALYZE_FAILED, "analyze_timeout") from None
                 if self._now() >= deadline:  # 보내기 직전 마지막 확인
-                    raise KnowledgeUnavailableError(NOT_SENT)
+                    raise RegisterNotSentError(NOT_SENT, "busy")
+                step(STEP_SUBMIT)
                 submitted.set()  # 여기부터는 등록됐을 수 있음
                 try:
                     page.click(fields_.submit)
@@ -267,7 +285,7 @@ class BrowserKnowledgeStore:
                     page.wait_for_url(is_result_page, timeout=PAGE_TIMEOUT_MS)
                     return str(page.url)
                 except Exception:
-                    raise KnowledgeUnavailableError(UNCERTAIN_RESULT) from None
+                    raise RegisterResultUnknownError(UNCERTAIN_RESULT) from None
             finally:
                 page.close()
 
@@ -278,11 +296,11 @@ class BrowserKnowledgeStore:
         except Exception:
             logger.warning("G-Knowledge 등록 자동화 실패")
             if submitted.is_set():
-                raise KnowledgeUnavailableError(UNCERTAIN_RESULT) from None
-            raise KnowledgeUnavailableError("G-Knowledge 등록에 실패했습니다") from None
+                raise RegisterResultUnknownError(UNCERTAIN_RESULT) from None
+            raise RegisterNotSentError("G-Knowledge 등록에 실패했습니다", "failed") from None
         safe = self._same_site(link)
         if not safe:
-            raise KnowledgeUnavailableError(UNCERTAIN_RESULT)
+            raise RegisterResultUnknownError(UNCERTAIN_RESULT)
         return RegisterResult(safe)
 
     def search(self, query: MaskedText) -> list[KnowledgeHit]:

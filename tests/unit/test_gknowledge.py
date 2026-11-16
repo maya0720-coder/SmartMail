@@ -21,6 +21,7 @@ from domain.tasks.extract import TaskExtractor
 from domain.tasks.service import TaskEdit, TaskService
 from fixtures.app_factory import FakeBackend, app_client, make_container
 from fixtures.gk_pages import FakePage, browser_store
+from fixtures.gk_wait import wait_gk
 from fixtures.synthetic import synthetic_rrn
 from integrations.gknowledge.browser import (
     BrowserKnowledgeStore,
@@ -173,7 +174,10 @@ def test_gk_api_preview_register(tmp_path: Path, clock: FixedClock) -> None:
         assert "R&R" in preview["body"]
         payload = {"title": preview["title"], "body": preview["body"], "tags": preview["tags"]}
         registered = client.post(f"/api/gk/register/{task['id']}", json=payload)
-        assert registered.status_code == 200 and registered.json()["gk_link"]
+        # 백그라운드 등록(결정기록 0035): 바로 202 + queued, 끝나면 requested
+        assert registered.status_code == 202 and registered.json()["state"] == "queued"
+        assert wait_gk(client, task["id"])["state"] == "requested"
+        assert client.get(f"/api/tasks/{task['id']}").json()["gk_link"]
         again = client.post(f"/api/gk/register/{task['id']}", json=payload)
         assert again.status_code == 409
 
