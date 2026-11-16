@@ -67,6 +67,7 @@ class EventType(StrEnum):
     IDLE_TIMEOUT = "idle_timeout"
     MAIL_COLLECT = "mail_collect"
     WIKI_POST = "wiki_post"
+    WIKI_READ = "wiki_read"  # 위키 양식 읽기(결정기록 0037)
     GK_REGISTER = "gk_register"
     GK_SEARCH = "gk_search"
     AI_CALL = "ai_call"

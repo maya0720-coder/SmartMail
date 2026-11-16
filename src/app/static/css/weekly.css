@@ -48,3 +48,26 @@
 .wk-tasks ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
 .wk-tasks button{width:100%;text-align:left;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line-soft);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
 .wk-tasks button:hover{border-color:var(--accent)}
+
+/* 조직 양식 프로필·지난주 이월(결정기록 0037) */
+.wk-profile-note{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.wk-editor .pf-locked{color:var(--muted);background:var(--soft);cursor:not-allowed}
+.wk-editor h3.pf-locked,.wk-editor h4.pf-locked{border-left:3px solid var(--line);padding-left:6px}
+.wk-editor .pf-diff{outline:2px dashed var(--warn);outline-offset:2px}
+.wk-editor .carry-add{background:var(--success-soft)}
+.wk-editor .carry-change{background:var(--warn-soft)}
+.wk-editor .carry-keep{background:var(--soft)}
+.carry-list{display:grid;gap:8px;max-height:50vh;overflow:auto}
+.carry-group{border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 10px}
+.carry-group legend{font-weight:600;font-size:13px}
+.carry-item{display:flex;gap:6px;align-items:flex-start;font-size:13px;padding:2px 0}
+.carry-done legend{color:var(--success)}
+.carry-progress legend{color:var(--warn)}
+/* 설정: 양식 프로필 */
+.pf-paste{min-height:120px;border:1px dashed var(--line);border-radius:var(--r-ctl);padding:10px;color:var(--sub);outline:none}
+.pf-paste:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.pf-blocks{display:grid;gap:6px;max-height:55vh;overflow:auto}
+.pf-block{display:grid;grid-template-columns:90px minmax(0,1fr);gap:6px;align-items:center;font-size:13px}
+.pf-block .pf-kind{color:var(--sub);font-size:12px}
+.pf-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
+.pf-cols label{display:grid;gap:2px;font-size:12px}

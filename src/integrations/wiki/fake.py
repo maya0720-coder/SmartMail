@@ -4,15 +4,41 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from domain.weekly.service import WikiConflictError, WikiPage, WikiUnavailableError
+from domain.weekly.service import (
+    WikiConflictError,
+    WikiLoginRequiredError,
+    WikiPage,
+    WikiUnavailableError,
+)
 from security.links import safe_link
 
 FAKE_BASE = "https://wiki.example.invalid/pages/"
+MAX_READ_BYTES = 500_000
 
 
 class FakeWiki:
     def __init__(self) -> None:
         self.pages: dict[str, WikiPage] = {}  # 제목 → 페이지
+        self.logged_in = True  # 위키 세션이 있는지(양식 바뀜 확인은 세션이 있을 때만)
+        self.read_calls = 0
+        self.read_fail: str | None = None  # "login" | "error": 양식 읽기 실패 흉내
+
+    def has_session(self) -> bool:
+        return self.logged_in
+
+    def read_page_html(self, link: str) -> str:
+        """가짜 위키 기준 주소의 페이지 본문(양식 읽기). 세션이 없으면 로그인 필요."""
+        self.read_calls += 1
+        if not self.logged_in or self.read_fail == "login":
+            raise WikiLoginRequiredError("위키 로그인이 필요합니다")
+        if self.read_fail == "error":
+            raise WikiUnavailableError("위키 페이지 본문을 읽지 못했습니다")
+        page = self.get_page_by_link(link)
+        if page is None:
+            raise WikiUnavailableError("위키 페이지를 찾지 못했습니다")
+        if len(page.body.encode("utf-8")) > MAX_READ_BYTES:
+            raise WikiUnavailableError("위키 본문이 너무 커서 읽지 않았습니다(500KB 이하)")
+        return page.body
 
     def get_page(self, space_key: str, title: str) -> WikiPage | None:
         return self.pages.get(title)

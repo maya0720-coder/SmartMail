@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tomllib
+from datetime import date
 from pathlib import Path
 from typing import Final
 
@@ -21,6 +22,8 @@ DEFAULT_WIKI_TEMPLATE: Final = RULES_DIR / "wiki_template.toml"
 DEFAULT_CATEGORY_RULES: Final = RULES_DIR / "task_categories.toml"
 DEFAULT_TITLE_RULES: Final = RULES_DIR / "title_rules.toml"
 DEFAULT_WEEKLY_FORM_RULES: Final = RULES_DIR / "weekly_form.toml"
+DEFAULT_HOLIDAYS: Final = RULES_DIR / "holidays.toml"
+MAX_HOLIDAYS: Final = 200
 MAX_RULE_ITEMS: Final = 500
 
 
@@ -161,3 +164,18 @@ def load_company_domains(
     if not isinstance(free, dict):
         raise ConfigError(f"{path.name}: [free_mail] 형식이 올바르지 않습니다")
     return dict(companies), str_list(free, "domains", path.name)
+
+
+def load_holidays(path: Path = DEFAULT_HOLIDAYS) -> frozenset[date]:
+    """공휴일 목록(YYYY-MM-DD). 주간보고 마감 알림을 직전 근무일로 앞당길 때 쓴다(결정기록 0037)."""
+    data = read_toml(path)
+    unknown = set(data) - {"dates"}
+    if unknown:
+        raise ConfigError(f"{path.name}: 알 수 없는 키 {sorted(unknown)}")
+    values = str_list(data, "dates", path.name)
+    if len(values) > MAX_HOLIDAYS:
+        raise ConfigError(f"{path.name}: dates는 최대 {MAX_HOLIDAYS}개")
+    try:
+        return frozenset(date.fromisoformat(v) for v in values)
+    except ValueError:
+        raise ConfigError(f"{path.name}: dates는 YYYY-MM-DD 형식이어야 합니다") from None

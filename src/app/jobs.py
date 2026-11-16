@@ -1,4 +1,4 @@
-"""작업 센터(U1, 결정기록 0035): 여러 백그라운드 작업의 상태를 한 목록으로 합친다.
+"""작업 센터(U1, 결정기록 0035·0037): 여러 백그라운드 작업의 상태를 한 목록으로 합친다.
 
 새로 저장하는 것은 없다. 각 작업이 이미 메모리에 가진 상태만 읽는다.
 대상 문구는 마스킹된 업무 제목뿐이며, 실패 사유는 코드 값으로만 내보낸다(화면이 문구로 바꾼다).
@@ -98,10 +98,33 @@ def _company_row(container: Container) -> dict[str, Any] | None:
     }
 
 
+def _wiki_row(container: Container) -> dict[str, Any] | None:
+    """위키 양식 읽기(결정기록 0037). 대상은 참고 링크 이름(마스킹됨), 사유는 코드 값."""
+    status = container.weekly_profiles.status
+    if not status.state:
+        return None
+    group = {"running": RUNNING, "done": DONE}.get(status.state, FAILED)
+    return {
+        "kind": "wiki",
+        "id": "wiki",
+        "target": status.target,
+        "state": status.state,
+        "group": group,
+        "reason": status.reason,
+        "at": _iso(status.at),
+        "retry": False,
+    }
+
+
 def collect_jobs(container: Container) -> dict[str, Any]:
     """작업 센터 목록과 진행 중 건수."""
     rows: list[dict[str, Any]] = _gk_rows(container)
-    for extra in (_summary_row(container), _mail_row(container), _company_row(container)):
+    for extra in (
+        _summary_row(container),
+        _mail_row(container),
+        _company_row(container),
+        _wiki_row(container),
+    ):
         if extra is not None:
             rows.append(extra)
     rows = rows[:MAX_JOBS]

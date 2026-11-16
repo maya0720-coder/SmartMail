@@ -15,6 +15,7 @@ from app.summary_job import SummaryJob
 from app.title_rule import apply_saved_rule
 from app.triage_tokens import DecisionTokens
 from app.web_security import new_csrf_token
+from app.weekly_wiring import build_weekly_extras
 from collectors.demo_data import demo_messages
 from collectors.demo_scenarios import DOMAIN as DEMO_DOMAIN
 from collectors.detect import CollectorKind, DetectionResult, detect_collector
@@ -57,6 +58,7 @@ from integrations.gknowledge.browser import BrowserKnowledgeStore, load_fields
 from integrations.gknowledge.fake import FakeKnowledgeStore
 from integrations.wiki.confluence import ConfluenceWiki
 from integrations.wiki.fake import FakeWiki
+from integrations.wiki.reader import load_wiki_read
 from security.browser import BrowserLoginAuthenticator, BrowserRuntime
 from security.credentials import (
     LOGIN_SITES,
@@ -317,7 +319,7 @@ def build_container(
         if not template.space_key:
             template = replace(template, space_key="DEMO")
     else:
-        wiki = ConfluenceWiki(str(settings.wiki_base_url), sessions)
+        wiki = ConfluenceWiki(str(settings.wiki_base_url), sessions, load_wiki_read())
     publish_log = SqlitePublishLog(db)
     author = settings.user_display_name
     if settings.demo_mode and author == "본인":
@@ -335,6 +337,11 @@ def build_container(
         form_rules=load_weekly_form_rules(),
         wiki_base_url=str(settings.wiki_base_url),
         link_bases=(str(settings.gknowledge_base_url),),
+    )
+
+    weekly_links = ReferenceLinkService(SqliteReferenceLinks(db), str(settings.wiki_base_url))
+    extras = build_weekly_extras(
+        settings, db, clock, tasks, wiki, weekly, weekly_links, publish_log, weekly_cache
     )
 
     # 로그인 없이 동작하는 사이트(결정기록 0034)
@@ -392,7 +399,10 @@ def build_container(
             always_ready=isinstance(ai_adapter, FakeKnowledgeAI),
         ),
         decisions=DecisionTokens(clock),
-        weekly_links=ReferenceLinkService(SqliteReferenceLinks(db), str(settings.wiki_base_url)),
+        weekly_links=weekly_links,
+        weekly_profiles=extras.profiles,
+        carryover=extras.carryover,
+        reminder=extras.reminder,
         weekly_cache=weekly_cache,
         weekly_drafts=WeeklyDraftStore(
             SqliteWeeklyDrafts(db),

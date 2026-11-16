@@ -1,0 +1,7 @@
+# 위키 양식 읽기(브라우저 화면 읽기, 결정기록 0037). REST API는 쓰지 않는다.
+# 본문 영역 선택자는 실제 위키 화면에서 확인이 필요하다(Confluence 기본값 추정: #main-content).
+content_selector = "#main-content"
+
+# 읽는 본문 HTML 크기 상한(바이트)과 화면 열기 제한 시간(초)
+max_bytes = 500000
+timeout_seconds = 30

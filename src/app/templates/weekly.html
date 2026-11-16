@@ -16,6 +16,7 @@
     <select id="wk-link" aria-label="참고 링크"><option value="">기본 양식(위키)</option></select>
     <span class="wk-form-note" id="wk-form-note" aria-live="polite"></span>
   </div>
+  <div class="notice wk-profile-note hidden" id="wk-profile-note">조직 양식이 등록되지 않아 기본 양식을 사용 중입니다 <a class="btn sm" href="/settings#wl-list">양식 등록</a></div>
   <div class="wk-tabs" role="tablist" aria-label="편집 방식">
     <button type="button" role="tab" class="wk-tab on" id="tab-rich" aria-selected="true" aria-controls="wk-rich">미리보기 편집</button>
     <button type="button" role="tab" class="wk-tab" id="tab-simple" aria-selected="false" aria-controls="wk-simple">간단 편집</button>
@@ -43,6 +44,11 @@
         <span class="sep" aria-hidden="true"></span>
         <button type="button" class="btn sm" data-cmd="undo" title="실행 취소">↶</button>
         <button type="button" class="btn sm" data-cmd="redo" title="다시 실행">↷</button>
+        <span class="sep" aria-hidden="true"></span>
+        <!-- 조직 양식 프로필(결정기록 0037): 양식이 있을 때만 보인다 -->
+        <button type="button" class="btn sm hidden" id="wk-lock" aria-pressed="true" title="머리글·표 열 이름 수정 잠금">구조 잠금 해제</button>
+        <button type="button" class="btn sm hidden" id="wk-compare" title="머리글·표 열 순서가 양식과 다른 곳 표시">양식과 비교</button>
+        <button type="button" class="btn sm hidden" id="wk-restore" title="내용은 두고 머리글·표 열 구조만 양식대로">양식으로 되돌리기</button>
       </div>
       <div class="wk-editor preview-box" id="wk-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="주간보고 본문(위키에 보일 모양)" spellcheck="false"></div>
     </div>
@@ -60,6 +66,7 @@
   <div class="wk-bar">
     <div class="actions tight">
       <button class="btn" id="btn-redraft" title="현재 편집 내용을 자동 초안으로 바꿉니다(덮어쓰기 전 확인)">자동 초안 다시 넣기</button>
+      <button class="btn" id="btn-carry" type="button" title="지난주 '차주 계획'을 이번 주 업무와 비교해 넣습니다(저장하지 않음)">지난주 내 보고 불러오기</button>
       <button class="btn" id="btn-save" title="정리·마스킹한 사본을 로컬에 임시 저장합니다(보관 기간 후 삭제)">임시 저장</button>
       <button class="btn" id="btn-preview" title="서버가 정리·마스킹한 결과를 편집 영역에 보여 주고 승인할 수 있게 합니다">미리보기 확인</button>
       <button class="btn" id="btn-copy" title="대상 플랫폼 형식으로 바꿔 클립보드에 복사합니다(게시 아님)">형식 변환 후 복사</button>
@@ -80,6 +87,15 @@
 </div>
 {% endblock %}
 {% block modals %}
+<!-- 지난주 이월(U5, 결정기록 0037): 비교 결과는 메모리에만 -->
+<div class="dim" id="dlg-carry" role="dialog" aria-modal="true" aria-labelledby="carry-head">
+  <div class="modal">
+    <h3 id="carry-head">지난주 내 보고 불러오기</h3>
+    <p class="s" id="carry-src"></p>
+    <div class="carry-list" id="carry-list"></div>
+    <div class="m-actions"><button class="btn" id="carry-cancel" type="button">취소</button><button class="btn primary" id="carry-ok" type="button">고른 항목 넣기</button></div>
+  </div>
+</div>
 <!-- 위키 게시 확인(WIKI-03) -->
 <div class="dim" id="dlg-wiki" role="dialog" aria-modal="true" aria-labelledby="wiki-head">
   <div class="modal">
@@ -94,4 +110,4 @@
   </div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ asset('js/weekly_common.js') }}"></script><script src="{{ asset('js/weekly_editor.js') }}"></script><script src="{{ asset('js/weekly.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/weekly_common.js') }}"></script><script src="{{ asset('js/weekly_editor.js') }}"></script><script src="{{ asset('js/weekly_profile.js') }}"></script><script src="{{ asset('js/weekly.js') }}"></script>{% endblock %}

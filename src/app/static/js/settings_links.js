@@ -16,6 +16,7 @@ async function loadLinks() {
       link.href
         ? el("a", { class: "wl-url", href: link.href, target: "_blank", rel: "noopener noreferrer" }, link.url)
         : el("span", { class: "wl-url" }, link.url)),
+    el("div", { class: "actions tight" }, ...profileButtons(link)),  // 조직 양식(settings_profile.js, 0037)
     el("button", { class: "btn sm", type: "button", onclick: async () => {
       const removed = await api("DELETE", "/api/weekly/links/" + link.id);
       toast(removed.ok ? "링크를 삭제했습니다" : errorText(removed, "삭제하지 못했습니다"), { kind: removed.ok ? "ok" : "error" });

@@ -71,6 +71,14 @@ class WikiApi(Protocol):
 
     def create_page(self, space_key: str, title: str, body: str) -> WikiPage: ...
 
+    def has_session(self) -> bool:
+        """위키 로그인 세션이 지금 있는지(새로 로그인하지 않음, 결정기록 0037)."""
+        ...
+
+    def read_page_html(self, link: str) -> str:
+        """양식 읽기: 로그인 세션 브라우저로 본문 영역 HTML만(위키 기준 주소 밖은 거부)."""
+        ...
+
     def update_page(self, page: WikiPage, body: str) -> WikiPage:
         """page.version을 기준으로 갱신한다. 서버 버전이 다르면 WikiConflictError."""
         ...

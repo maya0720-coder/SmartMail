@@ -77,6 +77,11 @@ async function loadLinks() {
 
 async function loadDraft() {
   const link = selectedLink();
+  if (link && link.has_profile) {
+    // 위키 세션이 이미 있을 때만 서버가 양식을 다시 읽어 비교한다(로그인 창 없음, 결정기록 0037)
+    const check = await api("POST", "/api/weekly/links/" + link.id + "/profile/check");
+    if (check.ok && check.data.changed) toast("양식이 바뀌었습니다 · 연결 다시 확인", { kind: "warn", ms: 10000, action: "연결 확인", onAction: () => window.location.assign("/settings#wl-list") });
+  }
   const result = await api("POST", "/api/weekly/draft", { link_id: link ? link.id : null });
   if (!result.ok) { toast(errorText(result, "초안을 만들지 못했습니다")); return; }
   weekStart = result.data.week_start;
@@ -89,6 +94,8 @@ async function loadDraft() {
   document.getElementById("wk-planned").value = result.data.planned.join("\n");
   document.getElementById("wk-issues").value = result.data.issues.join("\n");
   applyForm(result.data.form);
+  WP.form = result.data.form;
+  setProfile(result.data.profile || null);  // 조직 양식 구조 잠금·비교(weekly_profile.js)
   invalidatePreview();
   autosaveDirty = false;
   document.getElementById("wk-preview").classList.add("hidden");
@@ -102,7 +109,7 @@ async function offerSavedDraft() {
   if (!saved.ok || !saved.data.html) return;
   const when = saved.data.saved_at.slice(5, 16).replace("T", " ");
   toast((saved.data.stored ? "임시 저장본" : "자동 보관본") + "(" + when + ")이 있습니다", { kind: "warn", ms: 10000, action: "불러오기",
-    onAction: () => { setMode("rich"); setRichHtml(saved.data.html); invalidatePreview(); } });
+    onAction: () => { setMode("rich"); setRichHtml(saved.data.html); applyLock(); invalidatePreview(); } });
 }
 
 // 서버가 이스케이프한 본인 영역 HTML을 DOMParser로 읽어 텍스트 노드로만 다시 그린다(스크립트 실행 없음).
@@ -132,6 +139,7 @@ async function preview() {
     const head = doc.body.querySelector("h2");
     if (head) head.remove();
     setRichHtml(serializeRich(doc.body));
+    applyLock();
     fill(box, ...info);
   } else {
     fill(box, ...info, ...renderPreview(lastPreview.section_html));
@@ -232,6 +240,7 @@ function switchMode(next) {
     document.getElementById("wk-issues").value = lists.issues.join("\n");
   } else {
     setRichHtml(listsToHtml(form.headings, listsNow()));
+    applyLock();
   }
   setMode(next);
   invalidatePreview();
@@ -244,7 +253,7 @@ async function loadTaskPicker() {
   fill(document.getElementById("wk-task-list"), ...items.map((t) => {
     const text = "[" + (t.module_tag || "기타") + "] " + t.title + " (요청: " + (t.requester_label || t.requester_dept || "-") + ")";
     return el("li", {}, el("button", { type: "button", title: text, onmousedown: (event) => event.preventDefault(),
-      onclick: () => { setMode("rich"); insertItem(text); } }, text));
+      onclick: () => { setMode("rich"); if (!insertTaskRow(t)) insertItem(text); } }, text));
   }));
 }
 

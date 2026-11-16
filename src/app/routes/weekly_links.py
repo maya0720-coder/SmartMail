@@ -40,8 +40,9 @@ class ConvertBody(DraftBody):
     platform: Literal["slack", "wiki", "web"]
 
 
-def _link_json(link: ReferenceLink) -> dict[str, object]:
+def _link_json(link: ReferenceLink, has_profile: bool = False) -> dict[str, object]:
     return {
+        "has_profile": has_profile,  # 조직 양식 프로필 등록 여부(결정기록 0037)
         "id": link.id,
         "url": link.url,
         "href": safe_link(link.url, [link.url]),  # 화면 링크는 검증을 통과한 https만
@@ -54,10 +55,12 @@ def _link_json(link: ReferenceLink) -> dict[str, object]:
 
 @router.get("/links")
 def list_links(request: Request) -> JSONResponse:
-    links = get_container(request).weekly_links.list_all()
+    container = get_container(request)
+    links = container.weekly_links.list_all()
+    profiled = container.weekly_profiles.linked_ids()
     return JSONResponse(
         {
-            "links": [_link_json(link) for link in links],
+            "links": [_link_json(link, link.id in profiled) for link in links],
             "max_links": MAX_LINKS,
             "max_outline_lines": MAX_OUTLINE_LINES,
         }

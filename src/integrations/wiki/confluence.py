@@ -9,6 +9,7 @@ REST API(페이지 조회·생성·수정, 버전 번호 충돌 검사)를 쓸 �
 from __future__ import annotations
 
 from domain.weekly.service import WikiLoginRequiredError, WikiPage, WikiUnavailableError
+from integrations.wiki.reader import BrowserWikiReader, WikiReadRules
 from security.links import safe_link
 from security.logging_policy import Site
 from security.sessions import SessionStore
@@ -19,9 +20,19 @@ FOREIGN_LINK = "위키 기준 주소와 다른 링크라 조회하지 않습니�
 
 
 class ConfluenceWiki:
-    def __init__(self, base_url: str, sessions: SessionStore) -> None:
+    def __init__(
+        self, base_url: str, sessions: SessionStore, read_rules: WikiReadRules | None = None
+    ) -> None:
         self._base_url = base_url
         self._sessions = sessions
+        # 양식 읽기는 API가 아니라 로그인 세션 브라우저 화면 읽기(결정기록 0037)
+        self._reader = BrowserWikiReader(base_url, sessions, read_rules or WikiReadRules())
+
+    def has_session(self) -> bool:
+        return self._reader.has_session()
+
+    def read_page_html(self, link: str) -> str:
+        return self._reader.read_page_html(link)
 
     def _require_login(self) -> None:
         if self._sessions.current(Site.WIKI) is None:

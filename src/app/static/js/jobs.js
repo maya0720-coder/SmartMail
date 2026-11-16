@@ -15,6 +15,8 @@ const GK_REASON_LABELS = {
   result_unknown: "등록요청 후 결과를 확인하지 못함", error: "오류 · 결과 확인 필요",
   manual: "직접 확인해 등록됨으로 표시", login_required_ai: "AI-Ground 로그인 필요",
 };
+// 위키 양식 읽기 실패 사유(결정기록 0037)
+const WIKI_REASON_LABELS = { login_required: "위키 로그인 필요", not_found: "내 영역 머리글을 찾지 못함", invalid: "양식 구조를 읽지 못함", failed: "본문 읽기 실패" };
 const JOB_NAMES = { gk: "G-Knowledge 등록", summary: "AI 요청 요약", mail: "메일 수집", company: "회사명 조회", wiki: "위키 양식 읽기" };
 const JOBS_FAST_MS = 3000;   // 진행 중인 작업이 있을 때
 const JOBS_SLOW_MS = 20000;  // 없을 때(새로 시작된 백그라운드 작업 확인용)
@@ -36,6 +38,7 @@ function jobStateText(job) {
   }
   if (job.kind === "mail") return job.state === "running" ? "수집 중…" : job.at ? "마지막 수집 " + job.at.slice(5, 16).replace("T", " ") : "아직 수집 안 함";
   if (job.kind === "company") return job.state === "running" ? "조회 중…" : "최근 " + job.saved + "건 확인";
+  if (job.kind === "wiki") return job.state === "running" ? "읽는 중…" : job.state === "done" ? "양식 확인 완료" : "실패 · " + (WIKI_REASON_LABELS[job.reason] || "사유 확인 필요");
   return job.state;
 }
 

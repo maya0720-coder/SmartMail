@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
@@ -20,6 +21,8 @@ from domain.weekly.report import (
     MAX_ITEMS,
     OwnSectionError,
     WeeklyDraft,
+    classify_week_tasks,
+    item_text,
     render_body,
     with_layout,
 )
@@ -85,6 +88,8 @@ class DraftBody(BaseModel):
     draft_html: str | None = Field(default=None, max_length=MAX_HTML_FIELD_CHARS)
     page_title: str | None = Field(default=None, max_length=200)  # 되돌려 보낸 값(쓰지 않음)
     own_heading: str | None = Field(default=None, max_length=200)  # 되돌려 보낸 값(쓰지 않음)
+    # 초안 응답의 양식 구조(결정기록 0037)를 되돌려 보낸 값. 쓰지 않는다(서버 저장값이 기준)
+    profile: dict[str, Any] | None = None
 
     def to_draft(self) -> WeeklyDraft:
         if self.week_start.tzinfo is None or week_start(self.week_start) != self.week_start:
@@ -151,8 +156,20 @@ def make_draft(
         return _error(str(exc), 400)
     layout = container.weekly.resolve_layout(link)
     draft = container.weekly.draft()
-    section = render_body(draft, with_layout(container.weekly.template, layout))
+    profile = container.weekly_profiles.get(link.id) if link is not None else None
+    if profile is not None:
+        # 조직 양식 프로필 순서대로 초안을 만든다(결정기록 0037)
+        template = container.weekly.template
+        sections = classify_week_tasks(container.tasks.list_tasks(), container.clock.now())
+        section = container.weekly_profiles.render(
+            profile, sections, lambda task: item_text(task, template)
+        )
+        layout = replace(layout, label=f"양식 프로필 {profile.name}", source="link")
+    else:
+        section = render_body(draft, with_layout(container.weekly.template, layout))
     result = _draft_json(draft, layout, sanitize(section))
+    # 양식 구조(편집기 잠금·비교·되돌리기용). 없으면 '기본 양식 사용 중' 안내를 띄운다
+    result["profile"] = None if profile is None else profile.as_json()
     # 편집기 위쪽에 읽기 전용(회색)으로 보일 페이지 제목·본인 영역 머리글(WIKI-04)
     result["page_title"] = container.weekly.template.page_title(draft.week_start)
     result["own_heading"] = container.weekly.own_heading

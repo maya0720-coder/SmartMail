@@ -81,3 +81,6 @@
 .gk-st.s-running .ic{animation:gk-spin 1s linear infinite;width:12px;height:12px}
 @keyframes gk-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.gk-st.s-running .ic{animation:none}}
+/* 주간보고 마감 알림 배너(결정기록 0037) */
+.remind-bar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
+.remind-bar.hidden{display:none}

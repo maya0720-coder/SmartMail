@@ -108,11 +108,10 @@ def _item(task: Task, template: WikiTemplate) -> str:
     return mask(text).value[:MAX_ITEM_CHARS]
 
 
-def classify_week(tasks: list[Task], moment: datetime, template: WikiTemplate) -> WeeklyDraft:
-    """WIKI-01 자동 분류."""
+def classify_week_tasks(tasks: list[Task], moment: datetime) -> dict[str, list[Task]]:
+    """WIKI-01 자동 분류(업무 단위). 양식 프로필의 표 행을 만들 때도 쓴다(결정기록 0037)."""
     start, end = week_range(moment)
-    draft = WeeklyDraft(start)
-    sections = {"done": draft.done, "planned": draft.planned, "issues": draft.issues}
+    sections: dict[str, list[Task]] = {"done": [], "planned": [], "issues": []}
     for task in tasks:
         if task.weekly_section is not None and task.status not in (
             TaskStatus.SUGGESTED,
@@ -123,19 +122,34 @@ def classify_week(tasks: list[Task], moment: datetime, template: WikiTemplate) -
                 task.closed_at is None or not start <= task.closed_at < end
             )
             if task.weekly_section in sections and not old_done:
-                sections[task.weekly_section].append(_item(task, template))
+                sections[task.weekly_section].append(task)
             continue  # 'none'(넣지 않음) 포함
         if task.status is TaskStatus.DONE:
             if task.closed_at is not None and start <= task.closed_at < end:
-                draft.done.append(_item(task, template))
+                sections["done"].append(task)
         elif task.status is TaskStatus.ON_HOLD or (
             task.status in _OPEN and task.due_at is not None and task.due_at < moment
         ):
-            draft.issues.append(_item(task, template))  # 보류·기한 지연
+            sections["issues"].append(task)  # 보류·기한 지연
         elif task.status in _OPEN:
-            draft.planned.append(_item(task, template))
-    for items in (draft.done, draft.planned, draft.issues):
+            sections["planned"].append(task)
+    for items in sections.values():
         del items[MAX_ITEMS:]
+    return sections
+
+
+def item_text(task: Task, template: WikiTemplate) -> str:
+    """목록 항목 한 줄(항목 형식, 마스킹 후 자름)."""
+    return _item(task, template)
+
+
+def classify_week(tasks: list[Task], moment: datetime, template: WikiTemplate) -> WeeklyDraft:
+    """WIKI-01 자동 분류."""
+    sections = classify_week_tasks(tasks, moment)
+    draft = WeeklyDraft(week_range(moment)[0])
+    draft.done.extend(_item(t, template) for t in sections["done"])
+    draft.planned.extend(_item(t, template) for t in sections["planned"])
+    draft.issues.extend(_item(t, template) for t in sections["issues"])
     return draft
 
 

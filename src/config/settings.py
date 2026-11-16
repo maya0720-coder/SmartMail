@@ -48,6 +48,9 @@ LOGIN_SITE_NAMES: Final = frozenset({"wiki", "g-knowledge", "ai-ground", "groupw
 
 MAX_INTERNAL_DOMAINS: Final = 20
 
+# 주간보고 마감 알림 형식(빈 값 = 끔). 해석은 domain.weekly.remind.parse_remind
+WEEKLY_REMIND_PATTERN: Final = r"^$|^(MON|TUE|WED|THU|FRI|SAT|SUN) ([01]\d|2[0-3]):[0-5]\d$"
+
 Port = Annotated[int, Field(ge=1024, le=65535)]
 
 
@@ -91,6 +94,8 @@ class Settings(BaseSettings):
     # 지표 원장·G-Knowledge R&R의 담당자 표시명(로컬 단일 사용자). 실명 대신 별칭 가능.
     user_display_name: str = Field(default="본인", min_length=1, max_length=50)
     log_dir: Path = DEFAULT_LOG_DIR
+    # 주간보고 마감 알림(결정기록 0037): 'WED 15:00' 형식(요일 MON~SUN, 24시간). 비우면 끈다
+    weekly_remind_at: str = Field(default="", max_length=9, pattern=WEEKLY_REMIND_PATTERN)
 
     # 로그인·세션(AUTH-05, AUTH-09)
     session_idle_minutes: int = Field(default=30, ge=1, le=480)

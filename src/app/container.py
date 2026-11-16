@@ -20,8 +20,11 @@ from domain.search.pipeline import SearchPipeline
 from domain.tasks.categories import CategoryCatalog
 from domain.tasks.requester import CompanyResolver
 from domain.tasks.service import TaskService
+from domain.weekly.carryover import CarryoverService
 from domain.weekly.drafts import WeeklyDraftStore
 from domain.weekly.links import ReferenceLinkService
+from domain.weekly.profile_service import WeeklyProfileService
+from domain.weekly.remind import WeeklyReminder
 from domain.weekly.service import WeeklyService
 from integrations.ai.gateway import AiGateway
 from security.browser import BrowserRuntime
@@ -75,6 +78,9 @@ class Container:
     weekly_cache: SqliteWeeklyCache  # 주간보고 게시 캐시(마스킹 스냅샷)
     weekly_drafts: WeeklyDraftStore  # 주간보고 편집기 자동 보관·임시 저장(결정기록 0030)
     gk_queue: GkRegisterQueue  # G-Knowledge 백그라운드 등록(결정기록 0035)
+    weekly_profiles: WeeklyProfileService  # 주간보고 양식 프로필(결정기록 0037)
+    carryover: CarryoverService  # 지난주 보고 이월(메모리 비교, 0037)
+    reminder: WeeklyReminder  # 주간보고 마감 알림(0037)
     # 메일 수집 + 업무 반영을 한 번에 하나만 실행(자동 수집과 화면 버튼이 겹치지 않게)
     mail_lock: threading.Lock = field(default_factory=threading.Lock)
     # 시작 로그인 창에서 '나중에'를 눌렀는지(이번 실행 동안만, 메모리). 화면은 더 쓰지 않음(0034)

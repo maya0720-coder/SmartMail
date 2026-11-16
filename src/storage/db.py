@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-SCHEMA_VERSION: Final = 5  # 2: 트리아지(0015), 3: 구조화 요약(0021), 4: 0027~0030, 5: 0035
+SCHEMA_VERSION: Final = 6  # 2: 트리아지(0015), 3: 구조화 요약(0021), 4: 0027~0030, 5: 0035, 6: 0037
 
 # 사용자 데이터 테이블(전체 삭제 대상). 순서는 외래 키 의존의 역순.
 DATA_TABLES: Final = (
@@ -25,6 +25,7 @@ DATA_TABLES: Final = (
     "history_card",
     "mail_ref",
     "weekly_report",
+    "weekly_template_profile",
     "weekly_link",
     "weekly_publish_cache",
     "ai_call_log",
@@ -245,6 +246,21 @@ CREATE TABLE IF NOT EXISTS weekly_draft (
     saved_at TEXT NOT NULL
 )
 """
+# 주간보고 양식 프로필(결정기록 0037): 참고 링크마다 1개.
+# 양식 구조(머리글·열 이름·고정 문구, 마스킹)와 칸 연결만.
+# 표 데이터 행 글자·다른 팀원 영역·이름은 저장하지 않는다
+MIGRATION_6_WEEKLY_PROFILE: Final = """
+CREATE TABLE IF NOT EXISTS weekly_template_profile (
+    id INTEGER PRIMARY KEY,
+    link_id INTEGER NOT NULL UNIQUE REFERENCES weekly_link(id) ON DELETE CASCADE,
+    name TEXT NOT NULL CHECK (length(name) <= 120),
+    blocks_json TEXT NOT NULL CHECK (length(blocks_json) <= 65536),
+    bindings_json TEXT NOT NULL CHECK (length(bindings_json) <= 16384),
+    source_hash TEXT NOT NULL CHECK (length(source_hash) = 64),
+    source TEXT NOT NULL CHECK (source IN ('wiki', 'paste')),
+    fetched_at TEXT NOT NULL
+)
+"""
 # 기존 메일 참조의 요약 상태를 1회 계산한다(결정기록 0029). 이후에는 요약 작업이 기록한다.
 MIGRATION_4_SUMMARY_STATE: Final = """
 UPDATE mail_ref SET summary_state = CASE
@@ -313,6 +329,7 @@ class Database:
             conn.execute(MIGRATION_2_TRIAGE_RULES)
             conn.execute(MIGRATION_4_DOMAIN_COMPANY)
             conn.execute(MIGRATION_4_WEEKLY_DRAFT)
+            conn.execute(MIGRATION_6_WEEKLY_PROFILE)
             if "summary_state" not in existing["mail_ref"]:
                 conn.execute(MIGRATION_4_SUMMARY_STATE)
 
