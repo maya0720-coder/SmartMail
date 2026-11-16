@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from domain.calendar import WEEK_START_WEEKDAY, week_start
+from domain.calendar import WEEK_START_WEEKDAY, is_business_day, week_start
 from domain.clock import KST
 from domain.ports import Clock
 
@@ -41,10 +41,6 @@ def parse_remind(value: str) -> RemindRule | None:
     if match is None:
         raise ValueError("주간보고 마감 알림은 'WED 15:00' 형식이어야 합니다")
     return RemindRule(DAY_NAMES.index(match.group(1)), int(match.group(2)), int(match.group(3)))
-
-
-def is_business_day(day: date, holidays: frozenset[date]) -> bool:
-    return day.weekday() < 5 and day not in holidays
 
 
 def due_at(rule: RemindRule, moment: datetime, holidays: frozenset[date]) -> datetime:

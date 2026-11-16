@@ -403,6 +403,7 @@ def build_container(
         weekly_profiles=extras.profiles,
         carryover=extras.carryover,
         reminder=extras.reminder,
+        followup=extras.followup,
         weekly_cache=weekly_cache,
         weekly_drafts=WeeklyDraftStore(
             SqliteWeeklyDrafts(db),

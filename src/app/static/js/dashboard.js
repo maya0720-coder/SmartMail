@@ -61,7 +61,8 @@ function filteredTasks() {
   const term = searchTerm.trim().toLowerCase();
   const byStatus = (t) => currentFilter === "all" ? t.status !== "dismissed"
     : currentFilter === "todo" ? t.status !== "dismissed" && t.status !== "suggested"
-    : currentFilter === "soon" ? Boolean(t.due_badge) : t.status === currentFilter;
+    : currentFilter === "soon" ? Boolean(t.due_badge)
+    : currentFilter === "followup" ? isFollowup(t) : t.status === currentFilter;
   const byTerm = (t) => !term || [t.title, t.requester_label, t.requester_dept, t.module_tag].some((v) => v && v.toLowerCase().includes(term));
   return sortTasks(allTasks.filter((t) => byStatus(t) && byTerm(t)), todoSort);
 }
@@ -86,8 +87,11 @@ function todoRow(task) {
     el("td", { class: "c-dept" }, requesterNode(task, "") || "-"),
     el("td", { class: "c-last" }, lastMailText(task)),
     el("td", { class: "c-due" }, dueText(task)),
-    el("td", { class: "c-st" }, statusBadge(task)));
+    el("td", { class: "c-st" }, statusBadge(task), followupBadge(task)));
 }
+
+// 팔로업 필요(결정기록 0038): 보낸 질문에 설정한 근무일 이상 회신 없음
+const isFollowup = (t) => Boolean(t.followup) && t.followup.state === "followup";
 
 // 최근 메일: "11-16 14:05 · 받음/보냄". 내가 마지막으로 회신했으면 '회신함'(완료 후보 판단 보조)
 function lastMailText(task) {
@@ -138,7 +142,7 @@ function renderTodo() {
     const key = button.dataset.f;
     const count = key === "all" ? allTasks.filter((t) => t.status !== "dismissed").length
       : key === "todo" ? allTasks.filter((t) => t.status !== "dismissed" && t.status !== "suggested").length
-      : allTasks.filter((t) => key === "soon" ? Boolean(t.due_badge) : t.status === key).length;
+      : allTasks.filter((t) => key === "soon" ? Boolean(t.due_badge) : key === "followup" ? isFollowup(t) : t.status === key).length;
     button.textContent = button.textContent.replace(/\s\d+$/, "") + " " + count;
     button.classList.toggle("on", key === currentFilter);
     button.setAttribute("aria-pressed", key === currentFilter ? "true" : "false");

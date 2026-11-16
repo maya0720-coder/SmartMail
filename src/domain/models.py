@@ -168,6 +168,9 @@ class Task:
     # 요청자 구분(결정기록 0027): internal|external|freemail, 외부 회사 도메인(외부일 때만)
     requester_kind: str | None = None
     requester_domain: str | None = None
+    # 회신 대기(결정기록 0038): 내가 보낸 질문·요청 메일 시각(보조 표시, 상태 체계와 별개)
+    awaiting_reply_since: datetime | None = None
+    followup_dismissed: bool = False  # 사용자가 '대기 해제'를 누름(같은 메일로 다시 켜지지 않음)
     id: int | None = None
 
     @property

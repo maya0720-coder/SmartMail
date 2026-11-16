@@ -18,6 +18,7 @@ from app.routes import (
     categories,
     companies,
     data,
+    followup,
     gk,
     history,
     jobs,
@@ -143,6 +144,7 @@ def create_app(
     app.include_router(triage.rules_router)
     app.include_router(triage_bulk.router)
     app.include_router(task_progress.router)
+    app.include_router(followup.router)
     app.include_router(tasks.router)
     app.include_router(gk.router)
     app.include_router(jobs.router)

@@ -24,7 +24,7 @@
     <div class="card-head">
       <h3>내 할 일</h3>
       <div class="filters seg" id="filters" role="group" aria-label="업무 상태 필터">
-        <button data-f="todo">할 일</button><button class="on" data-f="all">전체</button><button data-f="suggested">제안됨</button><button data-f="in_progress">진행 중</button><button data-f="done_candidate">완료 후보</button><button data-f="soon">기한 임박</button><button data-f="done">완료</button>
+        <button data-f="todo">할 일</button><button class="on" data-f="all">전체</button><button data-f="suggested">제안됨</button><button data-f="in_progress">진행 중</button><button data-f="done_candidate">완료 후보</button><button data-f="soon">기한 임박</button><button data-f="followup" title="보낸 질문에 회신이 없는 업무(결정기록 0038)">팔로업 필요</button><button data-f="done">완료</button>
       </div>
       <div class="head-tools">
         <button class="icon-btn" id="btn-collect" type="button" aria-label="메일 새로고침" title="메일 새로고침"><svg class="ic" aria-hidden="true"><use href="{{ ic }}refresh-cw"></use></svg></button>
@@ -86,6 +86,7 @@
 <script src="{{ asset('js/todo_list.js') }}"></script>
 <script src="{{ asset('js/todo_actions.js') }}"></script>
 <script src="{{ asset('js/task_badges.js') }}"></script>
+<script src="{{ asset('js/weekly_common.js') }}"></script>
 <script src="{{ asset('js/detail_progress.js') }}"></script>
 <script src="{{ asset('js/detail_mail.js') }}"></script>
 <script src="{{ asset('js/dashboard_detail.js') }}"></script>

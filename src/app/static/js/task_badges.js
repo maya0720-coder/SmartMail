@@ -10,6 +10,16 @@ function statusBadge(task) {
   return el("span", { class: "badge " + (STATUS_BADGE_CLASS[task.status] || "b-wait") }, task.status_label);
 }
 
+// 회신 대기·팔로업 배지(결정기록 0038). 상태 배지와 별개인 보조 표시
+function followupBadge(task) {
+  const f = task.followup;
+  if (!f || f.state === "none") return null;
+  if (f.state === "followup") {
+    return el("span", { class: "badge b-follow", title: "보낸 질문에 " + f.days + "근무일째 회신 없음" }, "팔로업 필요 · " + f.days + "일");
+  }
+  return el("span", { class: "badge b-await", title: "내가 보낸 질문·요청에 회신을 기다리는 중" }, "회신 대기");
+}
+
 // 구분 판별 기준: 서버 설정(전자결재 구분 이름·기본 구분=목록 첫 항목). 읽기 전에는 기본값으로 그린다.
 const CATEGORY_KINDS = { approval: "전자결재", general: "일반업무" };
 

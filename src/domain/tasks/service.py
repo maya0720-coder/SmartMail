@@ -32,6 +32,8 @@ from domain.ports import (
 )
 from domain.tasks.categories import DEFAULT_CATEGORIES, CategoryCatalog
 from domain.tasks.extract import TaskCandidate, TaskExtractor
+from domain.tasks.followup import OPEN_STATUSES as FOLLOWUP_OPEN
+from domain.tasks.followup import sync_awaiting
 from domain.tasks.requester import RequesterClassifier
 from domain.tasks.thread_sync import sync_thread_fields
 from domain.tasks.triage_rules import RuleKey, TriageLearning
@@ -236,9 +238,9 @@ class TaskService:
         task = self._tasks.get(task_id)
         if task is None:
             return
-        updated = sync_thread_fields(
-            task, thread, self._refs.list_for_task(task_id), self._requesters
-        )
+        refs = self._refs.list_for_task(task_id)
+        updated = sync_thread_fields(task, thread, refs, self._requesters)
+        updated = sync_awaiting(updated, thread, refs)  # 회신 대기(결정기록 0038)
         if updated != task:
             self._tasks.update(updated)
 
@@ -252,6 +254,8 @@ class TaskService:
                 self._link_thread(thread, existing.id)  # TODO-04 중복 생성 금지
                 self._sync_thread(existing.id, thread)
                 linked += 1
+                # 방금 갱신한 값(마지막 메일·회신 대기)을 덮어쓰지 않게 다시 읽는다(결정기록 0038)
+                existing = self._tasks.get(existing.id) or existing
                 if self._detect_reply(existing, thread):
                     replied += 1
                 continue
@@ -357,6 +361,23 @@ class TaskService:
         kind = TaskEventType.APPROVED_EDITED if changed else TaskEventType.APPROVED
         self._events.record(kind, task_id=task_id)
         return saved
+
+    # ---- 회신 대기(결정기록 0038): 보조 표시, 상태 체계와 별개 ----
+    def mark_awaiting(self, task_id: int) -> Task:
+        """사용자가 '회신 대기로 표시'. 지금부터 근무일을 센다."""
+        task = self.get(task_id)
+        if task.status not in FOLLOWUP_OPEN:
+            raise TransitionError("진행 중인 업무만 회신 대기로 표시할 수 있습니다")
+        return self._save(
+            replace(task, awaiting_reply_since=self._clock.now(), followup_dismissed=False)
+        )
+
+    def clear_awaiting(self, task_id: int) -> Task:
+        """'대기 해제'. 같은 보낸 메일로는 다시 켜지지 않는다(새 질문 메일이면 다시 켜짐)."""
+        task = self.get(task_id)
+        if task.awaiting_reply_since is None or task.followup_dismissed:
+            raise TransitionError("회신 대기 중인 업무가 아닙니다")
+        return self._save(replace(task, followup_dismissed=True))
 
     # ---- 제안 트리아지(결정기록 0015) ----
     def snooze(self, task_id: int) -> Task:

@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-SCHEMA_VERSION: Final = 6  # 2: 트리아지(0015), 3: 구조화 요약(0021), 4: 0027~0030, 5: 0035, 6: 0037
+SCHEMA_VERSION: Final = 7  # 2: 0015, 3: 0021, 4: 0027~0030, 5: 0035, 6: 0037, 7: 0038
 
 # 사용자 데이터 테이블(전체 삭제 대상). 순서는 외래 키 의존의 역순.
 DATA_TABLES: Final = (
@@ -230,6 +230,14 @@ MIGRATION_5_TASK_COLUMNS: Final = (
         " AND gk_state_reason NOT GLOB '*[^a-z_]*'))",
     ),
 )
+# 회신 대기·팔로업(결정기록 0038): 시각과 해제 여부만. 메일 본문·질문 문장은 저장하지 않는다
+MIGRATION_7_TASK_COLUMNS: Final = (
+    ("awaiting_reply_since", "TEXT"),
+    (
+        "followup_dismissed",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (followup_dismissed IN (0, 1))",
+    ),
+)
 MIGRATION_4_DOMAIN_COMPANY: Final = """
 CREATE TABLE IF NOT EXISTS domain_company (
     domain TEXT PRIMARY KEY CHECK (length(domain) BETWEEN 1 AND 253),
@@ -319,6 +327,7 @@ class Database:
             ("mail_ref", MIGRATION_4_MAIL_REF_COLUMNS),
             ("task", MIGRATION_4_TASK_COLUMNS),
             ("task", MIGRATION_5_TASK_COLUMNS),
+            ("task", MIGRATION_7_TASK_COLUMNS),
         ]
         with self.transaction() as conn:
             for table, adds in plan:

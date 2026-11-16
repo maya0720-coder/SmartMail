@@ -84,3 +84,7 @@
 /* 주간보고 마감 알림 배너(결정기록 0037) */
 .remind-bar{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
 .remind-bar.hidden{display:none}
+/* 회신 대기·팔로업 배지(결정기록 0038) */
+.badge.b-await{background:var(--soft);color:var(--sub);margin-left:4px}
+.badge.b-follow{background:var(--warn-soft);color:var(--warn);margin-left:4px}
+.wk-copybuf{position:fixed;left:-9999px;top:0}

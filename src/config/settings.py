@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     log_dir: Path = DEFAULT_LOG_DIR
     # 주간보고 마감 알림(결정기록 0037): 'WED 15:00' 형식(요일 MON~SUN, 24시간). 비우면 끈다
     weekly_remind_at: str = Field(default="", max_length=9, pattern=WEEKLY_REMIND_PATTERN)
+    # 회신 대기 → '팔로업 필요'까지 근무일 수(결정기록 0038, 주말·공휴일 제외)
+    followup_business_days: int = Field(default=2, ge=1, le=20)
 
     # 로그인·세션(AUTH-05, AUTH-09)
     session_idle_minutes: int = Field(default=30, ge=1, le=480)

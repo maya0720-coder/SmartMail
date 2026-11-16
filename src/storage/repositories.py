@@ -46,6 +46,8 @@ def _task_from_row(row: sqlite3.Row) -> Task:
         progress_ref_count=row["progress_ref_count"],
         requester_kind=row["requester_kind"],
         requester_domain=row["requester_domain"],
+        awaiting_reply_since=from_db_time(row["awaiting_reply_since"]),
+        followup_dismissed=bool(row["followup_dismissed"]),
     )
 
 
@@ -80,6 +82,8 @@ def _task_params(task: Task) -> tuple[object, ...]:
         task.progress_ref_count,
         task.requester_kind,
         task.requester_domain,
+        to_db_time(task.awaiting_reply_since),
+        int(task.followup_dismissed),
     )
 
 
@@ -87,7 +91,8 @@ _TASK_COLUMNS = (
     "title, requester_dept, requested_at, due_at, status, module_tag, source, thread_id,"
     " created_at, closed_at, gk_link, gk_registered_at, shared, snooze_until, confidence,"
     " reasons, weekly_section, last_mail_at, last_mail_direction, progress_digest,"
-    " progress_ref_count, requester_kind, requester_domain"
+    " progress_ref_count, requester_kind, requester_domain, awaiting_reply_since,"
+    " followup_dismissed"
 )
 _TASK_COLUMN_COUNT = len(_TASK_COLUMNS.split(","))
 

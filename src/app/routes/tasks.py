@@ -16,6 +16,7 @@ from domain.clock import KST
 from domain.errors import UserInputError
 from domain.models import STATUS_LABELS, Task, TaskStatus, summary_state_of
 from domain.retention_rules import retention_info
+from domain.tasks.followup import FollowupState
 from domain.tasks.progress import progress_stale, ref_title, rule_summary
 from domain.tasks.service import TaskEdit, TaskNotFoundError, TransitionError, due_badge
 from domain.tasks.triage_view import is_low_confidence, received_group
@@ -73,6 +74,10 @@ def gk_state_json(container: Any, task_id: int | None) -> dict[str, Any] | None:
     return None if status is None else status.as_json()
 
 
+def followup_json(state: FollowupState) -> dict[str, Any]:
+    return {"state": state.state, "since": _iso(state.since), "days": state.business_days}
+
+
 def task_json(request: Request, task: Task, running: set[int] | None = None) -> dict[str, Any]:
     container = get_container(request)
     now = container.clock.now()
@@ -95,6 +100,8 @@ def task_json(request: Request, task: Task, running: set[int] | None = None) -> 
         "gk_link": safe_link(task.gk_link or "", [str(container.settings.gknowledge_base_url)]),
         # 백그라운드 등록 상태(결정기록 0035). 없으면 None
         "gk_state": gk_state_json(container, task.id),
+        # 회신 대기·팔로업(결정기록 0038): none | waiting | followup, 경과 근무일
+        "followup": followup_json(container.followup.state(task, now)),
         "retention_days_left": info.days_left if info else None,
         "retention_alert": bool(info and info.alert),
         # 제안 트리아지(결정기록 0015): 이유는 코드값, 문장은 담지 않는다

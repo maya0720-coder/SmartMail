@@ -11,6 +11,7 @@ from datetime import datetime
 from config.rules import load_holidays, load_weekly_form_rules
 from config.settings import Settings
 from domain.ports import Clock
+from domain.tasks.followup import FollowupPolicy
 from domain.tasks.service import TaskService
 from domain.weekly.carryover import CarryoverService
 from domain.weekly.links import ReferenceLinkService
@@ -28,6 +29,7 @@ class WeeklyExtras:
     profiles: WeeklyProfileService
     carryover: CarryoverService
     reminder: WeeklyReminder
+    followup: FollowupPolicy  # 회신 대기·팔로업(결정기록 0038, 같은 공휴일 목록을 쓴다)
 
 
 def build_weekly_extras(
@@ -42,6 +44,7 @@ def build_weekly_extras(
     cache: SqliteWeeklyCache,
 ) -> WeeklyExtras:
     rules = load_weekly_form_rules()
+    holidays = load_holidays()
 
     def own_heading() -> str:
         return weekly.own_heading
@@ -66,6 +69,7 @@ def build_weekly_extras(
             rules,
         ),
         reminder=WeeklyReminder(
-            parse_remind(settings.weekly_remind_at), clock, published, load_holidays()
+            parse_remind(settings.weekly_remind_at), clock, published, holidays
         ),
+        followup=FollowupPolicy(settings.followup_business_days, holidays),
     )

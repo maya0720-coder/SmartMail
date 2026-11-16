@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Final
 
 from domain.clock import KST, require_aware
@@ -42,3 +42,23 @@ def local_date_label(moment: datetime) -> str:
     """화면 표시용 'MM/DD(요일)'."""
     local = require_aware(moment).astimezone(KST)
     return f"{local:%m/%d}({'월화수목금토일'[local.weekday()]})"
+
+
+def is_business_day(day: date, holidays: frozenset[date] = frozenset()) -> bool:
+    """근무일: 월~금이고 공휴일 목록(config/rules/holidays.toml)에 없는 날."""
+    return day.weekday() < 5 and day not in holidays
+
+
+def business_days_after(
+    start: datetime, end: datetime, holidays: frozenset[date] = frozenset()
+) -> int:
+    """start 날짜 다음 날부터 end 날짜까지 근무일 수(KST 날짜 기준). end가 앞이면 0."""
+    first = require_aware(start).astimezone(KST).date()
+    last = require_aware(end).astimezone(KST).date()
+    count = 0
+    day = first + timedelta(days=1)
+    while day <= last and count < 366:
+        if is_business_day(day, holidays):
+            count += 1
+        day += timedelta(days=1)
+    return count

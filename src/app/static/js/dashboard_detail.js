@@ -115,6 +115,31 @@ function gkStateNode(task) {
   return link ? el("span", {}, link, " ", chip) : chip;
 }
 
+// 회신 대기·팔로업(결정기록 0038): 초안 복사(발송 없음)·대기 해제·직접 표시
+const FOLLOWUP_OPEN = ["waiting", "in_progress", "done_candidate", "on_hold"];
+function followupButtons(task, onChanged, b) {
+  if (!FOLLOWUP_OPEN.includes(task.status)) return [];
+  const post = (path, done) => async () => {
+    const result = await api("POST", "/api/tasks/" + task.id + path);
+    toast(result.ok ? done : errorText(result, "처리하지 못했습니다"), { kind: result.ok ? "ok" : "error" });
+    if (result.ok) onChanged();
+  };
+  const f = task.followup || { state: "none" };
+  if (f.state === "none") return [b("", "mail", "회신 대기로 표시", post("/awaiting", "회신 대기로 표시했습니다"))];
+  return [b("", "repeat", "팔로업 메일 초안 복사", () => copyFollowup(task)), b("", null, "대기 해제", post("/awaiting/clear", "회신 대기를 해제했습니다"))];
+}
+async function copyFollowup(task) {
+  const result = await api("GET", "/api/tasks/" + task.id + "/followup-draft");
+  if (!result.ok) { toast(errorText(result, "초안을 만들지 못했습니다"), { kind: "error" }); return; }
+  const ok = await copyText(result.data.text, null);
+  toast(ok ? "팔로업 메일 초안을 복사했습니다 · 메일 프로그램에 붙여넣어 보내세요(앱은 발송하지 않음)" : "복사하지 못했습니다. 다시 시도해 주세요", { kind: ok ? "ok" : "warn", ms: 6000 });
+}
+function followupText(task) {
+  const f = task.followup;
+  if (!f || f.state === "none") return "-";
+  return (f.state === "followup" ? "팔로업 필요" : "회신 대기") + " · " + f.since.slice(5, 16).replace("T", " ") + " 보냄 · " + f.days + "근무일 경과";
+}
+
 // 상태별 하단 고정 버튼: [주요(전체 폭)] + 보조
 function footButtons(task, resultBox, onChanged) {
   const act = (action) => () => applyAction(task, action, onChanged);
@@ -166,7 +191,8 @@ async function renderDetail(taskId, onChanged) {
       el("div", {}, "기한"), el("div", {}, dueText(task)),
       el("div", {}, "수신"), el("div", { class: "mono" }, received),
       el("div", { class: "ev" }, "근거"), el("div", { class: "ev" }, task.evidence ? "“" + task.evidence + "”" : "-"),
-      el("div", {}, "지식 등록"), el("div", { id: "d-gk-state" }, gkStateNode(task))),
+      el("div", {}, "지식 등록"), el("div", { id: "d-gk-state" }, gkStateNode(task)),
+      el("div", {}, "회신"), el("div", { id: "d-followup" }, followupText(task))),
     // 진행 요약(맨 위, 접기 가능) → 구조화 요약 → 진행 경과 타임라인(결정기록 0028)
     progressSection(task),
     digestView(task),
@@ -174,7 +200,8 @@ async function renderDetail(taskId, onChanged) {
     resultBox,
     timelineSection(task),
     mailSection(task.id, refs, mailButton));
-  fill(foot, el("div", { class: "d-btns" }, ...footButtons(task, resultBox, onChanged)),
+  fill(foot, el("div", { class: "d-btns" }, ...footButtons(task, resultBox, onChanged), ...followupButtons(task, onChanged,
+    (cls, ic, label, onclick) => el("button", { type: "button", class: "btn " + cls, onclick }, ic ? icon(ic) : null, label))),
     task.retention_days_left != null ? el("div", { class: "ret" }, "보관 D-" + task.retention_days_left + " · 기간이 지나면 앱에서 삭제" + (task.gk_link ? "" : " (G-Knowledge 미등록)")) : null);
 }
 
