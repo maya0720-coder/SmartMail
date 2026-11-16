@@ -160,8 +160,13 @@ def dismiss(request: Request, task_id: int) -> JSONResponse:
 
 @router.post("/{task_id}/revert")
 def revert(request: Request, task_id: int, body: RevertBody) -> JSONResponse:
+    return revert_one(request, task_id, body.decision_token)
+
+
+def revert_one(request: Request, task_id: int, token: str) -> JSONResponse:
+    """건별 되돌리기(일괄 되돌리기도 건마다 이것을 쓴다, 결정기록 0036)."""
     container = get_container(request)
-    decision = container.decisions.take(task_id, body.decision_token)
+    decision = container.decisions.take(task_id, token)
     if decision is None:
         return _error(REVERT_EXPIRED, 409)
     try:

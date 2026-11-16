@@ -1,5 +1,6 @@
 // 제안된 업무 트리아지 — 목록(결정기록 0015, 명세 2-1).
 // 1단계: 목록·선택·키보드(↑↓ · A·S·D·E). 2단계: 받은 시각 묶음·탭·진행 막대·'나중에 n건' 펼침.
+// 여러 건 선택·일괄 작업 바는 triage_bulk.js(결정기록 0036).
 // 목록 상태는 메모리에만 둔다. 모든 글자는 el()/textContent로만 넣는다.
 "use strict";
 
@@ -109,7 +110,7 @@ function renderTabs() {
   fill(document.getElementById("tr-tabs"), ...tabs.map(([key, label]) => {
     const n = TR.items.filter((t) => inTab(t, key)).length;
     return el("button", { type: "button", class: key === TR.tab ? "on" : "", "aria-pressed": key === TR.tab ? "true" : "false",
-      onclick: () => { TR.tab = key; TR.page = 1; renderTabs(); renderItems(); ensureSelection(); } }, label + " " + n);
+      onclick: () => { TR.tab = key; TR.page = 1; BULK.ids.clear(); renderTabs(); renderItems(); ensureSelection(); bulkChanged(); } }, label + " " + n);
   }));
 }
 
@@ -131,10 +132,16 @@ function renderCount() {
 
 function itemNode(task, snoozedItem) {
   const sel = task.id === TR.selectedId;
-  return el("li", { class: "tr-item" + (sel ? " sel" : "") + (snoozedItem ? " snoozed" : ""), role: "option",
+  const picked = BULK.ids.has(task.id);
+  // 일괄 선택 체크박스: 마우스로만 누른다(키보드는 Space·Shift+↑↓, 결정기록 0036)
+  const check = el("input", { type: "checkbox", class: "tr-check", tabindex: "-1", checked: picked,
+    "aria-label": "일괄 선택: " + task.title });
+  check.addEventListener("click", (event) => { event.stopPropagation(); toggleBulk(task.id); });
+  return el("li", { class: "tr-item" + (sel ? " sel" : "") + (picked ? " picked" : "") + (snoozedItem ? " snoozed" : ""), role: "option",
     "aria-selected": sel ? "true" : "false", dataset: { id: String(task.id) }, tabindex: "-1",
-    onclick: () => selectTriage(task.id, true, true) },
-    el("div", { class: "tr-line1" }, summaryChip(task.summary_state), el("span", { class: "tr-title", title: task.title }, task.title), confidenceBar(task.confidence)),
+    onmousedown: (event) => { if (event.shiftKey) event.preventDefault(); },  // Shift+클릭 때 글자 선택 막기
+    onclick: (event) => { if (!bulkClick(event, task.id)) selectTriage(task.id, true, true); } },
+    el("div", { class: "tr-line1" }, check, summaryChip(task.summary_state), el("span", { class: "tr-title", title: task.title }, task.title), confidenceBar(task.confidence)),
     el("div", { class: "tr-line2" }, categoryChip(task), dueChip(task),
       requesterNode(task, "dept"),
       task.thread_count >= 2 ? el("span", { class: "thr", title: "대화 " + task.thread_count + "통" }, icon("mail"), String(task.thread_count)) : null,
@@ -181,6 +188,7 @@ function renderItems() {
     nodes.push(...TR.snoozedItems.map((t) => itemNode(t, true)));
   }
   list.replaceChildren(...nodes);
+  syncBulkMarks();
 }
 
 async function loadLastSync() {
@@ -223,8 +231,10 @@ async function loadTriage(keepId) {
   if (found && keepId !== undefined) TR.page = pageOf(found.id);  // 지정한 항목이 있는 페이지로
   const target = found || visibleOrder()[0];
   TR.selectedId = target ? target.id : null;
+  pruneBulk();
   renderItems();
-  if (target) renderTriageDetail(target); else renderTriageEmpty();
+  if (bulkActive()) renderBulkBar();
+  else if (target) renderTriageDetail(target); else renderTriageEmpty();
 }
 
 function ensureSelection() {
@@ -245,7 +255,7 @@ function selectTriage(id, focus, open) {
     li.setAttribute("aria-selected", on ? "true" : "false");
     if (on) { row = li; li.scrollIntoView({ block: "nearest" }); if (focus) li.focus({ preventScroll: true }); }
   }
-  renderTriageDetail(task);
+  if (bulkActive()) renderBulkBar(); else renderTriageDetail(task);
   if (open) openTriageDrawer(row);
 }
 
@@ -291,11 +301,13 @@ document.getElementById("tr-snoozed").addEventListener("click", async () => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.altKey) return;
   if (typeof QUICK !== "undefined" && QUICK.active) return;  // 빠른 정리 모드가 키를 쓴다(3단계)
   const target = event.target;
   if (target.closest && target.closest("input, textarea, select, [contenteditable='true']")) return;
   if (document.querySelector(".dim.show")) return;
+  if (handleBulkKey(event)) { event.preventDefault(); return; }  // 여러 건 선택(결정기록 0036)
+  if (event.ctrlKey || event.metaKey) return;
   if (event.key === "Escape" && closeTriageDrawer()) { event.preventDefault(); return; }
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   const actions = {

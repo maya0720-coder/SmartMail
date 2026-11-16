@@ -216,3 +216,14 @@ mark{-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .q-done-btns{display:flex;gap:8px}
 @media (prefers-reduced-motion:reduce){.q-card{transition:none}}
 @media (max-width:900px){.quick{grid-template-columns:minmax(0,1fr)}.q-side{order:2}}
+/* 여러 건 선택·일괄 작업 바(U2, 결정기록 0036): 체크박스는 hover·선택 모드에서만 보인다 */
+.tr-check{flex:none;width:16px;height:16px;margin:0;accent-color:var(--accent);opacity:0;cursor:pointer;transition:opacity .15s}
+.tr-item:hover .tr-check,.tr-items.multi .tr-check,.tr-check:focus-visible{opacity:1}
+.tr-item.picked{background:var(--accent-soft)}
+.tr-item.picked:not(.sel){box-shadow:inset 3px 0 0 var(--line)}
+.bulk-bar{display:flex;flex-direction:column;gap:14px;padding:16px}
+.bulk-head{display:flex;align-items:center;gap:8px;font-size:15px}
+.bulk-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bulk-row .inline-input{width:auto;min-width:120px}
+.bulk-actions{flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){.tr-check{transition:none}}

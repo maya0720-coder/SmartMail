@@ -30,6 +30,7 @@ from app.routes import (
     tasks,
     title_rule,
     triage,
+    triage_bulk,
     ui_prefs,
     weekly,
     weekly_drafts,
@@ -138,6 +139,7 @@ def create_app(
     app.include_router(summaries.router)
     app.include_router(triage.router)
     app.include_router(triage.rules_router)
+    app.include_router(triage_bulk.router)
     app.include_router(task_progress.router)
     app.include_router(tasks.router)
     app.include_router(gk.router)
