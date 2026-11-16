@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,7 @@ from domain.models import HistoryCard, TaskStatus
 from domain.tasks.extract import TaskExtractor
 from domain.tasks.service import TaskEdit, TaskService
 from fixtures.app_factory import FakeBackend, app_client, make_container
+from fixtures.gk_pages import FakePage, browser_store
 from fixtures.synthetic import synthetic_rrn
 from integrations.gknowledge.browser import (
     BrowserKnowledgeStore,
@@ -119,10 +119,11 @@ def test_search_finds_registered(db: Database, clock: FixedClock) -> None:
     assert service.search(mask("무관한 키워드")) == []
 
 
-def test_default_field_map_is_unconfirmed() -> None:
+def test_default_field_map_register_ready_search_unconfirmed() -> None:
     register, search = load_fields()
     assert register.path == "/knowledge/new"
-    assert not register.ready and not search.ready
+    # 등록은 실제 화면 확인 완료(결정기록 0032), 검색 화면은 아직 확인 필요
+    assert register.ready and not search.ready
 
 
 def test_field_map_validation(tmp_path: Path) -> None:
@@ -132,63 +133,8 @@ def test_field_map_validation(tmp_path: Path) -> None:
         load_fields(bad)
 
 
-class FakePage:
-    def __init__(self, log: list[tuple[str, ...]], result: str) -> None:
-        self.log = log
-        self.url = result
-        self.items: list[Any] = []
-
-    def goto(self, url: str, timeout: int) -> None:
-        self.log.append(("goto", url))
-
-    def fill(self, selector: str, value: str) -> None:
-        self.log.append(("fill", selector, value))
-
-    def click(self, selector: str) -> None:
-        self.log.append(("click", selector))
-
-    def wait_for_load_state(self, state: str, timeout: int) -> None:
-        return None
-
-    def wait_for_url(self, predicate: Any, timeout: int) -> None:
-        if not predicate(self.url):
-            raise TimeoutError("주소가 바뀌지 않음")
-
-    def wait_for_selector(self, selector: str, timeout: int) -> None:
-        if not self.items and selector == ".item":
-            raise TimeoutError("결과 없음")
-
-    def query_selector_all(self, selector: str) -> list[Any]:
-        return self.items
-
-    def get_attribute(self, selector: str, name: str) -> str:
-        return self.url
-
-    def close(self) -> None:
-        self.log.append(("close",))
-
-
-def _browser_store(
-    clock: FixedClock, result: str, now: Any = time.monotonic, page_cls: Any = None
-) -> tuple[BrowserKnowledgeStore, list[Any], BrowserRuntime]:
-    runtime = BrowserRuntime(backend_factory=FakeBackend)
-    sessions = SessionStore(clock, timedelta(minutes=30))
-    context = runtime.open_context()
-    log: list[tuple[str, ...]] = []
-    cls = page_cls or FakePage
-    context._raw.new_page = lambda: cls(log, result)  # type: ignore[union-attr]
-    sessions.open(Site.GKNOWLEDGE, context)
-    fields = RegisterFields("/knowledge/new", "#t", "#b", "", "#s", "", "/knowledge/[0-9]+")
-    empty = SearchFields("", "", "", "", "", "")
-    return (
-        BrowserKnowledgeStore("https://gk.example.invalid", sessions, fields, empty, now=now),
-        log,
-        runtime,
-    )
-
-
 def test_gk03_browser_fill_and_submit(clock: FixedClock) -> None:
-    store, log, runtime = _browser_store(clock, "https://gk.example.invalid/knowledge/77")
+    store, log, runtime = browser_store(clock, "https://gk.example.invalid/knowledge/77")
     try:
         result = store.register(draft_from_edit("제목", "본문", []))
         assert result.link.endswith("/knowledge/77")
@@ -201,7 +147,7 @@ def test_gk03_browser_fill_and_submit(clock: FixedClock) -> None:
 
 
 def test_foreign_result_link_rejected(clock: FixedClock) -> None:
-    store, _log, runtime = _browser_store(clock, "https://evil.example/phish")
+    store, _log, runtime = browser_store(clock, "https://evil.example/phish")
     try:
         with pytest.raises(KnowledgeUnavailableError):
             store.register(draft_from_edit("제목", "본문", []))
@@ -253,7 +199,7 @@ def test_gk06_same_task_reentry_and_same_title_rejected(db: Database, clock: Fix
 
 
 def test_gk03_tags_appended_to_body_without_tag_field(clock: FixedClock) -> None:
-    store, log, runtime = _browser_store(clock, "https://gk.example.invalid/knowledge/9")
+    store, log, runtime = browser_store(clock, "https://gk.example.invalid/knowledge/9")
     try:
         store.register(draft_from_edit("제목", "본문", ["FI", "역분개"]))
         fills = {entry[1]: entry[2] for entry in log if entry[0] == "fill"}
@@ -263,7 +209,7 @@ def test_gk03_tags_appended_to_body_without_tag_field(clock: FixedClock) -> None
 
 
 def test_gk04_result_not_confirmed_when_still_on_register_page(clock: FixedClock) -> None:
-    store, _log, runtime = _browser_store(clock, "https://gk.example.invalid/knowledge/new")
+    store, _log, runtime = browser_store(clock, "https://gk.example.invalid/knowledge/new")
     try:
         with pytest.raises(KnowledgeUnavailableError, match="등록 여부를 먼저 확인"):
             store.register(draft_from_edit("제목", "본문", []))
@@ -319,7 +265,7 @@ def test_srch02_search_by_url_query(clock: FixedClock) -> None:
     ],
 )
 def test_gk04_non_result_page_is_not_success(clock: FixedClock, result: str) -> None:
-    store, _log, runtime = _browser_store(clock, result)
+    store, _log, runtime = browser_store(clock, result)
     try:
         with pytest.raises(KnowledgeUnavailableError, match="등록 여부를 먼저 확인"):
             store.register(draft_from_edit("제목", "본문", []))
@@ -329,7 +275,7 @@ def test_gk04_non_result_page_is_not_success(clock: FixedClock, result: str) -> 
 
 def test_gk06_not_sent_when_dequeued_after_deadline(clock: FixedClock) -> None:
     times = iter([0.0, 10_000.0])
-    store, log, runtime = _browser_store(
+    store, log, runtime = browser_store(
         clock, "https://gk.example.invalid/knowledge/7", now=lambda: next(times)
     )
     try:
@@ -346,7 +292,7 @@ class BrokenClickPage(FakePage):
 
 
 def test_gk06_click_failure_is_uncertain(clock: FixedClock) -> None:
-    store, _log, runtime = _browser_store(
+    store, _log, runtime = browser_store(
         clock, "https://gk.example.invalid/knowledge/7", page_cls=BrokenClickPage
     )
     try:

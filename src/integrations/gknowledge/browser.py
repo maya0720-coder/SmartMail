@@ -5,7 +5,10 @@
   자동화를 하지 않고 `KnowledgeUnavailableError`로 안내한다(추측 구현 금지).
 - 등록 화면 항목은 제목·내용·첨부다(결정기록 0008 G-3). 태그 칸이 없으면 태그를 본문 끝에 붙이고,
   첨부는 자동화하지 않는다(메일 첨부를 저장·전송하지 않음).
-- 등록 결과는 '결과 링크 요소' 또는 '결과 주소 형식(result_path)과 맞는 주소'로만 확인한다.
+- 등록 화면은 2단계다(결정기록 0010·0032): 제목·본문 입력 → 'AI 분석' → 분석 결과 칸이
+  보이면 '등록요청'. 분석 결과는 G-Knowledge 값 그대로 두고, 본문 입력은 보내기 전에 확인한다.
+- 등록 결과는 '결과 링크 요소', '결과 주소 형식(result_path)과 맞는 주소', '접수 안내 요소
+  (result_message)' 중 하나로만 확인한다. 실제 화면은 주소가 그대로이고 접수 안내만 뜬다(0032).
   확인하지 못하면 중복 등록을 막기 위해 다시 보내지 않고 사용자에게 직접 확인을 요청한다(G-4·G-6).
 - 검색 경로에 `{query}`가 있으면 주소로 검색한다(입력칸 자동화보다 화면 변경에 강함, G-5).
 """
@@ -40,10 +43,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_FIELDS_FILE: Final = RULES_DIR / "gknowledge_fields.toml"
 PAGE_TIMEOUT_MS: Final = 30_000
+# G-Knowledge 'AI 분석' 결과를 기다리는 시간(ms). 넘으면 '등록요청' 전이므로 보내지 않고 멈춘다.
+ANALYZE_WAIT_MS: Final = 60_000
 # 검색 결과 대기(ms). 시간 안에 결과 항목이 없으면 '결과 없음'으로 본다.
 SEARCH_WAIT_MS: Final = 10_000
 # 등록 포기 시각(초). 브라우저 대기열에서 이 시간 뒤에 꺼내지면 등록하지 않는다.
-REGISTER_TIMEOUT_SECONDS: Final = 90.0
+REGISTER_TIMEOUT_SECONDS: Final = 150.0  # 화면 열기 30초 + AI 분석 60초 + 결과 확인 30초 + 여유
 CALL_MARGIN_SECONDS: Final = 10.0
 MAX_RESULT_PATTERN_CHARS: Final = 200
 QUERY_PLACEHOLDER: Final = "{query}"
@@ -57,6 +62,21 @@ NOT_CONFIRMED: Final = (
 )
 LOGIN_REQUIRED: Final = "G-Knowledge 로그인이 필요합니다"
 NOT_SENT: Final = "G-Knowledge가 바빠 등록하지 않았습니다. 잠시 후 다시 시도해 주세요"
+ANALYZE_FAILED: Final = (
+    "G-Knowledge AI 분석이 끝나지 않아 등록하지 않았습니다. 잠시 후 다시 시도해 주세요"
+)
+BODY_NOT_ENTERED: Final = "G-Knowledge 본문 입력을 확인하지 못해 등록하지 않았습니다"
+# 분석 완료 요소에 글자가 들어왔는지 보는 스크립트(입력칸이면 value, 아니면 글자).
+# 결과 칸이 먼저 보이고 값이 나중에 채워지는 경우 빈 결과로 등록요청하지 않게 한다.
+FILLED_SCRIPT: Final = (
+    "s => { const e = document.querySelector(s);"
+    " return !!e && String(('value' in e) ? e.value : e.textContent).trim().length > 0; }"
+)
+
+
+def _compact(text: str) -> str:
+    # 편집기(Quill)가 줄바꿈·공백을 바꿔 담을 수 있어 공백을 빼고 비교한다
+    return "".join(text.split())
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,12 +88,27 @@ class RegisterFields:
     submit: str
     result_link: str
     result_path: str
+    # 2단계 등록 화면(결정기록 0010·0032):
+    # 작성 → 'AI 분석' → 분석 결과 칸이 보이면 '등록요청'(submit).
+    # analyze가 비어 있으면 1단계(작성 → submit)로 동작한다.
+    analyze: str = ""
+    analysis_ready: str = ""  # 분석이 끝났다고 볼 요소(보이고 글자가 들어올 때까지 기다림)
+    # 등록요청 뒤 접수 안내 요소. 주소가 바뀌지 않는 화면에서 결과를 확인한다(결정기록 0032).
+    result_message: str = ""
+
+    def missing(self) -> list[str]:
+        """자동 등록에 필요한데 비어 있는 설정 이름(화면 안내용, 값은 담지 않음)."""
+        names = [n for n in ("path", "title", "body", "submit") if not getattr(self, n)]
+        if self.analyze and not self.analysis_ready:
+            names.append("analysis_ready")
+        if not (self.result_link or self.result_path or self.result_message):
+            # 결과 확인 방법이 있어야 등록한다
+            names.append("result_message(또는 result_path·result_link)")
+        return names
 
     @property
     def ready(self) -> bool:
-        # 결과를 확인할 방법(결과 링크 요소 또는 결과 주소 형식)이 있어야 등록한다
-        confirmable = bool(self.result_link or self.result_path)
-        return all((self.path, self.title, self.body, self.submit)) and confirmable
+        return not self.missing()
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,7 +201,9 @@ class BrowserKnowledgeStore:
     def register(self, draft: MaskedDraft) -> RegisterResult:
         fields_ = self._register
         if not fields_.ready:
-            raise KnowledgeUnavailableError(NOT_CONFIRMED)
+            # 어떤 설정이 비었는지 이름만 알린다(gknowledge_fields.toml [register])
+            missing = ", ".join(fields_.missing())
+            raise KnowledgeUnavailableError(f"{NOT_CONFIRMED} — 미설정: {missing}")
         context = self._context()
         url = self._url(fields_.path)
         register_path = urlsplit(url).path.rstrip("/")
@@ -196,8 +233,25 @@ class BrowserKnowledgeStore:
                 page.goto(url, timeout=PAGE_TIMEOUT_MS)
                 page.fill(fields_.title, draft.title.value)
                 page.fill(fields_.body, body)
+                if _compact(str(page.inner_text(fields_.body))) != _compact(body):
+                    raise KnowledgeUnavailableError(BODY_NOT_ENTERED)  # 보내기 전이므로 안전
                 if fields_.tags and tags:
                     page.fill(fields_.tags, tags)
+                if fields_.analyze:
+                    # 2단계 화면: 'AI 분석' 결과는 G-Knowledge가 채운 그대로 둔다(사용자 결정)
+                    page.click(fields_.analyze)
+                    started = self._now()
+                    try:
+                        page.wait_for_selector(fields_.analysis_ready, timeout=ANALYZE_WAIT_MS)
+                        # 칸이 보여도 값이 비어 있으면 아직 분석 중으로 본다(남은 시간만 대기)
+                        left_ms = ANALYZE_WAIT_MS - int((self._now() - started) * 1000)
+                        if left_ms <= 0:
+                            raise TimeoutError("분석 대기 시간 초과")
+                        page.wait_for_function(
+                            FILLED_SCRIPT, arg=fields_.analysis_ready, timeout=left_ms
+                        )
+                    except Exception:
+                        raise KnowledgeUnavailableError(ANALYZE_FAILED) from None
                 if self._now() >= deadline:  # 보내기 직전 마지막 확인
                     raise KnowledgeUnavailableError(NOT_SENT)
                 submitted.set()  # 여기부터는 등록됐을 수 있음
@@ -206,6 +260,10 @@ class BrowserKnowledgeStore:
                     if fields_.result_link:
                         page.wait_for_selector(fields_.result_link, timeout=PAGE_TIMEOUT_MS)
                         return str(page.get_attribute(fields_.result_link, "href") or "")
+                    if fields_.result_message:
+                        page.wait_for_selector(fields_.result_message, timeout=PAGE_TIMEOUT_MS)
+                        # 접수 화면에는 지식 링크가 없다(검토 대기). G-Knowledge 첫 화면을 남긴다
+                        return self._base
                     page.wait_for_url(is_result_page, timeout=PAGE_TIMEOUT_MS)
                     return str(page.url)
                 except Exception:
