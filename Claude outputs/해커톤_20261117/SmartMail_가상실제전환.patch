@@ -1,0 +1,2108 @@
+diff -ruN a/.env.example b/.env.example
+--- a/.env.example	2026-11-17 08:35:34.121381307 +0900
++++ b/.env.example	2026-11-17 08:35:34.122831374 +0900
+@@ -39,6 +39,12 @@
+ SMARTMAIL_DEMO_MODE=false
+ # 데모 모드에서 가상 과거 해결 사례·가상 G-Knowledge 문서를 미리 넣기(true/false, 데모 모드에서만)
+ SMARTMAIL_DEMO_SEED=true
++# 데모 가상 데이터 종류: ie(IE팀 SAP 지원) / sales(골프 시뮬레이터 B2B 영업팀 가상 메일 116통)
++SMARTMAIL_DEMO_DATASET=ie
++# 화면 상단 '가상 / 실제' 전환 표시(true/false). 가상 화면은 메모리 DB·가짜 연동만 사용
++SMARTMAIL_DATA_MODE_SWITCH=true
++# 처음 보여 줄 화면: real(실제) / demo(가상)
++SMARTMAIL_DATA_MODE_DEFAULT=real
+ 
+ # 보관·지표·타임아웃
+ SMARTMAIL_RETENTION_DAYS=7
+diff -ruN "a/docs/\352\262\260\354\240\225\352\270\260\353\241\235/0042_\352\260\200\354\203\201\354\213\244\354\240\234_\354\240\204\355\231\230_\354\230\201\354\227\205\355\214\200_\352\260\200\354\203\201\353\215\260\354\235\264\355\204\260.md" "b/docs/\352\262\260\354\240\225\352\270\260\353\241\235/0042_\352\260\200\354\203\201\354\213\244\354\240\234_\354\240\204\355\231\230_\354\230\201\354\227\205\355\214\200_\352\260\200\354\203\201\353\215\260\354\235\264\355\204\260.md"
+--- "a/docs/\352\262\260\354\240\225\352\270\260\353\241\235/0042_\352\260\200\354\203\201\354\213\244\354\240\234_\354\240\204\355\231\230_\354\230\201\354\227\205\355\214\200_\352\260\200\354\203\201\353\215\260\354\235\264\355\204\260.md"	1970-01-01 09:00:00.000000000 +0900
++++ "b/docs/\352\262\260\354\240\225\352\270\260\353\241\235/0042_\352\260\200\354\203\201\354\213\244\354\240\234_\354\240\204\355\231\230_\354\230\201\354\227\205\355\214\200_\352\260\200\354\203\201\353\215\260\354\235\264\355\204\260.md"	2026-11-17 08:35:34.194753930 +0900
+@@ -0,0 +1,61 @@
++# 0042 화면 상단 '가상 / 실제' 전환과 영업팀 가상 데이터 116통
++
++- 날짜: 2026-11-17
++- 상태: 구현(클라우드 작업 공간에서 데모 화면·영상 녹화로 확인, 사용자 PC 실행 확인 필요)
++- 관련 요구사항: 화면(기획서 6장), MAIL-01·03, TODO-01~05, WIKI-01~06, MET-01~04, GK-01~06
++
++## 배경
++
++- 2026 AX CHALLENGE 결과물 제출을 위해 실제 메일 없이도 전체 기능을 보여 줄 시연 화면이 필요했다.
++- 사용자 요청: '영업팀 담당자' 설정으로 가상 메일 116통을 집계한 것처럼 보여 주되, 실제 기능은 그대로 유지하고
++  화면 상단에서 가상/실제를 쉽게 오갈 것. 시나리오는 골프 시뮬레이터 B2B 영업으로 정했다(사용자 선택).
++
++## 결정
++
++1. **두 개의 컨테이너**(`app/data_modes.py`)
++   - 실제: 설정 그대로(실제 메일함·사내 사이트·로컬 DB).
++   - 가상: `demo_mode=True, demo_dataset="sales"`로 만든 별도 컨테이너. **메모리 DB·가짜 연동만** 쓰고 실제 DB·세션·
++     브라우저를 공유하지 않는다. 앱을 끄면 가상 데이터는 사라진다.
++   - `get_container()`(`app/deps.py`)가 지금 선택된 쪽을 돌려준다. 로컬 단일 사용자 앱이라 전환 상태는 서버 메모리 1개로
++     둔다(쿠키·브라우저 저장소 미사용).
++   - 보안 미들웨어는 CSRF 토큰 1개를 검사하므로 가상 컨테이너도 실제 컨테이너 토큰을 쓴다.
++   - 주기 작업은 두 컨테이너 모두에 대해 돌린다(가상 쪽은 외부 호출 없음). 잔존 검사는 한 번만.
++2. **전환 UI·API**
++   - 상단 오른쪽 `가상 | 실제` 스위치(`base.html`, `static/js/data_mode.js`, `status.css`). 바꾸면 같은 메뉴를 새로 연다.
++   - `GET/POST /api/data-mode`(`app/routes/data_mode.py`). 값은 `real|demo`만(그 밖은 422), 쓸 수 없는 화면은 409.
++   - 가상 화면에는 상단 띠로 "가상 데이터 화면 · 모두 가상"을 표시한다.
++3. **설정**(`.env.example`)
++   - `SMARTMAIL_DATA_MODE_SWITCH`(기본 true): 끄면 가상 화면을 만들지 않는다.
++   - `SMARTMAIL_DATA_MODE_DEFAULT`(기본 real): 처음 보여 줄 화면.
++   - `SMARTMAIL_DEMO_DATASET`(기본 ie): 데모 모드 단독 실행 시 데이터 종류(기존 테스트 호환).
++   - 이미 `SMARTMAIL_DEMO_MODE=true`로 실행하면 전환 없이 그 화면 하나만 쓴다.
++4. **가상 데이터**(`collectors/demo_sales*.py`)
++   - 가상 영업 담당자 '김영업'이 최근 4주에 받은 메일 116통(스레드 76개): 고객 견적·AS·계약·설치 일정, 사내 협조
++     (재무·물류·설치기술·법무·CS), 전자결재 8건, 내가 먼저 보낸 질문(회신 대기), 참조·공지·뉴스레터.
++   - 외부 회사는 예약 최상위 도메인 `.example`, 사내는 `example.invalid`만 쓴다. 개인 메일 표시 확인용 1건은 가짜 아이디.
++   - 시연용 요약 제목 표(`demo_sales_titles.py`)를 가짜 AI(`integrations/ai/demo_sales_ai.py`)가 씌운다.
++5. **처리 이력 채우기**(`app/demo_sales_seed.py`)
++   - 수집 → 제안 → AI 요약 → 요청일 기준으로 승인·진행·완료·보류, 완료 일부 G-Knowledge 등록(가짜)·히스토리 카드,
++     유사 이력 해결 단계(지표 MET-04)를 기록한다. 결과는 매번 같다(난수 시드 116).
++   - 과거 시각으로 기록하려고 `OffsetClock`(`domain/clock.py`)을 쓴다. 가상 컨테이너 전용이며 끝나면 실제 시각으로 돌아간다.
++   - 가상 화면 보관 기간은 30일(4주치 이력이 보관 작업에 지워지지 않게). 실제 화면 보관 규칙(7일)은 바꾸지 않는다.
++
++## 보안·개인정보
++
++- 가상 화면은 외부 연동이 모두 가짜다(메일 COM·그룹웨어·위키·G-Knowledge·AI-Ground 호출 없음).
++- 가상 데이터에 실제 인물·회사·주소·전화번호가 없다. 실제 DB와 분리돼 섞이지 않는다.
++- 전환 API는 기존 CSRF·루프백·호스트 검사를 그대로 거친다.
++
++## 검증
++
++- `tests/unit/test_data_modes.py`(10건): 116통·도메인 규칙·시나리오 포함, OffsetClock, 가짜 연동 강제, 실제/가상 DB 분리·
++  CSRF 공유, 전환 설정, API 전환·422·403·409, 단일 화면.
++- 전체 테스트(클라우드 Linux): 968건 중 963 통과. 실패 5건은 Windows 전용(아웃룩 COM·DPAPI)·라이선스 파일 미복사로
++  변경 전 코드에서도 같은 결과. 사용자 PC에서 `scripts\check.py`로 다시 확인 필요.
++- ruff·mypy(strict) 통과, 금지 패턴 0건, 변경 파일 시크릿 탐지 0건.
++- 시연 영상: `SmartMail_기능소개_가상데이터.mp4`(약 2분 43초, 한글 자막).
++
++## 남은 확인
++
++- 사용자 PC(Windows)에서 실제 화면 ↔ 가상 화면 전환 후 실제 메일 수집·로그인이 그대로 동작하는지.
++- 가상 데이터를 만드는 데 드는 시작 시간(클라우드 기준 1초 미만).
+diff -ruN "a/docs/\353\263\200\352\262\275\354\235\264\353\240\245.md" "b/docs/\353\263\200\352\262\275\354\235\264\353\240\245.md"
+--- "a/docs/\353\263\200\352\262\275\354\235\264\353\240\245.md"	2026-11-17 08:35:34.200168599 +0900
++++ "b/docs/\353\263\200\352\262\275\354\235\264\353\240\245.md"	2026-11-17 08:35:34.201488941 +0900
+@@ -64,3 +64,4 @@
+ | 2026-11-17 | 07 | 제안 체크 유지·전체/묶음 선택(B1·B2, TODO-02, 결정기록 0040): 행 클릭은 상세만 바꾸고 체크 유지(대시보드와 같은 규칙), 탭·페이지 이동 시 유지('다른 탭 포함' 표시), 목록 머리 3상태 체크(현재 페이지)·▾(이 탭·모든 탭 전체 선택, 전체 해제), 묶음 머리 3상태 체크(모든 페이지), 체크 1건 이상이면 상세 위 일괄 바, 100건 한도 안내(서버와 같은 상수 1곳), 대시보드 ▾ 필터 전체 선택·Esc 해제, 공통 `bulk_select.js` |
+ | 2026-11-17 | 07·11 | 대시보드 기간 기준(A1, MET-01~04·TODO-03, 결정기록 0039): 지표 카드를 진행 중인 현재 기간 기준·직전 기간 같은 경과 구간과 동기 비교(`basis=current`, 이전 방식은 '기준·표로 보기' 토글), 상단 기간이 상태 도넛·할 일 목록에도 적용(요청·최근 메일·완료가 기간 안 + 이월 미완료, `이월 포함` 토글, `GET /api/tasks?since&carry`), `전체` 기간 추가, 기간 선택 ui_prefs 저장, 완료 상태인데 원장에 없는 업무 시작 시 1회 보정(숫자만), 카드·도넛 완료 정의 툴팁, 지표 스크립트 분리(`dashboard_metrics.js`) |
+ | 2026-11-17 | 10·12 | 주간보고 HTML 편집·플랫폼별 복사·게시(C1·C2, WIKI-01~06, 결정기록 0041): 편집 탭 3개(미리보기·HTML·간단), HTML 탭 코드 입력(줄 번호·Tab·200KB)·500ms 실시간 미리보기(`POST /api/weekly/clean-html`, 저장 안 함)·제거 요약 경고줄·붙여넣기 정리·줄 맞춤·양식 HTML 불러오기, 정리기 허용 목록 확장(h1→h3·hr·blockquote·pre·code·s·sub·sup·span·div·caption·colgroup·col·tfoot, 표 속성, 제한된 style `rich_style.py`), 복사 형식 7종(위키·위키 원본 XHTML·Slack·Teams·메일·Markdown·텍스트, `targets.py`·`convert_formats.py`, 변환기는 `CleanHtml` 타입만), `[게시 대상 ▾]`·`[복사]`(HTML+글자)·`[복사 미리보기]`, 위키만 직접 게시·그 밖은 승인 후 복사+열기(메일은 제목만 mailto, 발송 기능 없음)·게시 캐시·같은 주 재게시 확인, 참고 링크 플랫폼 teams·mail·markdown(스키마 8 CHECK 확장, 표 재생성·데이터 보존), Slack·Teams 직접 게시는 `PublishTarget`·Fake만(미연결, D3) |
++| 2026-11-17 | 12·13 | 해커톤 시연: 화면 상단 '가상 / 실제' 전환(`app/data_modes.py`, `GET/POST /api/data-mode`, `data_mode.js`), 골프 시뮬레이터 B2B 영업팀 가상 메일 116통(`collectors/demo_sales*.py`)과 처리 이력 채우기(`app/demo_sales_seed.py`, `OffsetClock`), 시연용 요약 제목 가짜 AI(`integrations/ai/demo_sales_ai.py`), 설정 `SMARTMAIL_DATA_MODE_SWITCH`·`SMARTMAIL_DATA_MODE_DEFAULT`·`SMARTMAIL_DEMO_DATASET`, 결정기록 0042, 기능 소개 영상 |
+diff -ruN "a/docs/\354\232\224\352\265\254\354\202\254\355\225\255\354\266\224\354\240\201\355\221\234.md" "b/docs/\354\232\224\352\265\254\354\202\254\355\225\255\354\266\224\354\240\201\355\221\234.md"
+--- "a/docs/\354\232\224\352\265\254\354\202\254\355\225\255\354\266\224\354\240\201\355\221\234.md"	2026-11-17 08:35:34.206341260 +0900
++++ "b/docs/\354\232\224\352\265\254\354\202\254\355\225\255\354\266\224\354\240\201\355\221\234.md"	2026-11-17 08:35:34.207519796 +0900
+@@ -73,5 +73,6 @@
+ | MET-03 | 11 | `src/domain/metrics/aggregate.py` | `tests/unit/test_metrics.py::test_exclusions_from_denominators` | 완료 |
+ | MET-04 | 11 | `src/domain/metrics/aggregate.py`(검색 안 한 업무 분모 제외), `src/domain/search/pipeline.py`(해결 단계 기록) | `tests/unit/test_metrics.py::test_exclusions_from_denominators` | 완료 |
+ | 화면(기획서 6장) | 12 | `src/app/templates/`, `src/app/static/css/app.css`, `src/app/static/js/todo_list.js`(정렬·페이징·도넛), `todo_actions.js`(상태 변경·되돌리기·일괄), `dashboard_detail.js`(상세·서랍), `common.js`(아이콘·Ctrl K·토스트), 로컬 폰트·아이콘(`static/fonts`, `static/img`) — 디자인 명세 01·03(결정기록 0012·0013). 공통 골격 `static/css/layout.css`·`base.html` 제목 영역 블록 — 디자인 명세 06(결정기록 0016) | `tests/integration/test_ui_browser.py::test_ui_todo_paging_fits_viewport`, `test_ui_todo_sort_cycle_and_keyboard`, `test_ui_dashboard_app_shell_layout`, `test_ui_drawer_bulk_undo_and_search`, `tests/security/test_ui_render.py`, `tests/integration/test_ui_layout.py`, `tests/integration/test_ui_splitter.py`, `tests/security/test_ui_prefs.py`, `tests/integration/test_ui_triage_wide.py` | 완료(명세 01 1·2차 + 명세 03, 일괄 작업 포함). 명세 06 1~3단계 완료(여백 통일, 패널 크기 조절 `splitter.js`·`app/ui_prefs.py`·`routes/ui_prefs.py`, 폭에 맞춘 재배치 `reflow.css`·`triage.css`). 2026-11-17 N1·U3·U4: 폭 비율 상한·프리셋, 제안 상세 넓게 보기(W), 메일 영역 높이 맞춤·크게 보기(결정기록 0033) |
++| 시연(가상/실제 전환) | 12·13 | `src/app/data_modes.py`, `src/app/routes/data_mode.py`, `src/app/demo_sales_seed.py`, `src/collectors/demo_sales*.py`, `src/integrations/ai/demo_sales_ai.py`, `src/domain/clock.py`(OffsetClock), `templates/base.html`·`static/js/data_mode.js`(0042) | `tests/unit/test_data_modes.py` | 완료(2026-11-17, 사용자 PC 실행 확인 필요) |
+ 
+ 상태 값: 대기 / 진행 중 / 완료 / 보류(확인 필요)
+diff -ruN a/src/app/bootstrap.py b/src/app/bootstrap.py
+--- a/src/app/bootstrap.py	2026-11-17 08:35:34.078296709 +0900
++++ b/src/app/bootstrap.py	2026-11-17 08:35:34.079976821 +0900
+@@ -17,6 +17,7 @@
+ from app.web_security import new_csrf_token
+ from app.weekly_wiring import build_weekly_extras
+ from collectors.demo_data import demo_messages
++from collectors.demo_sales import sales_messages
+ from collectors.demo_scenarios import DOMAIN as DEMO_DOMAIN
+ from collectors.detect import CollectorKind, DetectionResult, detect_collector
+ from collectors.fake import FakeMailCollector
+@@ -53,6 +54,7 @@
+ from domain.weekly.drafts import WeeklyDraftStore
+ from domain.weekly.links import ReferenceLinkService
+ from domain.weekly.service import WeeklyService, WikiApi
++from integrations.ai.demo_sales_ai import SalesDemoAI
+ from integrations.ai.fake import FakeKnowledgeAI
+ from integrations.ai.gateway import AiGateway
+ from integrations.ai.ground_browser import BrowserGllmAdapter, load_chat_fields
+@@ -121,12 +123,18 @@
+ 
+ 
+ DEMO_DETECTION = DetectionResult(CollectorKind.OUTLOOK, "데모 모드: 가상 메일함에서 읽습니다")
++SALES_DETECTION = DetectionResult(
++    CollectorKind.OUTLOOK, "가상 데이터: 영업팀 가상 메일함(116통)에서 읽습니다"
++)
+ 
+ 
+ def select_collector(
+     settings: Settings, sessions: SessionStore, clock: Clock
+ ) -> tuple[MailCollector, DetectionResult]:
+     """수집 경로를 고른다(MAIL-07). 데모 모드는 합성 메일을 쓴다."""
++    if settings.demo_mode and settings.demo_dataset == "sales":
++        # 시연용 영업팀 가상 메일 116통(결정기록 0042)
++        return FakeMailCollector(sales_messages(clock.now())), SALES_DETECTION
+     if settings.demo_mode:
+         base = clock.now() - timedelta(days=6)
+         return FakeMailCollector(demo_messages(base)), DEMO_DETECTION
+@@ -205,7 +213,9 @@
+ 
+     ai_adapter: KnowledgeAI
+     ai_timeout, ai_retries = settings.http_timeout_seconds, 1
+-    if settings.demo_mode or settings.ai_adapter == "fake":
++    if settings.demo_mode and settings.demo_dataset == "sales":
++        ai_adapter = SalesDemoAI()  # 가상(영업팀) 화면: 시연용 요약 제목(결정기록 0042)
++    elif settings.demo_mode or settings.ai_adapter == "fake":
+         ai_adapter = FakeKnowledgeAI()
+     else:
+         ai_adapter = BrowserGllmAdapter(
+diff -ruN a/src/app/data_modes.py b/src/app/data_modes.py
+--- a/src/app/data_modes.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/app/data_modes.py	2026-11-17 08:35:34.134237216 +0900
+@@ -0,0 +1,97 @@
++"""화면 상단 '가상 / 실제' 데이터 전환(결정기록 0042).
++
++- 실제: 설정 그대로의 컨테이너(실제 메일함·사내 사이트·로컬 DB).
++- 가상: 영업팀 가상 메일 116통을 담은 별도 컨테이너(메모리 DB·가짜 연동). 실제 쪽과 DB·세션·
++  브라우저를 공유하지 않는다. 앱을 끄면 가상 데이터는 모두 사라진다.
++- 전환은 로컬 단일 사용자 앱의 서버 상태 1개로 관리한다(쿠키·브라우저 저장소를 쓰지 않음).
++- CSRF 토큰은 보안 미들웨어가 하나만 검사하므로 가상 컨테이너도 실제 컨테이너의 토큰을 쓴다.
++"""
++
++from __future__ import annotations
++
++import logging
++import threading
++from typing import Final, Literal
++
++from app.bootstrap import build_container
++from app.container import Container
++from app.demo_sales_seed import seed_sales_demo
++from config.settings import Settings
++from domain.clock import OffsetClock
++
++logger = logging.getLogger(__name__)
++
++DataMode = Literal["real", "demo"]
++MODES: Final[tuple[DataMode, ...]] = ("real", "demo")
++DEMO_USER_NAME: Final = "김영업"
++DEMO_RETENTION_DAYS: Final = 30  # 4주치 가상 이력이 보관기간 작업에 지워지지 않게
++
++
++class DataModes:
++    def __init__(self, real: Container, demo: Container | None, initial: DataMode = "real") -> None:
++        self._containers: dict[DataMode, Container] = {"real": real}
++        if demo is not None:
++            self._containers["demo"] = demo
++        self._lock = threading.Lock()
++        self._current: DataMode = initial if initial in self._containers else "real"
++
++    @property
++    def current(self) -> DataMode:
++        return self._current
++
++    @property
++    def available(self) -> tuple[DataMode, ...]:
++        return tuple(m for m in MODES if m in self._containers)
++
++    def container(self, mode: DataMode | None = None) -> Container:
++        return self._containers[mode or self._current]
++
++    def all(self) -> list[Container]:
++        return list(self._containers.values())
++
++    def switch(self, mode: DataMode) -> DataMode:
++        if mode not in self._containers:
++            raise ValueError("사용할 수 없는 데이터 화면입니다")
++        with self._lock:
++            self._current = mode
++        return self._current
++
++
++def demo_settings(settings: Settings) -> Settings:
++    """실제 설정에서 가상(영업팀) 화면용 설정을 만든다. 외부 연동은 모두 가짜로 바뀐다."""
++    return settings.model_copy(
++        update={
++            "demo_mode": True,
++            "demo_dataset": "sales",
++            "demo_seed": False,
++            "ai_adapter": "fake",
++            "user_display_name": DEMO_USER_NAME,
++            "retention_days": DEMO_RETENTION_DAYS,
++            "mail_initial_days": 30,
++            "mail_sync_minutes": 0,
++            "session_keepalive_minutes": 0,
++        }
++    )
++
++
++def build_demo_container(real: Container) -> Container:
++    """가상 컨테이너를 만들고 116통 가상 데이터를 채운다."""
++    clock = OffsetClock()
++    container = build_container(demo_settings(real.settings), clock=clock)
++    container.csrf_token = real.csrf_token
++    seed_sales_demo(container, clock)
++    return container
++
++
++def build_modes(real: Container) -> DataModes:
++    settings = real.settings
++    if not settings.data_mode_switch or settings.demo_mode:
++        # 전환을 끄거나, 이미 데모 모드로 실행하면 그 화면 하나만 쓴다
++        return DataModes(real, None)
++    try:
++        demo = build_demo_container(real)
++    except Exception as exc:
++        # 가상 화면 준비가 실패해도 실제 화면은 띄운다(원인은 예외 종류만 기록)
++        logger.error("가상 데이터 화면을 만들지 못했습니다: %s", type(exc).__name__)
++        demo = None
++    return DataModes(real, demo, settings.data_mode_default)
+diff -ruN a/src/app/demo_sales_seed.py b/src/app/demo_sales_seed.py
+--- a/src/app/demo_sales_seed.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/app/demo_sales_seed.py	2026-11-17 08:35:34.139911570 +0900
+@@ -0,0 +1,193 @@
++"""시연용 '가상' 화면 만들기: 영업팀 가상 메일 116통 수집·요약·처리 이력(결정기록 0042).
++
++- 가상 컨테이너(메모리 DB·가짜 연동)에서만 실행한다. 실제 메일·사이트·로컬 DB를 건드리지 않는다.
++- 처리 이력(승인·진행·완료·G-Knowledge 등록·히스토리 카드)은 시각을 과거로 옮겨(OffsetClock)
++  기록한다. 그래야 주·월 지표 그래프와 '최근 4주' 흐름이 실제 사용처럼 보인다.
++- 결과는 매번 같다(난수 시드 고정). 회사·사람·내용은 모두 가상이다.
++"""
++
++from __future__ import annotations
++
++import logging
++import random
++from dataclasses import dataclass
++from datetime import datetime, timedelta
++from typing import Final
++
++from app.container import Container
++from collectors.demo_sales import CUSTOMERS
++from domain.clock import OffsetClock
++from domain.history_service import CardDraft
++from domain.models import ResolutionStage, Task, TaskSource, TaskStatus
++from domain.tasks.requester import SOURCE_USER
++from domain.tasks.service import TaskEdit
++
++logger = logging.getLogger(__name__)
++
++SEED: Final = 116
++MAX_SUMMARY_ROUNDS: Final = 40
++
++
++@dataclass(frozen=True, slots=True)
++class SeedResult:
++    messages: int
++    tasks: int
++    done: int
++    gk: int
++    cards: int
++
++
++def _card_for(title: str) -> tuple[CardDraft, tuple[str, ...]]:
++    """제목 키워드로 영업 업무 히스토리 카드(문제-원인-조치)를 만든다(가상)."""
++    rules = [
++        (
++            ("견적", "단가", "리스"),
++            "견적 요청",
++            "구성·수량·AS 조건별 단가 산정 필요",
++            "표준 단가표 기준 견적 작성 후 할인 품의 상신, 고객 회신",
++            ("견적", "B2B"),
++        ),
++        (
++            ("AS", "오류", "인식", "누락", "센서"),
++            "장비·소프트웨어 장애",
++            "센서 노후·라이선스 동기화 지연",
++            "설치기술팀·CS팀 점검 요청, 조치 결과 고객 안내",
++            ("AS", "CS"),
++        ),
++        (
++            ("계약", "갱신", "날인"),
++            "계약 체결·갱신",
++            "특약·손해배상 조항 협의 필요",
++            "법무 검토 반영 후 전자결재 품의, 날인본 회수",
++            ("계약", "법무"),
++        ),
++        (
++            ("설치", "일정", "교육"),
++            "설치·교육 일정 조율",
++            "현장 공사·인력 일정 의존",
++            "설치기술팀 인력 배정 후 고객 확정, 교육 일정 안내",
++            ("설치", "일정"),
++        ),
++        (
++            ("미수", "대금", "세금계산서", "잔금"),
++            "대금·채권 관리",
++            "고객 지급 일정 미확정",
++            "고객 지급일 확인 후 재무팀 회신",
++            ("채권", "재무"),
++        ),
++    ]
++    for keys, problem, cause, action, tags in rules:
++        if any(k in title for k in keys):
++            return CardDraft(f"{problem}: {title}"[:200], cause, action, None), tags
++    return (
++        CardDraft(
++            f"고객·사내 요청: {title}"[:200],
++            "요청 사항 확인 필요",
++            "담당 부서 협조 후 결과 회신",
++            None,
++        ),
++        ("영업",),
++    )
++
++
++def _summarize_all(container: Container) -> None:
++    job = container.summary_job
++    for _ in range(MAX_SUMMARY_ROUNDS):
++        if not job.pending_ids():
++            return
++        job.run_once()
++
++
++def _progress(
++    container: Container, clock: OffsetClock, task: Task, rng: random.Random, now: datetime
++) -> str:
++    """요청 시각과 경과 일수로 처리 상태를 정한다. 반환: 최종 상태 값."""
++    assert task.id is not None  # noqa: S101 - 저장된 업무
++    requested = task.requested_at or task.created_at
++    age = (now - requested).total_seconds() / 86400
++    tasks = container.tasks
++    if age < 1 or (age < 4 and rng.random() < 0.55):
++        return TaskStatus.SUGGESTED.value  # 최근 메일은 아직 제안 목록에 남긴다
++    # 기한이 없으면 요청일 + 2~4일로 정한다(지표: 기한 준수율)
++    clock.at(requested + timedelta(hours=1))
++    due = task.due_at or requested + timedelta(days=rng.choice((2, 3, 4)))
++    tasks.approve(task.id, TaskEdit(due_at=due))
++    if age < 4:
++        if rng.random() < 0.6:
++            clock.at(requested + timedelta(hours=3))
++            tasks.change_status(task.id, TaskStatus.IN_PROGRESS)
++            return TaskStatus.IN_PROGRESS.value
++        return TaskStatus.WAITING.value
++    roll = rng.random()
++    clock.at(requested + timedelta(hours=3))
++    if roll < 0.08:
++        tasks.change_status(task.id, TaskStatus.ON_HOLD)
++        return TaskStatus.ON_HOLD.value
++    tasks.change_status(task.id, TaskStatus.IN_PROGRESS)
++    if roll < 0.2:
++        return TaskStatus.IN_PROGRESS.value
++    # 완료: 대부분 기한 안, 일부는 하루 늦게
++    late = rng.random() < 0.15
++    finish = due + timedelta(hours=10) if late else requested + timedelta(hours=rng.randint(5, 44))
++    finish = min(finish, now - timedelta(hours=2))
++    clock.at(finish)
++    tasks.change_status(task.id, TaskStatus.DONE)
++    return TaskStatus.DONE.value
++
++
++def seed_sales_demo(container: Container, clock: OffsetClock) -> SeedResult:
++    """가상 컨테이너에 116통 수집 → 업무 제안 → AI 요약 → 처리 이력을 만든다."""
++    rng = random.Random(SEED)  # noqa: S311 - 시연 데이터 배치용(보안 용도 아님)
++    for domain, name in CUSTOMERS.items():
++        container.company_cache.save(domain, name, SOURCE_USER)
++    result = container.mail.sync()
++    container.tasks.ingest(result.threads)
++    _summarize_all(container)
++    # 외부 고객 업무의 요청 부서 칸에 고객사 이름을 넣는다(주간보고 '(요청: …)' 표시용)
++    for task in container.tasks.list_tasks():
++        company = CUSTOMERS.get(task.requester_domain or "")
++        if task.id is not None and company is not None:
++            container.tasks.edit(task.id, TaskEdit(requester_dept=company))
++    now = clock.now()
++    mail_tasks = [
++        t
++        for t in container.tasks.list_tasks([TaskStatus.SUGGESTED])
++        if t.source is TaskSource.MAIL and t.id is not None
++    ]
++    mail_tasks.sort(key=lambda t: t.requested_at or t.created_at)
++    done_ids: list[int] = []
++    try:
++        for task in mail_tasks:
++            if _progress(container, clock, task, rng, now) == TaskStatus.DONE.value:
++                assert task.id is not None  # noqa: S101
++                done_ids.append(task.id)
++        gk = cards = 0
++        for task_id in done_ids:
++            current = container.tasks.get(task_id)
++            closed = current.closed_at or now
++            if rng.random() < 0.55:
++                clock.at(min(closed + timedelta(hours=2), now - timedelta(minutes=30)))
++                draft, tags = _card_for(current.title)
++                container.history.save(task_id, draft, tags)
++                cards += 1
++            if rng.random() < 0.5:
++                clock.at(min(closed + timedelta(hours=3), now - timedelta(minutes=20)))
++                container.knowledge.register(task_id, container.knowledge.preview(task_id))
++                gk += 1
++            # 유사 이력 재사용률(MET-04): 완료 업무 일부를
++            # 앱·G-Knowledge 이력으로 해결한 것으로 기록
++            stage_roll = rng.random()
++            if stage_roll < 0.7:
++                stage = (
++                    ResolutionStage.APP
++                    if stage_roll < 0.4
++                    else ResolutionStage.GKNOWLEDGE
++                    if stage_roll < 0.6
++                    else ResolutionStage.AI
++                )
++                container.ledger.set_resolution(task_id, stage)
++    finally:
++        clock.reset()
++    total = len(container.tasks.list_tasks())
++    logger.info("가상 데이터 준비: 메일 %s통, 업무 %s건", result.new_messages, total)
++    return SeedResult(result.new_messages, total, len(done_ids), gk, cards)
+diff -ruN a/src/app/deps.py b/src/app/deps.py
+--- a/src/app/deps.py	2026-11-17 08:35:34.085511735 +0900
++++ b/src/app/deps.py	2026-11-17 08:35:34.086917834 +0900
+@@ -8,5 +8,10 @@
+ 
+ 
+ def get_container(request: Request) -> Container:
+-    container: Container = request.app.state.container
+-    return container
++    """지금 선택된 데이터 화면(실제/가상)의 컨테이너(결정기록 0042)."""
++    modes = getattr(request.app.state, "modes", None)
++    if modes is not None:
++        container: Container = modes.container()
++        return container
++    fallback: Container = request.app.state.container
++    return fallback
+diff -ruN a/src/app/factory.py b/src/app/factory.py
+--- a/src/app/factory.py	2026-11-17 08:35:34.071221999 +0900
++++ b/src/app/factory.py	2026-11-17 08:35:34.072802609 +0900
+@@ -11,6 +11,7 @@
+ from starlette.middleware.trustedhost import TrustedHostMiddleware
+ 
+ from app.container import Container
++from app.data_modes import DataModes
+ from app.errors import register_error_handlers
+ from app.mail_sync import background_sync
+ from app.routes import (
+@@ -18,6 +19,7 @@
+     categories,
+     companies,
+     data,
++    data_mode,
+     followup,
+     gk,
+     history,
+@@ -54,65 +56,73 @@
+ MAIL_SYNC_ONCE_SECONDS = 366 * 24 * 60 * 60
+ 
+ 
++def _start_jobs(container: Container, run_background_jobs: bool) -> list[PeriodicJob]:
++    """컨테이너 1개의 주기 작업을 만들고(필요하면) 시작한다. 반환: 멈출 작업 목록."""
++    job = PeriodicJob("retention", container.retention.run)
++    sweeper = PeriodicJob("idle", container.sessions.sweep, SESSION_SWEEP_SECONDS)
++    # 메일 자동 수집(MAIL-04): 시작 시 1회(처음이면 최근 N일) + 설정 간격마다 증분 수집
++    sync_minutes = container.settings.mail_sync_minutes
++    mail_job = PeriodicJob(
++        "mail-sync",
++        lambda: background_sync(container),
++        sync_minutes * 60 if sync_minutes > 0 else MAIL_SYNC_ONCE_SECONDS,
++    )
++    # 업무 제목 AI 요청 요약(결정기록 0014): AI-Ground 로그인 상태에서 2분마다 조금씩
++    summary_job = PeriodicJob("summary", container.summary_job.run_once, SUMMARY_INTERVAL_SECONDS)
++    # 연결 유지 점검(결정기록 0031): 사이트 쪽 만료 감지. 0분이거나 대상이 없으면 끔
++    keepalive_minutes = container.settings.session_keepalive_minutes
++    keepalive_job = PeriodicJob(
++        "keepalive", container.keepalive.run_once, max(keepalive_minutes, 1) * 60
++    )
++    keepalive_on = keepalive_minutes > 0 and container.keepalive.enabled
++    # 외부 회사명 확인(결정기록 0027): 요약 작업과 같은 주기, 수집 흐름과 분리
++    company_job = PeriodicJob("company", container.company_job.run_once, SUMMARY_INTERVAL_SECONDS)
++    # G-Knowledge 등록 큐는 사용자가 누른 작업만 처리하므로 항상 켠다(결정기록 0035)
++    container.gk_queue.start()
++    jobs = [keepalive_job, company_job, summary_job, mail_job, job, sweeper]
++    if run_background_jobs:
++        job.start()
++        sweeper.start()
++        mail_job.start()
++        summary_job.start()
++        company_job.start()
++        if keepalive_on:
++            keepalive_job.start()
++    return jobs
++
++
++async def _stop_jobs(container: Container, jobs: list[PeriodicJob]) -> None:
++    container.gk_queue.stop()
++    for periodic in jobs:
++        await periodic.stop()
++    close = getattr(container.mail.collector, "close", None)
++    if callable(close):
++        close()
++    container.sessions.logout_all(EndReason.APP_STOP)
++    container.ai.close()
++    container.browser.shutdown()
++
++
+ def create_app(
+     container: Container,
+     *,
+     run_background_jobs: bool = True,
+     trusted_clients: tuple[str, ...] = LOOPBACK_CLIENTS,
++    modes: DataModes | None = None,
+ ) -> FastAPI:
++    data_modes = modes or DataModes(container, None)
++
+     @asynccontextmanager
+     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+         container.residue.run()
+         log_event(EventType.APP_START, Site.APP, success=True)
+-        job = PeriodicJob("retention", container.retention.run)
+-        sweeper = PeriodicJob("idle", container.sessions.sweep, SESSION_SWEEP_SECONDS)
+-        # 메일 자동 수집(MAIL-04): 시작 시 1회(처음이면 최근 N일) + 설정 간격마다 증분 수집
+-        sync_minutes = container.settings.mail_sync_minutes
+-        mail_job = PeriodicJob(
+-            "mail-sync",
+-            lambda: background_sync(container),
+-            sync_minutes * 60 if sync_minutes > 0 else MAIL_SYNC_ONCE_SECONDS,
+-        )
+-        # 업무 제목 AI 요청 요약(결정기록 0014): AI-Ground 로그인 상태에서 2분마다 조금씩
+-        summary_job = PeriodicJob(
+-            "summary", container.summary_job.run_once, SUMMARY_INTERVAL_SECONDS
+-        )
+-        # 연결 유지 점검(결정기록 0031): 사이트 쪽 만료 감지. 0분이거나 대상이 없으면 끔
+-        keepalive_minutes = container.settings.session_keepalive_minutes
+-        keepalive_job = PeriodicJob(
+-            "keepalive", container.keepalive.run_once, max(keepalive_minutes, 1) * 60
+-        )
+-        keepalive_on = keepalive_minutes > 0 and container.keepalive.enabled
+-        # 외부 회사명 확인(결정기록 0027): 요약 작업과 같은 주기, 수집 흐름과 분리
+-        company_job = PeriodicJob(
+-            "company", container.company_job.run_once, SUMMARY_INTERVAL_SECONDS
+-        )
+-        # G-Knowledge 등록 큐는 사용자가 누른 작업만 처리하므로 항상 켠다(결정기록 0035)
+-        container.gk_queue.start()
+-        if run_background_jobs:
+-            job.start()
+-            sweeper.start()
+-            mail_job.start()
+-            summary_job.start()
+-            company_job.start()
+-            if keepalive_on:
+-                keepalive_job.start()
++        # 실제·가상 화면의 주기 작업(가상은 가짜 연동만 쓰므로 외부 호출 없음, 결정기록 0042)
++        running = [(c, _start_jobs(c, run_background_jobs)) for c in data_modes.all()]
+         try:
+             yield
+         finally:
+-            container.gk_queue.stop()
+-            await keepalive_job.stop()
+-            await company_job.stop()
+-            await summary_job.stop()
+-            await mail_job.stop()
+-            await job.stop()
+-            await sweeper.stop()
+-            close = getattr(container.mail.collector, "close", None)
+-            if callable(close):
+-                close()
+-            container.sessions.logout_all(EndReason.APP_STOP)
+-            container.ai.close()
+-            container.browser.shutdown()
++            for each, jobs in running:
++                await _stop_jobs(each, jobs)
+             container.residue.run()
+             log_event(EventType.APP_STOP, Site.APP, success=True)
+ 
+@@ -124,7 +134,9 @@
+         lifespan=lifespan,
+     )
+     app.state.container = container
+-    container.summary_job.auto = run_background_jobs
++    app.state.modes = data_modes
++    for each in data_modes.all():
++        each.summary_job.auto = run_background_jobs
+     register_error_handlers(app, debug=container.settings.debug)
+     app.add_middleware(
+         SecurityMiddleware,
+@@ -137,6 +149,7 @@
+     app.include_router(login_all.router)
+     app.include_router(auth.router)
+     app.include_router(data.router)
++    app.include_router(data_mode.router)
+     app.include_router(mail.router)
+     app.include_router(categories.router)
+     app.include_router(companies.router)
+diff -ruN a/src/app/main.py b/src/app/main.py
+--- a/src/app/main.py	2026-11-17 08:35:34.056592946 +0900
++++ b/src/app/main.py	2026-11-17 08:35:34.058004935 +0900
+@@ -18,6 +18,7 @@
+ import uvicorn
+ 
+ from app.bootstrap import build_container
++from app.data_modes import build_modes
+ from app.factory import create_app
+ from config.settings import ConfigError, load_settings
+ from security.logging_policy import configure_logging
+@@ -60,7 +61,8 @@
+         return 3
+     configure_logging(settings.log_dir / LOG_FILE_NAME)
+     container = build_container(settings)
+-    app = create_app(container)
++    modes = build_modes(container)  # 상단 '가상 / 실제' 전환(결정기록 0042)
++    app = create_app(container, modes=modes)
+     print(f"업무 처리 현황: {url} (종료: Ctrl+C)")
+     if open_browser:
+         _open_browser_later(url)
+diff -ruN a/src/app/routes/data_mode.py b/src/app/routes/data_mode.py
+--- a/src/app/routes/data_mode.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/app/routes/data_mode.py	2026-11-17 08:35:34.151226803 +0900
+@@ -0,0 +1,43 @@
++"""'가상 / 실제' 데이터 화면 전환 API(결정기록 0042)."""
++
++from __future__ import annotations
++
++from typing import Literal
++
++from fastapi import APIRouter, Request
++from fastapi.responses import JSONResponse
++from pydantic import BaseModel, ConfigDict
++
++from app.data_modes import DataModes
++
++router = APIRouter(prefix="/api/data-mode")
++
++
++class ModeBody(BaseModel):
++    model_config = ConfigDict(extra="forbid")
++
++    mode: Literal["real", "demo"]
++
++
++def _modes(request: Request) -> DataModes | None:
++    return getattr(request.app.state, "modes", None)
++
++
++def _state(modes: DataModes | None) -> dict[str, object]:
++    if modes is None:
++        return {"current": "real", "available": ["real"]}
++    return {"current": modes.current, "available": list(modes.available)}
++
++
++@router.get("")
++def current(request: Request) -> JSONResponse:
++    return JSONResponse(_state(_modes(request)))
++
++
++@router.post("")
++def switch(request: Request, body: ModeBody) -> JSONResponse:
++    modes = _modes(request)
++    if modes is None or body.mode not in modes.available:
++        return JSONResponse({"error": "사용할 수 없는 데이터 화면입니다."}, status_code=409)
++    modes.switch(body.mode)
++    return JSONResponse(_state(modes))
+diff -ruN a/src/app/static/css/status.css b/src/app/static/css/status.css
+--- a/src/app/static/css/status.css	2026-11-17 08:35:34.114324052 +0900
++++ b/src/app/static/css/status.css	2026-11-17 08:35:34.115731087 +0900
+@@ -88,3 +88,10 @@
+ .badge.b-await{background:var(--soft);color:var(--sub);margin-left:4px}
+ .badge.b-follow{background:var(--warn-soft);color:var(--warn);margin-left:4px}
+ .wk-copybuf{position:fixed;left:-9999px;top:0}
++
++/* 가상 / 실제 데이터 화면 전환(결정기록 0042) */
++.data-mode{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;background:var(--card)}
++.data-mode button{border:0;background:transparent;border-radius:999px;padding:4px 12px;font:inherit;font-size:12.5px;font-weight:600;color:var(--sub,#6b7280);cursor:pointer}
++.data-mode button.on[data-mode="demo"]{background:var(--warn-soft);color:var(--warn)}
++.data-mode button.on[data-mode="real"]{background:var(--accent-soft,#e8efff);color:var(--accent,#2563eb)}
++.data-mode button:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:1px}
+diff -ruN a/src/app/static/js/data_mode.js b/src/app/static/js/data_mode.js
+--- a/src/app/static/js/data_mode.js	1970-01-01 09:00:00.000000000 +0900
++++ b/src/app/static/js/data_mode.js	2026-11-17 08:35:34.145585047 +0900
+@@ -0,0 +1,20 @@
++// 상단 '가상 / 실제' 데이터 화면 전환(결정기록 0042). 서버 상태를 바꾼 뒤 지금 화면을 다시 연다.
++"use strict";
++
++(() => {
++  const box = document.getElementById("data-mode");
++  if (!box) return;
++  box.addEventListener("click", async (event) => {
++    const button = event.target.closest("button[data-mode]");
++    if (!button || button.classList.contains("on")) return;
++    for (const b of box.querySelectorAll("button")) b.disabled = true;
++    const result = await api("POST", "/api/data-mode", { mode: button.dataset.mode });
++    if (!result.ok) {
++      for (const b of box.querySelectorAll("button")) b.disabled = false;
++      toast(errorText(result, "화면을 바꾸지 못했습니다"), { kind: "error" });
++      return;
++    }
++    // 선택·체크 같은 화면 상태가 다른 데이터에 섞이지 않게 같은 메뉴를 새로 연다
++    window.location.assign(window.location.pathname);
++  });
++})();
+diff -ruN a/src/app/templates/base.html b/src/app/templates/base.html
+--- a/src/app/templates/base.html	2026-11-17 08:35:34.092911133 +0900
++++ b/src/app/templates/base.html	2026-11-17 08:35:34.094549269 +0900
+@@ -19,7 +19,9 @@
+ {% set nav_icons = {"dashboard": "layout-grid", "suggestions": "inbox", "weekly": "file-text", "history": "history", "settings": "settings"} %}
+ {% set short_labels = {"dashboard": "홈", "suggestions": "제안", "weekly": "주간보고", "history": "히스토리", "settings": "설정"} %}
+ <body data-page="{{ active }}" data-bulk-max="{{ bulk_max }}"{% if ui_prefs.detail_w %} data-detail-w="{{ ui_prefs.detail_w }}"{% endif %}{% if ui_prefs.triage_list_w %} data-tr-list-w="{{ ui_prefs.triage_list_w }}"{% endif %}{% if ui_prefs.triage_wide %} data-tr-wide="1"{% endif %}>
+-{% if demo_mode %}
++{% if demo_mode and demo_dataset == "sales" %}
++<div class="demo">가상 데이터 화면 · 골프 시뮬레이터 B2B 영업팀 담당자(김영업)의 가상 메일 116통 · 회사·사람·내용은 모두 가상이며 실제 메일·사이트와 연동되지 않습니다</div>
++{% elif demo_mode %}
+ <div class="demo">데모 모드입니다 · 실제 메일·사이트와 연동되지 않으며 모든 데이터는 가상입니다</div>
+ {% endif %}
+ <header class="topnav">
+@@ -40,6 +42,13 @@
+     <span class="search-hint" aria-hidden="true">Enter: 히스토리에서 찾기 · Esc: 지우기</span>
+   </form>
+   <div class="hdr-right">
++    {% if data_mode_switch %}
++    <!-- 가상 / 실제 데이터 전환(결정기록 0042) -->
++    <div class="data-mode" id="data-mode" role="group" aria-label="데이터 화면 전환">
++      <button type="button" data-mode="demo"{% if data_mode == "demo" %} class="on" aria-pressed="true"{% else %} aria-pressed="false"{% endif %} title="영업팀 가상 메일 116통으로 보는 시연 화면">가상</button>
++      <button type="button" data-mode="real"{% if data_mode == "real" %} class="on" aria-pressed="true"{% else %} aria-pressed="false"{% endif %} title="내 메일·사내 사이트와 연동되는 실제 화면">실제</button>
++    </div>
++    {% endif %}
+     <div class="conn" id="conn"></div>
+     <!-- 작업 센터(결정기록 0035): 백그라운드 작업 진행·실패 확인 -->
+     <div class="jobs-wrap" id="jobs-wrap">
+@@ -87,6 +96,7 @@
+ <script src="{{ asset('js/login.js') }}"></script>
+ <script src="{{ asset('js/jobs.js') }}"></script>
+ <script src="{{ asset('js/remind.js') }}"></script>
++<script src="{{ asset('js/data_mode.js') }}"></script>
+ {% block scripts %}{% endblock %}
+ </body>
+ </html>
+diff -ruN a/src/app/templating.py b/src/app/templating.py
+--- a/src/app/templating.py	2026-11-17 08:35:34.063702691 +0900
++++ b/src/app/templating.py	2026-11-17 08:35:34.065487335 +0900
+@@ -64,9 +64,14 @@
+ 
+ def render(request: Request, template: str, active: str, **context: Any) -> HTMLResponse:
+     container = get_container(request)
++    modes = getattr(request.app.state, "modes", None)
+     html = _env.get_template(template).render(
+         csrf_token=container.csrf_token,
+         demo_mode=container.settings.demo_mode,
++        demo_dataset=container.settings.demo_dataset,
++        # 상단 '가상 / 실제' 전환(결정기록 0042): 두 화면이 모두 있을 때만 표시
++        data_mode=modes.current if modes is not None else "real",
++        data_mode_switch=modes is not None and len(modes.available) > 1,
+         nav_items=NAV_ITEMS,
+         active=active,
+         site_labels=SITE_LABELS,
+diff -ruN a/src/collectors/demo_sales.py b/src/collectors/demo_sales.py
+--- a/src/collectors/demo_sales.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/collectors/demo_sales.py	2026-11-17 08:35:34.174437566 +0900
+@@ -0,0 +1,100 @@
++"""시연용 가상 데이터: 골프 시뮬레이터 B2B 영업팀 담당자의 메일 116통.
++
++- 모든 회사·사람·주소·번호·금액은 가상이다. 외부 회사 도메인은 예약 최상위 도메인 `.example`,
++  사내 도메인은 `example.invalid`만 쓴다(실제 메일·인물·회사 아님).
++- 받는 사람은 가상의 영업팀 담당자 '김영업'이다. 최근 4주에 걸쳐 고객 요청·사내 협조·전자결재·
++  공지·뉴스레터·참조 메일·내 회신이 섞여 있어 제안·할 일·지표·주간보고 흐름을 한 번에 보여 준다.
++- 이 파일은 데이터만 만든다. 앱 연결(시딩)은 `app/demo_sales_seed.py`가 한다.
++"""
++
++from __future__ import annotations
++
++from datetime import datetime, timedelta
++
++from collectors.demo_sales_base import CUSTOMERS, INTERNAL_DOMAIN, ME, TOTAL_MESSAGES, Mail, _in
++from collectors.demo_sales_customers import _customer_threads, _short_threads
++from collectors.demo_sales_internal import (
++    _approval_threads,
++    _cc_and_notices,
++    _internal_threads,
++    _my_questions,
++)
++from domain.clock import KST
++from domain.mail import MailKey, MailMessage
++from domain.models import MailSource
++
++__all__ = ["CUSTOMERS", "INTERNAL_DOMAIN", "ME", "TOTAL_MESSAGES", "sales_messages"]
++
++
++def _all_threads() -> list[list[Mail]]:
++    return [
++        *_customer_threads(),
++        *_short_threads(),
++        *_internal_threads(),
++        *_approval_threads(),
++        *_my_questions(),
++        *_cc_and_notices(),
++    ]
++
++
++def _filler(count: int) -> list[list[Mail]]:
++    """116통을 맞추기 위한 짧은 후속 회신(받은 감사 인사 등, 업무로 잡히지 않음)."""
++    rows = []
++    for i in range(count):
++        rows.append(
++            [
++                Mail(
++                    27 - (i % 27),
++                    18,
++                    "영업지원팀 한가상",
++                    _in("salesops"),
++                    f"영업팀 공지 메일 모음 {i + 1}",
++                    "참고용 공유 메일입니다.",
++                    to_me=False,
++                    cc_me=False,
++                    auto=True,
++                )
++            ]
++        )
++    return rows
++
++
++def sales_messages(now: datetime) -> list[MailMessage]:
++    """지금(now)을 기준으로 최근 4주 안에 흩어진 가상 메일 116통."""
++    threads = _all_threads()
++    count = sum(len(t) for t in threads)
++    if count < TOTAL_MESSAGES:
++        threads += _filler(TOTAL_MESSAGES - count)
++    local_now = now.astimezone(KST)
++    today = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
++    messages: list[MailMessage] = []
++    n = 0
++    for index, thread in enumerate(threads, start=1):
++        thread_id = f"SALES-T{index:03d}"
++        for mail in thread:
++            n += 1
++            when = today - timedelta(days=mail.days_ago) + timedelta(hours=mail.hour)
++            if when > local_now:  # 오늘 메일이 아직 오지 않은 시각이면 조금 앞당긴다
++                when = local_now - timedelta(minutes=5 * (n % 12 + 1))
++            messages.append(
++                MailMessage(
++                    key=MailKey(
++                        MailSource.OUTLOOK,
++                        f"SALES-ENTRY-{n:04d}",
++                        f"<sales-{n:04d}@{INTERNAL_DOMAIN}>",
++                    ),
++                    thread_id=thread_id,
++                    subject=mail.subject,
++                    sender_name=mail.sender,
++                    sender_address=mail.address,
++                    received_at=when,
++                    folder="보낸 편지함" if mail.mine else "받은 편지함",
++                    sent_by_me=mail.mine,
++                    to_me=mail.to_me and not mail.mine,
++                    cc_me=mail.cc_me,
++                    is_auto=mail.auto,
++                    body=mail.body,
++                    attachment_names=mail.attachments,
++                )
++            )
++    return messages[:TOTAL_MESSAGES]
+diff -ruN a/src/collectors/demo_sales_base.py b/src/collectors/demo_sales_base.py
+--- a/src/collectors/demo_sales_base.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/collectors/demo_sales_base.py	2026-11-17 08:35:34.181281210 +0900
+@@ -0,0 +1,64 @@
++"""시연용 영업팀 가상 메일의 공통 정의(결정기록 0042). 회사·사람·주소·내용은 모두 가상이다."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from typing import Final
++
++INTERNAL_DOMAIN: Final = "example.invalid"
++
++
++ME: Final = "김영업"
++
++
++TOTAL_MESSAGES: Final = 116
++
++
++# 외부 고객사 도메인 → 회사명(가상). 시딩 때 회사명 캐시에 '확정'으로 넣는다.
++CUSTOMERS: Final[dict[str, str]] = {
++    "greenfield-gc.example": "그린필드골프클럽",
++    "swingpark.example": "스윙파크 스크린골프",
++    "birdiezone.example": "버디존 골프아카데미",
++    "pinehills-cc.example": "파인힐스CC",
++    "eagle-screen.example": "이글스크린",
++    "happyround.example": "해피라운드 골프카페",
++    "blueocean-resort.example": "블루오션리조트",
++    "wondergolf.example": "원더골프 연습장",
++    "skydrive.example": "스카이드라이브 골프센터",
++    "mountainview-cc.example": "마운틴뷰CC",
++    "haneul-leisure.example": "하늘레저",
++    "one-hotel.example": "원호텔앤리조트",
++}
++
++
++@dataclass(frozen=True, slots=True)
++class Mail:
++    """한 통. days_ago·hour: 기준 시각(지금)으로부터 며칠 전 몇 시(KST)."""
++
++    days_ago: int
++    hour: float
++    sender: str
++    address: str
++    subject: str
++    body: str
++    mine: bool = False
++    to_me: bool = True
++    cc_me: bool = False
++    auto: bool = False
++    attachments: tuple[str, ...] = ()
++
++
++def _sign(name: str, org: str) -> str:
++    return f"\n\n감사합니다.\n{name} 드림\n----------------------------------------\n{org}\n"
++
++
++def _ext(local: str, domain: str) -> str:
++    return f"{local}@{domain}"
++
++
++def _in(local: str) -> str:
++    return f"{local}@{INTERNAL_DOMAIN}"
++
++
++def _reply(days_ago: int, hour: float, subject: str, body: str) -> Mail:
++    return Mail(days_ago, hour, ME, _in("sales.kim"), f"RE: {subject}", body, mine=True)
+diff -ruN a/src/collectors/demo_sales_customers.py b/src/collectors/demo_sales_customers.py
+--- a/src/collectors/demo_sales_customers.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/collectors/demo_sales_customers.py	2026-11-17 08:35:34.162943299 +0900
+@@ -0,0 +1,454 @@
++"""시연용 영업팀 가상 메일: 고객 요청 스레드(결정기록 0042). 모두 가상이다."""
++
++from __future__ import annotations
++
++from typing import Final
++
++from collectors.demo_sales_base import (
++    CUSTOMERS,
++    Mail,
++    _ext,
++    _reply,
++    _sign,
++)
++
++
++# ---- 고객 요청 스레드(외부) ------------------------------------------------------------
++def _customer_threads() -> list[list[Mail]]:
++    c = "greenfield-gc.example"
++    t: list[list[Mail]] = []
++    s = "[견적요청] 실내 연습장 시뮬레이터 4대 견적"
++    t.append(
++        [
++            Mail(
++                26,
++                9.2,
++                "그린필드골프클럽 박예시 팀장",
++                _ext("park", c),
++                s,
++                "안녕하세요. 클럽하우스 2층 실내 연습장에 시뮬레이터 4대를 도입하려 합니다.\n"
++                "본체·프로젝터·스윙 플레이트 포함 견적서 요청드립니다. "
++                "11월 말까지 회신 부탁드립니다." + _sign("박예시", "그린필드골프클럽 시설팀"),
++                attachments=("연습장_도면.pdf",),
++            ),
++            _reply(
++                25,
++                15,
++                s,
++                "요청하신 4대 구성 견적서 첨부드립니다. 설치 일정은 계약 후 2주 내 가능합니다.",
++            ),
++            Mail(
++                24,
++                10,
++                "그린필드골프클럽 박예시 팀장",
++                _ext("park", c),
++                f"RE: {s}",
++                "견적 잘 받았습니다. 3년 무상 AS 조건으로 다시 검토 부탁드립니다.",
++            ),
++            _reply(23, 11, s, "3년 무상 AS 포함 조건으로 수정 견적 드렸습니다. 확인 부탁드립니다."),
++        ]
++    )
++    c = "swingpark.example"
++    s = "강남점 장비 추가 구매 문의드립니다"
++    t.append(
++        [
++            Mail(
++                22,
++                14,
++                "스윙파크 스크린골프 이가상 대표",
++                _ext("lee", c),
++                s,
++                "강남점에 룸 2개를 증설합니다. 기존과 같은 모델로 2대 추가 구매가 가능할까요?\n"
++                "단가와 납기 확인 요청드립니다." + _sign("이가상", "스윙파크 스크린골프"),
++            ),
++            _reply(
++                21,
++                10,
++                s,
++                "동일 모델 2대 재고 확보했습니다. 단가표 첨부드리며 납기는 발주 후 10일입니다.",
++            ),
++        ]
++    )
++    c = "birdiezone.example"
++    s = "[AS접수] 3번 타석 센서 인식 오류"
++    t.append(
++        [
++            Mail(
++                20,
++                9.5,
++                "버디존 골프아카데미 정더미 실장",
++                _ext("jung", c),
++                s,
++                "3번 타석에서 공 인식이 간헐적으로 안 됩니다. "
++                "수업에 지장이 있어 빠른 점검 부탁드립니다."
++                + _sign("정더미", "버디존 골프아카데미"),
++            ),
++            _reply(20, 13, s, "설치기술팀에 점검 요청했습니다. 내일 오전 방문 예정입니다."),
++            Mail(
++                18,
++                17,
++                "버디존 골프아카데미 정더미 실장",
++                _ext("jung", c),
++                f"RE: {s}",
++                "센서 교체 후 정상 동작 확인했습니다. 빠른 처리 감사합니다.",
++            ),
++        ]
++    )
++    c = "pinehills-cc.example"
++    s = "연간 유지보수 계약 갱신 조건 검토 요청"
++    t.append(
++        [
++            Mail(
++                19,
++                11,
++                "파인힐스CC 최샘플 과장",
++                _ext("choi", c),
++                s,
++                "12월 만료되는 유지보수 계약 갱신 조건을 검토해 주시기 바랍니다.\n"
++                "점검 주기를 분기 1회에서 월 1회로 늘리는 경우 비용도 함께 알려주세요."
++                + _sign("최샘플", "파인힐스CC 운영지원팀"),
++                attachments=("현행_계약서.pdf",),
++            ),
++            _reply(
++                17, 16, s, "월 1회 점검 기준 갱신안 드립니다. 법무 검토 후 최종본 공유드리겠습니다."
++            ),
++        ]
++    )
++    c = "eagle-screen.example"
++    s = "수원점 오픈 일정에 맞춘 설치 일정 조율"
++    t.append(
++        [
++            Mail(
++                16,
++                10,
++                "이글스크린 한테스트 매니저",
++                _ext("han", c),
++                s,
++                "수원점 오픈이 12월 5일로 확정됐습니다. "
++                "11월 마지막 주에 설치가 가능한지 확인 부탁드립니다."
++                + _sign("한테스트", "이글스크린 개발팀"),
++            ),
++            _reply(
++                15,
++                14,
++                s,
++                "11/27~28 설치로 설치기술팀과 일정 잡았습니다. 전기 공사 완료 여부만 알려주세요.",
++            ),
++            Mail(
++                14,
++                9,
++                "이글스크린 한테스트 매니저",
++                _ext("han", c),
++                f"RE: {s}",
++                "전기 공사는 11/25 완료 예정입니다. 일정 확정 부탁드립니다.",
++            ),
++        ]
++    )
++    c = "happyround.example"
++    s = "프로모션 가격 적용 가능 여부 문의"
++    t.append(
++        [
++            Mail(
++                15,
++                15,
++                "해피라운드 골프카페 오예시 점장",
++                _ext("oh", c),
++                s,
++                "홈페이지에 안내된 연말 프로모션 가격을 신규 매장 2곳에도 "
++                "적용해 주실 수 있을까요?\n"
++                "이번 주 금요일까지 회신 부탁드립니다." + _sign("오예시", "해피라운드 골프카페"),
++            ),
++            _reply(14, 11, s, "2곳 모두 프로모션 가격 적용 가능합니다. 계약서 초안 보내드립니다."),
++        ]
++    )
++    c = "blueocean-resort.example"
++    s = "리조트 VIP 라운지 시뮬레이터 리스 조건 요청"
++    t.append(
++        [
++            Mail(
++                13,
++                10,
++                "블루오션리조트 서가상 부장",
++                _ext("seo", c),
++                s,
++                "VIP 라운지에 시뮬레이터 1대를 리스로 운영하려 합니다. "
++                "36개월 리스 조건 견적 요청드립니다." + _sign("서가상", "블루오션리조트 F&B팀"),
++            ),
++            _reply(
++                12,
++                15,
++                s,
++                "36개월 리스 조건표 첨부드립니다. 월 납입액과 중도 해지 조건 확인 부탁드립니다.",
++            ),
++            Mail(
++                11,
++                10,
++                "블루오션리조트 서가상 부장",
++                _ext("seo", c),
++                f"RE: {s}",
++                "조건 확인했습니다. 계약 진행하겠습니다. 계약서 송부 부탁드립니다.",
++            ),
++        ]
++    )
++    c = "wondergolf.example"
++    s = "[요청] 타석 10개 교체 제안서 송부"
++    t.append(
++        [
++            Mail(
++                12,
++                9,
++                "원더골프 연습장 유샘플 이사",
++                _ext("yoo", c),
++                s,
++                "노후 타석 10개를 시뮬레이터 타석으로 교체하려 합니다. "
++                "단계별 교체 제안서 요청드립니다.\n"
++                "11/21까지 받아볼 수 있을까요?" + _sign("유샘플", "원더골프 연습장"),
++            ),
++            _reply(10, 16, s, "1차 4타석·2차 6타석 단계 교체 제안서 보내드립니다."),
++        ]
++    )
++    c = "skydrive.example"
++    s = "소프트웨어 업데이트 후 코스 목록 누락"
++    t.append(
++        [
++            Mail(
++                9,
++                14,
++                "스카이드라이브 골프센터 문더미 매니저",
++                _ext("moon", c),
++                s,
++                "어제 업데이트 이후 해외 코스 일부가 목록에서 보이지 않습니다. 확인 부탁드립니다."
++                + _sign("문더미", "스카이드라이브 골프센터"),
++            ),
++            _reply(9, 17, s, "CS팀 확인 결과 라이선스 동기화 문제로 오늘 밤 재배포 예정입니다."),
++        ]
++    )
++    c = "mountainview-cc.example"
++    s = "회원 대상 시타회 공동 진행 제안"
++    t.append(
++        [
++            Mail(
++                8,
++                11,
++                "마운틴뷰CC 장예시 팀장",
++                _ext("jang", c),
++                s,
++                "12월 둘째 주 회원 시타회를 공동으로 진행하고 싶습니다. "
++                "장비 2대 대여와 담당자 지원이 가능할까요?"
++                + _sign("장예시", "마운틴뷰CC 마케팅팀"),
++            ),
++            _reply(
++                7,
++                15,
++                s,
++                "장비 2대 대여 가능합니다. 물류팀에 일정 확인 중이며 담당자 1명 지원하겠습니다.",
++            ),
++            Mail(
++                0,
++                10,
++                "마운틴뷰CC 장예시 팀장",
++                _ext("jang", c),
++                f"RE: {s}",
++                "감사합니다. 행사 당일 동선 협의를 위해 이번 주 통화 가능하실까요?",
++            ),
++        ]
++    )
++    c = "haneul-leisure.example"
++    s = "신규 가맹 상담 일정 요청"
++    t.append(
++        [
++            Mail(
++                6,
++                10,
++                "하늘레저 노가상 대표",
++                _ext("noh", c),
++                s,
++                "스크린골프 가맹 사업을 검토 중입니다. "
++                "다음 주 중 방문 상담 일정 잡아 주시기 바랍니다." + _sign("노가상", "하늘레저"),
++            ),
++            _reply(5, 9, s, "다음 주 화요일 14시 방문 상담 가능합니다. 주소 확인 부탁드립니다."),
++            Mail(
++                5,
++                15,
++                "하늘레저 노가상 대표",
++                _ext("noh", c),
++                f"RE: {s}",
++                "화요일 14시 좋습니다. 사업계획서도 미리 보내드리겠습니다.",
++            ),
++        ]
++    )
++    c = "one-hotel.example"
++    s = "호텔 키즈존 미니 시뮬레이터 견적 요청드립니다"
++    t.append(
++        [
++            Mail(
++                4,
++                13,
++                "원호텔앤리조트 임샘플 과장",
++                _ext("lim", c),
++                s,
++                "키즈존에 어린이용 미니 시뮬레이터 2대 도입을 검토합니다. "
++                "견적과 안전 인증 자료 요청드립니다."
++                + _sign("임샘플", "원호텔앤리조트 시설기획팀"),
++            ),
++            Mail(
++                1,
++                9,
++                "원호텔앤리조트 임샘플 과장",
++                _ext("lim", c),
++                f"RE: {s}",
++                "내부 보고가 다음 주라 이번 주 금요일까지 견적 받아볼 수 있을지 확인 부탁드립니다.",
++            ),
++        ]
++    )
++    c = "greenfield-gc.example"
++    s = "계약서 날인본 송부 및 대금 지급 일정 확인"
++    t.append(
++        [
++            Mail(
++                3,
++                10,
++                "그린필드골프클럽 박예시 팀장",
++                _ext("park", c),
++                s,
++                "계약서 날인본 보내드립니다. "
++                "선금 지급일을 11/25로 진행해도 되는지 확인 부탁드립니다.",
++                attachments=("계약서_날인본.pdf",),
++            ),
++        ]
++    )
++    c = "swingpark.example"
++    s = "강남점 추가 장비 설치 완료 후 교육 요청"
++    t.append(
++        [
++            Mail(
++                2,
++                16,
++                "스윙파크 스크린골프 이가상 대표",
++                _ext("lee", c),
++                s,
++                "추가 장비 설치가 끝났습니다. 신규 직원 대상 운영 교육 일정 잡아 주세요.",
++            ),
++        ]
++    )
++    c = "eagle-screen.example"
++    s = "수원점 오픈 이벤트 판촉물 지원 문의"
++    t.append(
++        [
++            Mail(
++                1,
++                11,
++                "이글스크린 한테스트 매니저",
++                _ext("han", c),
++                s,
++                "오픈 이벤트용 배너와 경품 지원이 가능할까요? 11/28까지 회신 부탁드립니다.",
++            ),
++        ]
++    )
++    c = "birdiezone.example"
++    s = "[긴급] 아카데미 레슨 예약 시스템 연동 오류"
++    t.append(
++        [
++            Mail(
++                0,
++                9,
++                "버디존 골프아카데미 정더미 실장",
++                _ext("jung", c),
++                s,
++                "레슨 예약 시스템과 타석 배정 연동이 오늘 아침부터 안 됩니다. "
++                "오늘 중 확인 요청드립니다.",
++            ),
++        ]
++    )
++    c = "pinehills-cc.example"
++    s = "갱신 계약서 최종본 검토 부탁드립니다"
++    t.append(
++        [
++            Mail(
++                0,
++                14,
++                "파인힐스CC 최샘플 과장",
++                _ext("choi", c),
++                s,
++                "법무 검토 반영한 최종본 확인했습니다. "
++                "날인 전에 특약 조항 한 번 더 검토 부탁드립니다.",
++                attachments=("갱신계약서_최종.pdf",),
++            ),
++        ]
++    )
++    # 개인 메일 도메인 고객(회사명 대신 '외부(개인 메일)' 표시 확인용, 가상 주소)
++    t.append(
++        [
++            Mail(
++                7,
++                20,
++                "개인 고객 김가상",
++                "demo-fake-0001@naver.com",
++                "가정용 시뮬레이터 설치 가능 문의",
++                "아파트 거실에 설치 가능한 가정용 모델이 있는지 문의드립니다. 상담 부탁드립니다.",
++            ),
++        ]
++    )
++    return t
++
++
++# ---- 짧은 고객 문의(요청 1통 + 내 회신 1통) ----------------------------------------------
++_SHORT_TOPICS: Final = [
++    (
++        "소모품(매트·티) 정기 배송 주기 변경 요청",
++        "매트와 티 정기 배송을 월 2회로 바꿔 주시기 바랍니다.",
++    ),
++    ("프로젝터 램프 교체 비용 문의", "프로젝터 램프 교체 주기와 비용 확인 부탁드립니다."),
++    ("세금계산서 재발행 요청", "사업자 주소가 바뀌어 10월분 세금계산서 재발행 부탁드립니다."),
++    ("신규 코스 콘텐츠 추가 구매 문의", "신규 해외 코스 패키지 추가 구매 조건 확인 요청드립니다."),
++    (
++        "타석 예약 키오스크 연동 가능 여부 문의",
++        "매장 키오스크와 타석 배정 연동이 가능할까요? 검토 부탁드립니다.",
++    ),
++    ("장비 이전 설치 견적 요청", "매장 이전으로 장비 3대 이전 설치 견적 요청드립니다."),
++    ("대회 모드 설정 지원 요청", "다음 달 매장 대회용 대회 모드 설정 지원 부탁드립니다."),
++    (
++        "스윙 분석 리포트 출력 오류 확인 부탁",
++        "스윙 분석 리포트 출력 시 그래프가 깨집니다. 확인 부탁드립니다.",
++    ),
++    ("연간 이용 통계 자료 요청", "올해 타석 이용 통계 자료를 12월 초까지 받아볼 수 있을까요?"),
++    ("직원 운영 교육 추가 일정 요청", "신규 직원 4명 대상 운영 교육 추가 일정 요청드립니다."),
++    ("방음 시공 협력사 소개 요청", "룸 방음 공사 협력사 소개 부탁드립니다."),
++    ("분할 납부 조건 변경 문의", "잔금 분할 납부를 6개월로 늘릴 수 있는지 문의드립니다."),
++    ("데모 장비 시연 일정 요청", "본사 쇼룸에서 신모델 시연 일정 잡아 주시기 바랍니다."),
++    ("AS 출장비 기준 확인 요청", "무상 기간 이후 AS 출장비 기준 확인 부탁드립니다."),
++]
++
++
++def _short_threads() -> list[list[Mail]]:
++    domains = list(CUSTOMERS)
++    people = ["담당 가상", "실장 예시", "매니저 샘플", "과장 테스트", "대표 더미"]
++    threads: list[list[Mail]] = []
++    for i, (subject, body) in enumerate(_SHORT_TOPICS):
++        domain = domains[(i * 5) % len(domains)]
++        company = CUSTOMERS[domain]
++        who = f"{company} {people[i % len(people)]}"
++        days = 27 - i * 2 if i < 13 else 1
++        ask = Mail(
++            days,
++            10 + (i % 6),
++            who,
++            _ext(f"contact{i + 1:02d}", domain),
++            subject,
++            body + _sign(who.split(" ")[-2] if " " in who else who, company),
++        )
++        if i % 4 == 3:  # 일부는 아직 회신 전(할 일·제안으로 남음)
++            threads.append([ask])
++        else:
++            threads.append(
++                [
++                    ask,
++                    _reply(
++                        max(days - 1, 0),
++                        17,
++                        subject,
++                        "요청 내용 확인했습니다. 처리 결과 정리해 회신드립니다.",
++                    ),
++                ]
++            )
++    return threads
+diff -ruN a/src/collectors/demo_sales_internal.py b/src/collectors/demo_sales_internal.py
+--- a/src/collectors/demo_sales_internal.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/collectors/demo_sales_internal.py	2026-11-17 08:35:34.157118443 +0900
+@@ -0,0 +1,412 @@
++"""시연용 영업팀 가상 메일: 사내 협조·전자결재·내 질문·참조·공지(결정기록 0042). 모두 가상이다."""
++
++from __future__ import annotations
++
++from collectors.demo_sales_base import (
++    ME,
++    Mail,
++    _ext,
++    _in,
++    _reply,
++)
++
++
++# ---- 사내 협조 요청(내부) ---------------------------------------------------------------
++def _internal_threads() -> list[list[Mail]]:
++    t: list[list[Mail]] = []
++    s = "11월 영업 실적 마감 자료 제출 요청"
++    t.append(
++        [
++            Mail(
++                25,
++                10,
++                "경영기획팀 임샘플",
++                _in("plan"),
++                s,
++                "11월 실적 마감 자료(수주·매출·미수)를 양식에 맞춰 11/28까지 제출 부탁드립니다.",
++                attachments=("실적마감_양식.xlsx",),
++            ),
++            _reply(24, 16, s, "작성 중이며 마감일 전 제출하겠습니다."),
++        ]
++    )
++    s = "그린필드골프클럽 미수금 확인 요청"
++    t.append(
++        [
++            Mail(
++                23,
++                14,
++                "재무팀 오예시",
++                _in("finance"),
++                s,
++                "그린필드골프클럽 10월분 잔금이 아직 입금되지 않았습니다. "
++                "고객사 확인 부탁드립니다.",
++            ),
++            _reply(22, 11, s, "고객사 확인 결과 11/5 지급 예정입니다."),
++        ]
++    )
++    s = "스윙파크 출고 요청서 확인 부탁"
++    t.append(
++        [
++            Mail(
++                21,
++                9,
++                "물류팀 장가상",
++                _in("logistics"),
++                s,
++                "스윙파크 강남점 2대 출고 요청서의 배송지 주소가 비어 있습니다. 확인 부탁드립니다.",
++            ),
++            _reply(21, 11, s, "배송지 주소 입력해 재상신했습니다."),
++        ]
++    )
++    s = "버디존 센서 교체 작업 결과 보고"
++    t.append(
++        [
++            Mail(
++                18,
++                18,
++                "설치기술팀 서테스트",
++                _in("tech"),
++                s,
++                "버디존 3번 타석 센서 교체 완료했습니다. "
++                "고객 확인 서명 받아 첨부합니다. 내용 확인 부탁드립니다.",
++                attachments=("작업확인서.pdf",),
++            ),
++        ]
++    )
++    s = "연말 프로모션 판촉물 수량 취합 요청"
++    t.append(
++        [
++            Mail(
++                17,
++                10,
++                "마케팅팀 유더미",
++                _in("mkt"),
++                s,
++                "담당 고객사별 연말 판촉물(배너·경품) 필요 수량을 11/20까지 회신해 주세요.",
++            ),
++            _reply(16, 15, s, "담당 6개 고객사 수량 정리해 첨부드립니다."),
++        ]
++    )
++    s = "파인힐스 갱신 계약서 법무 검토 요청"
++    t.append(
++        [
++            Mail(
++                16,
++                16,
++                "법무팀 노예시",
++                _in("legal"),
++                s,
++                "요청하신 갱신 계약서 검토 의견 드립니다. "
++                "손해배상 조항 수정이 필요합니다. 반영 후 회신 부탁드립니다.",
++                attachments=("검토의견.docx",),
++            ),
++            _reply(15, 10, s, "손해배상 조항 수정 반영했습니다. 재검토 부탁드립니다."),
++            Mail(
++                13,
++                17,
++                "법무팀 노예시",
++                _in("legal"),
++                f"RE: {s}",
++                "수정본 확인했습니다. 이상 없습니다.",
++            ),
++        ]
++    )
++    s = "이글스크린 수원점 설치 인력 배정 확인"
++    t.append(
++        [
++            Mail(
++                13,
++                11,
++                "설치기술팀 서테스트",
++                _in("tech"),
++                s,
++                "11/27~28 이글스크린 설치 인력 2명 배정했습니다. "
++                "현장 담당자 연락처 공유 부탁드립니다.",
++            ),
++            _reply(13, 15, s, "현장 담당자 정보 메신저로 공유드렸습니다."),
++        ]
++    )
++    s = "CRM 영업 기회 입력 누락 건 정리 요청"
++    t.append(
++        [
++            Mail(
++                11,
++                9,
++                "영업지원팀 한가상",
++                _in("salesops"),
++                s,
++                "CRM에 이번 달 영업 기회 3건이 입력되지 않았습니다. 금주 내 입력 부탁드립니다.",
++            ),
++        ]
++    )
++    s = "스카이드라이브 라이선스 동기화 오류 원인 공유"
++    t.append(
++        [
++            Mail(
++                8,
++                15,
++                "CS팀 문샘플",
++                _in("cs"),
++                s,
++                "라이선스 서버 동기화 지연이 원인이었습니다. "
++                "재배포 완료했고 고객 안내 부탁드립니다.",
++            ),
++            _reply(8, 17, s, "고객사에 재배포 완료 안내했습니다."),
++        ]
++    )
++    s = "주간 영업 회의 자료 업데이트 요청"
++    t.append(
++        [
++            Mail(
++                6,
++                9,
++                "영업지원팀 한가상",
++                _in("salesops"),
++                s,
++                "이번 주 회의 전까지 담당 파이프라인 현황을 공유 시트에 "
++                "업데이트해 주시기 바랍니다.",
++            ),
++            _reply(6, 14, s, "파이프라인 현황 업데이트 완료했습니다."),
++        ]
++    )
++    s = "블루오션리조트 리스 계약 신용조회 요청"
++    t.append(
++        [
++            Mail(
++                10,
++                13,
++                "재무팀 오예시",
++                _in("finance"),
++                s,
++                "블루오션리조트 리스 계약 전 신용조회 동의서가 필요합니다. "
++                "고객사에 요청 부탁드립니다.",
++            ),
++        ]
++    )
++    s = "원호텔 키즈존 안전 인증 자료 요청"
++    t.append(
++        [
++            Mail(
++                3,
++                15,
++                "CS팀 문샘플",
++                _in("cs"),
++                s,
++                "원호텔 견적 건 관련 어린이 제품 안전 인증서 사본이 필요하시면 "
++                "요청 양식 작성 부탁드립니다.",
++            ),
++        ]
++    )
++    s = "12월 설치 일정표 취합 요청"
++    t.append(
++        [
++            Mail(
++                2,
++                10,
++                "설치기술팀 서테스트",
++                _in("tech"),
++                s,
++                "12월 설치 예정 건을 12/1까지 일정표에 입력해 주세요. 인력 배정에 필요합니다.",
++            ),
++        ]
++    )
++    s = "신규 가맹 상담 자료 최신본 공유 요청"
++    t.append(
++        [
++            Mail(
++                4,
++                11,
++                "영업지원팀 한가상",
++                _in("salesops"),
++                s,
++                "하늘레저 상담 전에 가맹 안내 자료 최신본이 필요하면 말씀 부탁드립니다. "
++                "수익 시뮬레이션 표도 있습니다.",
++            ),
++            _reply(4, 13, s, "최신본과 수익 시뮬레이션 표 요청드립니다."),
++        ]
++    )
++    s = "미수금 현황 주간 점검 요청"
++    t.append(
++        [
++            Mail(
++                1,
++                9,
++                "재무팀 오예시",
++                _in("finance"),
++                s,
++                "담당 고객사 미수금 현황을 점검해 금일 중 회신 부탁드립니다.",
++                attachments=("미수현황.xlsx",),
++            ),
++        ]
++    )
++    s = "시타회 장비 대여 가능 수량 확인 부탁"
++    t.append(
++        [
++            Mail(
++                0,
++                11,
++                "물류팀 장가상",
++                _in("logistics"),
++                s,
++                "12월 둘째 주 시타회용 데모 장비 대여 가능 수량 확인 부탁드립니다. "
++                "다른 행사와 겹칩니다.",
++            ),
++        ]
++    )
++    return t
++
++
++# ---- 전자결재 -------------------------------------------------------------------------
++def _approval_threads() -> list[list[Mail]]:
++    sender, address = "전자결재 알림", _in("approval")
++    items = [
++        (
++            24,
++            "[전자결재] 그린필드골프클럽 할인 승인 요청 (결재요청)",
++            "그린필드골프클럽 견적 특별 할인 품의가 상신되었습니다. 결재 바랍니다.",
++        ),
++        (
++            20,
++            "[전자결재] 스윙파크 추가 구매 계약 품의 결재 완료",
++            "스윙파크 강남점 추가 구매 계약 품의가 결재 완료되었습니다. 후속 처리 부탁드립니다.",
++        ),
++        (
++            14,
++            "[전자결재] 블루오션리조트 리스 계약 품의 상신 요청",
++            "리스 계약 품의 상신이 필요합니다. 기안 작성 후 상신 부탁드립니다.",
++        ),
++        (
++            11,
++            "[전자결재] 출장비 정산 결재 반려 안내",
++            "11월 출장비 정산이 영수증 누락으로 반려되었습니다. 보완 후 재상신 부탁드립니다.",
++        ),
++        (
++            7,
++            "[전자결재] 연말 프로모션 판촉비 집행 품의 결재요청",
++            "판촉비 집행 품의가 상신되었습니다. 검토 후 결재 부탁드립니다.",
++        ),
++        (
++            5,
++            "[전자결재] 파인힐스CC 유지보수 갱신 계약 품의 결재 완료",
++            "갱신 계약 품의가 결재 완료되었습니다. 계약 체결 진행 부탁드립니다.",
++        ),
++        (
++            2,
++            "[전자결재] 원더골프 타석 교체 견적 승인 요청",
++            "단계별 교체 견적 승인 품의가 상신되었습니다. 결재 부탁드립니다.",
++        ),
++        (
++            0,
++            "[전자결재] 이글스크린 오픈 판촉물 지원 기안 결재요청",
++            "오픈 이벤트 판촉물 지원 기안이 상신되었습니다. 확인 부탁드립니다.",
++        ),
++    ]
++    return [
++        [Mail(d, 8.5 + i * 0.3, sender, address, sub, body)]
++        for i, (d, sub, body) in enumerate(items)
++    ]
++
++
++# ---- 내가 먼저 보낸 질문(회신 대기·팔로업 시연) ----------------------------------------
++def _my_questions() -> list[list[Mail]]:
++    rows = [
++        (
++            9,
++            "그린필드골프클럽 잔금 지급 일정 확인 요청드립니다",
++            "그린필드골프클럽 박예시 팀장",
++            _ext("park", "greenfield-gc.example"),
++            "잔금 지급 일정 확인 부탁드립니다.",
++        ),
++        (
++            6,
++            "원더골프 2차 교체 타석 위치 확인 부탁드립니다",
++            "원더골프 연습장 유샘플 이사",
++            _ext("yoo", "wondergolf.example"),
++            "2차 교체 6타석 위치 도면 확인 부탁드립니다.",
++        ),
++        (
++            4,
++            "블루오션리조트 신용조회 동의서 회신 요청",
++            "블루오션리조트 서가상 부장",
++            _ext("seo", "blueocean-resort.example"),
++            "신용조회 동의서 날인 후 회신 부탁드립니다.",
++        ),
++    ]
++    threads = []
++    for days, subject, _who, _address, body in rows:
++        threads.append([Mail(days, 10, ME, _in("sales.kim"), subject, body, mine=True)])
++    return threads
++
++
++# ---- 참조 메일·공지·뉴스레터(제외·낮은 확신도 시연) ------------------------------------
++def _cc_and_notices() -> list[list[Mail]]:
++    t: list[list[Mail]] = []
++    cc = [
++        (
++            22,
++            "영업지원팀 한가상",
++            "영업 2팀 고객사 방문 일정 공유",
++            "다음 주 2팀 방문 일정 공유드립니다.",
++        ),
++        (
++            17,
++            "마케팅팀 유더미",
++            "연말 프로모션 홈페이지 문구 확인 요청",
++            "홈페이지 문구 시안 확인 부탁드립니다.",
++        ),
++        (12, "CS팀 문샘플", "11월 AS 처리 현황 공유", "11월 AS 처리 현황 공유드립니다."),
++        (
++            9,
++            "재무팀 오예시",
++            "세금계산서 발행 기준 변경 안내",
++            "12월부터 세금계산서 발행 기준이 바뀝니다.",
++        ),
++        (
++            5,
++            "설치기술팀 서테스트",
++            "설치 안전 수칙 개정 공유",
++            "설치 안전 수칙 개정본 공유드립니다.",
++        ),
++        (
++            1,
++            "영업지원팀 한가상",
++            "4분기 영업 목표 조정안 검토 요청",
++            "조정안 검토 후 의견 부탁드립니다.",
++        ),
++    ]
++    for d, who, subject, body in cc:
++        local = "salesops" if "영업" in who else "team"
++        t.append([Mail(d, 13, who, _in(local), subject, body, to_me=False, cc_me=True)])
++    notices = [
++        (27, "인사팀", "[공지] 11월 사내 교육 일정 안내"),
++        (21, "IT운영팀", "[공지] 그룹웨어 정기 점검 안내"),
++        (14, "총무팀", "[공지] 연말 사무실 대청소 안내"),
++        (7, "IT운영팀", "[공지] 보안 패치 설치 안내"),
++        (3, "인사팀", "[공지] 연말정산 일정 안내"),
++    ]
++    for d, who, subject in notices:
++        t.append([Mail(d, 9, who, _in("notice"), subject, "전 직원 대상 안내입니다.", to_me=False)])
++    news = [
++        (26, "주간 골프산업 뉴스"),
++        (19, "주간 골프산업 뉴스"),
++        (12, "주간 골프산업 뉴스"),
++        (5, "주간 골프산업 뉴스"),
++        (16, "파트너 포털 알림"),
++        (2, "파트너 포털 알림"),
++    ]
++    for d, subject in news:
++        t.append(
++            [
++                Mail(
++                    d,
++                    7,
++                    "뉴스 발송",
++                    _in("noreply"),
++                    subject,
++                    "이번 주 소식입니다.",
++                    to_me=False,
++                    auto=True,
++                )
++            ]
++        )
++    return t
+diff -ruN a/src/collectors/demo_sales_titles.py b/src/collectors/demo_sales_titles.py
+--- a/src/collectors/demo_sales_titles.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/collectors/demo_sales_titles.py	2026-11-17 08:35:34.168660763 +0900
+@@ -0,0 +1,68 @@
++"""가상(영업팀) 화면용 'AI 요청 요약' 제목 표(결정기록 0042). 내용은 모두 가상이다."""
++
++from __future__ import annotations
++
++from typing import Final
++
++# 가상 화면용 'AI 요청 요약' 제목(가짜 AI가 메일 제목 대신 쓰는 시연용 요약, 결정기록 0042).
++# 키는 메일 제목, 값은 요청자·대상·할 일이 드러나는 요약 제목(40자 이하).
++SUMMARY_TITLES: Final[dict[str, str]] = {
++    "[견적요청] 실내 연습장 시뮬레이터 4대 견적": "그린필드 실내연습장 시뮬레이터 4대 견적 회신",
++    "강남점 장비 추가 구매 문의드립니다": "스윙파크 강남점 동일모델 2대 단가·납기 안내",
++    "[AS접수] 3번 타석 센서 인식 오류": "버디존 3번 타석 센서 오류 점검 방문 조율",
++    "연간 유지보수 계약 갱신 조건 검토 요청": "파인힐스 유지보수 월1회 점검 갱신안 작성",
++    "수원점 오픈 일정에 맞춘 설치 일정 조율": "이글스크린 수원점 11월말 설치 일정 확정",
++    "프로모션 가격 적용 가능 여부 문의": "해피라운드 신규 2개점 연말 프로모션가 적용",
++    "리조트 VIP 라운지 시뮬레이터 리스 조건 요청": "블루오션 VIP라운지 36개월 리스 조건 제시",
++    "[요청] 타석 10개 교체 제안서 송부": "원더골프 타석 10개 단계별 교체 제안서 송부",
++    "소프트웨어 업데이트 후 코스 목록 누락": "스카이드라이브 업데이트 후 코스 누락 조치",
++    "회원 대상 시타회 공동 진행 제안": "마운틴뷰CC 12월 시타회 장비 2대·인력 지원",
++    "신규 가맹 상담 일정 요청": "하늘레저 가맹 방문 상담 일정 확정",
++    "호텔 키즈존 미니 시뮬레이터 견적 요청드립니다": "원호텔 키즈존 미니 2대 견적·안전인증 송부",
++    "계약서 날인본 송부 및 대금 지급 일정 확인": "그린필드 날인본 접수·선금 11/25 지급 확인",
++    "강남점 추가 장비 설치 완료 후 교육 요청": "스윙파크 강남점 신규 직원 운영교육 일정",
++    "수원점 오픈 이벤트 판촉물 지원 문의": "이글스크린 수원점 오픈 배너·경품 지원 회신",
++    "[긴급] 아카데미 레슨 예약 시스템 연동 오류": "버디존 레슨예약-타석배정 연동 오류 긴급 확인",
++    "갱신 계약서 최종본 검토 부탁드립니다": "파인힐스 갱신계약 최종본 특약 조항 검토",
++    "가정용 시뮬레이터 설치 가능 문의": "개인 고객 가정용 모델 설치 상담",
++    "소모품(매트·티) 정기 배송 주기 변경 요청": "소모품 정기배송 월2회로 주기 변경",
++    "프로젝터 램프 교체 비용 문의": "프로젝터 램프 교체주기·비용 안내",
++    "세금계산서 재발행 요청": "주소 변경에 따른 10월 세금계산서 재발행",
++    "신규 코스 콘텐츠 추가 구매 문의": "해외 코스 패키지 추가 구매 조건 안내",
++    "타석 예약 키오스크 연동 가능 여부 문의": "매장 키오스크-타석배정 연동 가능 검토",
++    "장비 이전 설치 견적 요청": "매장 이전 장비 3대 이전설치 견적",
++    "대회 모드 설정 지원 요청": "매장 대회용 대회모드 설정 지원",
++    "스윙 분석 리포트 출력 오류 확인 부탁": "스윙분석 리포트 그래프 깨짐 오류 확인",
++    "연간 이용 통계 자료 요청": "연간 타석 이용 통계 12월초 제공",
++    "직원 운영 교육 추가 일정 요청": "신규 직원 4명 운영교육 추가 일정",
++    "방음 시공 협력사 소개 요청": "룸 방음공사 협력사 소개",
++    "분할 납부 조건 변경 문의": "잔금 분할납부 6개월 연장 가능 검토",
++    "데모 장비 시연 일정 요청": "본사 쇼룸 신모델 시연 일정 확정",
++    "AS 출장비 기준 확인 요청": "무상기간 후 AS 출장비 기준 안내",
++    "11월 영업 실적 마감 자료 제출 요청": "11월 실적 마감자료(수주·매출·미수) 제출",
++    "그린필드골프클럽 미수금 확인 요청": "그린필드 10월 잔금 미입금 확인",
++    "스윙파크 출고 요청서 확인 부탁": "스윙파크 출고요청서 배송지 보완 재상신",
++    "버디존 센서 교체 작업 결과 보고": "버디존 센서 교체 작업확인서 검토",
++    "연말 프로모션 판촉물 수량 취합 요청": "담당 고객사 연말 판촉물 수량 회신",
++    "파인힐스 갱신 계약서 법무 검토 요청": "파인힐스 계약서 손해배상 조항 수정 반영",
++    "이글스크린 수원점 설치 인력 배정 확인": "이글스크린 설치인력 배정·현장담당 공유",
++    "CRM 영업 기회 입력 누락 건 정리 요청": "CRM 영업기회 누락 3건 입력",
++    "스카이드라이브 라이선스 동기화 오류 원인 공유": "스카이드라이브 재배포 완료 고객 안내",
++    "주간 영업 회의 자료 업데이트 요청": "주간회의 파이프라인 현황 업데이트",
++    "블루오션리조트 리스 계약 신용조회 요청": "블루오션 리스계약 신용조회 동의서 요청",
++    "원호텔 키즈존 안전 인증 자료 요청": "원호텔 견적용 어린이제품 안전인증서 신청",
++    "12월 설치 일정표 취합 요청": "12월 설치예정 건 일정표 입력",
++    "신규 가맹 상담 자료 최신본 공유 요청": "하늘레저 상담용 가맹자료·수익표 준비",
++    "미수금 현황 주간 점검 요청": "담당 고객사 미수금 주간 점검 회신",
++    "시타회 장비 대여 가능 수량 확인 부탁": "12월 시타회 데모장비 대여수량 확인",
++    "[전자결재] 그린필드골프클럽 할인 승인 요청 (결재요청)": "그린필드 견적 특별할인 품의 결재",
++    "[전자결재] 스윙파크 추가 구매 계약 품의 결재 완료": "스윙파크 추가구매 계약 후속 처리",
++    "[전자결재] 블루오션리조트 리스 계약 품의 상신 요청": "블루오션 리스계약 품의 기안·상신",
++    "[전자결재] 출장비 정산 결재 반려 안내": "11월 출장비 정산 영수증 보완 재상신",
++    "[전자결재] 연말 프로모션 판촉비 집행 품의 결재요청": "연말 프로모션 판촉비 집행 품의 결재",
++    "[전자결재] 파인힐스CC 유지보수 갱신 계약 품의 결재 완료": "파인힐스 갱신계약 체결 진행",
++    "[전자결재] 원더골프 타석 교체 견적 승인 요청": "원더골프 단계별 교체 견적 승인 결재",
++    "[전자결재] 이글스크린 오픈 판촉물 지원 기안 결재요청": "이글스크린 오픈 판촉물 지원 기안 결재",
++    "연말 프로모션 홈페이지 문구 확인 요청": "연말 프로모션 홈페이지 문구 시안 확인",
++    "4분기 영업 목표 조정안 검토 요청": "4분기 영업목표 조정안 의견 회신",
++}
+diff -ruN a/src/config/settings.py b/src/config/settings.py
+--- a/src/config/settings.py	2026-11-17 08:35:34.107214438 +0900
++++ b/src/config/settings.py	2026-11-17 08:35:34.108737923 +0900
+@@ -129,6 +129,15 @@
+     demo_mode: bool = False
+     # 데모 모드에서 가상 과거 사례(히스토리 카드)·가상 G-Knowledge 문서를 미리 넣을지(결정기록 0021)
+     demo_seed: bool = True
++    # 데모 가상 데이터 종류: ie(IE팀 SAP 지원, 기본·테스트용) /
++    # sales(골프 시뮬레이터 B2B 영업팀 116통)
++    demo_dataset: Literal["ie", "sales"] = "ie"
++    # 화면 상단 '가상 / 실제' 전환(결정기록 0042). 켜면 시작할 때
++    # 가상(영업팀) 데이터 화면을 함께 만든다.
++    # 가상 화면은 메모리 DB와 가짜 연동만 쓰므로 실제 메일·사이트·로컬 DB에 영향이 없다.
++    data_mode_switch: bool = True
++    # 앱을 열었을 때 처음 보여 줄 화면: real(실제) / demo(가상)
++    data_mode_default: Literal["real", "demo"] = "real"
+ 
+     # 외부 호출 타임아웃(초)
+     http_timeout_seconds: float = Field(default=DEFAULT_HTTP_TIMEOUT_SECONDS, gt=0, le=300)
+diff -ruN a/src/domain/clock.py b/src/domain/clock.py
+--- a/src/domain/clock.py	2026-11-17 08:35:34.100150102 +0900
++++ b/src/domain/clock.py	2026-11-17 08:35:34.101681831 +0900
+@@ -35,3 +35,23 @@
+     if value.tzinfo is None:
+         raise ValueError("시간대가 있는 시각이 필요합니다")
+     return value
++
++
++class OffsetClock:
++    """시스템 시각 + 조정값. 시연 데이터를 과거 시점으로 처리해 넣을 때만 쓴다(결정기록 0042).
++
++    `at(moment)`으로 잠시 그 시각처럼 동작하고, `reset()`으로 실제 시각으로 돌아간다.
++    """
++
++    def __init__(self) -> None:
++        self._offset = timedelta(0)
++
++    def now(self) -> datetime:
++        return datetime.now(UTC) + self._offset
++
++    def at(self, moment: datetime) -> None:
++        require_aware(moment)
++        self._offset = moment - datetime.now(UTC)
++
++    def reset(self) -> None:
++        self._offset = timedelta(0)
+diff -ruN a/src/integrations/ai/demo_sales_ai.py b/src/integrations/ai/demo_sales_ai.py
+--- a/src/integrations/ai/demo_sales_ai.py	1970-01-01 09:00:00.000000000 +0900
++++ b/src/integrations/ai/demo_sales_ai.py	2026-11-17 08:35:34.188075577 +0900
+@@ -0,0 +1,28 @@
++"""가상(영업팀) 화면 전용 가짜 AI(결정기록 0042). 외부 전송 없음.
++
++가짜 AI의 요청 요약에 시연용 요약 제목(`collectors.demo_sales_titles.SUMMARY_TITLES`)을 씌운다.
++메일 제목이 표에 없으면 기본 가짜 AI 결과를 그대로 쓴다.
++"""
++
++from __future__ import annotations
++
++from dataclasses import replace
++
++from collectors.demo_sales_titles import SUMMARY_TITLES
++from domain.ai import RequestDigest
++from integrations.ai.fake import _SUBJECT, FakeKnowledgeAI
++
++
++class SalesDemoAI(FakeKnowledgeAI):
++    def _digest(self, text: str) -> RequestDigest | None:
++        digest = super()._digest(text)
++        match = _SUBJECT.search(text)
++        if digest is None or match is None:
++            return digest
++        subject = match.group(1).strip()
++        if len(subject) < 6:
++            return digest
++        for raw, title in SUMMARY_TITLES.items():
++            if raw in subject or subject in raw:
++                return replace(digest, title=title[:40])
++        return digest
+diff -ruN a/tests/unit/test_data_modes.py b/tests/unit/test_data_modes.py
+--- a/tests/unit/test_data_modes.py	1970-01-01 09:00:00.000000000 +0900
++++ b/tests/unit/test_data_modes.py	2026-11-17 08:35:34.128541715 +0900
+@@ -0,0 +1,128 @@
++"""가상 / 실제 데이터 화면 전환과 영업팀 가상 데이터 116통(결정기록 0042)."""
++
++from __future__ import annotations
++
++from datetime import UTC, datetime, timedelta
++from pathlib import Path
++
++import pytest
++
++from app.data_modes import DataModes, build_demo_container, build_modes, demo_settings
++from collectors.demo_sales import CUSTOMERS, INTERNAL_DOMAIN, TOTAL_MESSAGES, sales_messages
++from domain.clock import FixedClock, OffsetClock
++from domain.models import TaskStatus
++from fixtures.app_factory import app_client, make_container
++
++NOW = datetime(2026, 11, 17, 6, 0, tzinfo=UTC)  # 15:00 KST
++
++
++def test_sales_messages_are_116_virtual_mails() -> None:
++    messages = sales_messages(NOW)
++    assert len(messages) == TOTAL_MESSAGES == 116
++    assert len({m.key.message_id for m in messages}) == 116
++    for m in messages:
++        domain = m.sender_address.rsplit("@", 1)[1]
++        # 외부는 예약 도메인(.example), 사내는 example.invalid, 개인 메일은 가짜 아이디만
++        assert (
++            domain in CUSTOMERS
++            or domain == INTERNAL_DOMAIN
++            or m.sender_address.startswith("demo-fake-")
++        )
++        assert NOW - timedelta(days=29) <= m.received_at <= NOW
++
++
++def test_sales_messages_cover_demo_scenarios() -> None:
++    messages = sales_messages(NOW)
++    assert any(m.sent_by_me for m in messages)  # 내 회신(완료 후보·회신 대기)
++    assert any(m.is_auto for m in messages)  # 뉴스레터(제외 규칙)
++    assert any(m.cc_me and not m.to_me for m in messages)  # 참조만
++    assert any("[전자결재]" in m.subject for m in messages)
++
++
++def test_offset_clock_moves_and_resets() -> None:
++    clock = OffsetClock()
++    past = datetime.now(UTC) - timedelta(days=10)
++    clock.at(past)
++    assert abs((clock.now() - past).total_seconds()) < 5
++    clock.reset()
++    assert abs((clock.now() - datetime.now(UTC)).total_seconds()) < 5
++    with pytest.raises(ValueError):
++        clock.at(datetime(2026, 1, 1))  # 시간대 없는 시각 거부
++
++
++def test_demo_settings_force_fake_integrations(tmp_path: Path) -> None:
++    real = make_container(tmp_path, FixedClock(NOW), demo_mode=False)
++    settings = demo_settings(real.settings)
++    assert settings.demo_mode and settings.demo_dataset == "sales"
++    assert settings.ai_adapter == "fake"
++    assert real.settings.demo_mode is False  # 실제 설정은 바뀌지 않음
++
++
++def test_demo_container_is_isolated_and_seeded(tmp_path: Path) -> None:
++    real = make_container(tmp_path, FixedClock(NOW), demo_mode=False)
++    demo = build_demo_container(real)
++    assert demo.db is not real.db
++    assert demo.csrf_token == real.csrf_token
++    tasks = demo.tasks.list_tasks()
++    assert len(tasks) > 40
++    statuses = {t.status for t in tasks}
++    assert {TaskStatus.SUGGESTED, TaskStatus.DONE, TaskStatus.IN_PROGRESS} <= statuses
++    done = [t for t in tasks if t.status is TaskStatus.DONE]
++    assert all(t.closed_at is not None and t.closed_at <= datetime.now(UTC) for t in done)
++    assert any(t.gk_registered for t in done)
++    assert len(demo.ledger.list_entries()) == len(done)
++    assert real.tasks.list_tasks() == []  # 실제 DB에는 아무것도 들어가지 않음
++    assert isinstance(demo.clock, OffsetClock)
++
++
++def test_build_modes_respects_switch_setting(tmp_path: Path) -> None:
++    off = make_container(tmp_path, FixedClock(NOW), demo_mode=False, data_mode_switch=False)
++    assert build_modes(off).available == ("real",)
++    already_demo = make_container(tmp_path / "d", FixedClock(NOW), demo_mode=True)
++    assert build_modes(already_demo).available == ("real",)
++
++
++def test_data_mode_api_switches_container(tmp_path: Path) -> None:
++    real = make_container(tmp_path, FixedClock(NOW), demo_mode=False)
++    modes = DataModes(real, build_demo_container(real))
++    from fastapi.testclient import TestClient
++
++    from app.factory import create_app
++    from app.web_security import LOOPBACK_CLIENTS
++    from fixtures.app_factory import BASE_URL
++
++    app = create_app(
++        real,
++        run_background_jobs=False,
++        trusted_clients=(*LOOPBACK_CLIENTS, "testclient"),
++        modes=modes,
++    )
++    with TestClient(app, base_url=BASE_URL, raise_server_exceptions=False) as client:
++        client.headers.update({"X-CSRF-Token": real.csrf_token})
++        assert client.get("/api/data-mode").json() == {
++            "current": "real",
++            "available": ["real", "demo"],
++        }
++        assert client.get("/api/tasks").json() == []
++        assert client.post("/api/data-mode", json={"mode": "demo"}).json()["current"] == "demo"
++        assert len(client.get("/api/tasks").json()) > 40
++        page = client.get("/")
++        assert "가상 데이터 화면" in page.text and 'data-mode="real"' in page.text
++        assert client.post("/api/data-mode", json={"mode": "other"}).status_code == 422
++        # CSRF 토큰 없이 전환 불가
++        assert (
++            client.post(
++                "/api/data-mode", json={"mode": "real"}, headers={"X-CSRF-Token": "x"}
++            ).status_code
++            == 403
++        )
++        assert client.post("/api/data-mode", json={"mode": "real"}).json()["current"] == "real"
++        assert client.get("/api/tasks").json() == []
++
++
++def test_single_mode_app_has_no_switch(tmp_path: Path) -> None:
++    container = make_container(tmp_path, FixedClock(NOW))
++    with app_client(container) as client:
++        assert client.get("/api/data-mode").json()["available"] == ["real"]
++        assert client.post("/api/data-mode", json={"mode": "demo"}).status_code == 409
++        assert 'id="data-mode"' not in client.get("/").text
