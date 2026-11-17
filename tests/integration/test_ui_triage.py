@@ -44,6 +44,8 @@ def test_todo02_triage_keyboard_decisions_undo_and_highlight(tmp_path: Path) -> 
         page.wait_for_selector("#tr-items .tr-item.sel")
         total = page.locator("#tr-items .tr-item").count()
         assert total >= 4
+        # 맨 위(오늘 묶음)는 직접 만든 제안이라 메일 원문이 없다. 메일 제안을 골라 하이라이트 확인
+        page.locator("#tr-items .tr-item", has_not_text="스크립트 제목 제안").first.click()
         page.locator("#tr-detail mark").first.wait_for()  # 요청 문장 하이라이트(<mark> 요소)
         assert page.evaluate("window.__xss") is None
         assert page.locator("#tr-items", has_text="스크립트 제목 제안").count() == 1

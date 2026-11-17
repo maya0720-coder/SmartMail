@@ -38,6 +38,7 @@ from app.routes import (
     weekly_drafts,
     weekly_links,
     weekly_profiles,
+    weekly_share,
 )
 from app.scheduler import PeriodicJob
 from app.summary_job import SUMMARY_INTERVAL_SECONDS
@@ -156,6 +157,7 @@ def create_app(
     app.include_router(weekly_links.router)
     app.include_router(weekly_profiles.router)
     app.include_router(weekly_assist.router)
+    app.include_router(weekly_share.router)
     app.include_router(metrics.router)
     app.include_router(pages.router)
     return app

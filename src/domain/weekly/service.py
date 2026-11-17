@@ -18,6 +18,7 @@ from domain.models import TaskEventType
 from domain.ports import Clock, EventRecorder
 from domain.tasks.service import TaskService
 from domain.weekly.convert import to_platform_text
+from domain.weekly.convert_formats import export_draft
 from domain.weekly.form import (
     FormLayout,
     FormRules,
@@ -37,6 +38,7 @@ from domain.weekly.report import (
 )
 from domain.weekly.rich import sanitize, unmasked_text_left
 from domain.weekly.sections import current_section_text
+from domain.weekly.targets import ExportFormat
 from security.links import safe_link
 from security.masking import mask
 
@@ -112,6 +114,7 @@ class DeliveryTarget:
 
     platform: Platform = Platform.WIKI
     link: str | None = None
+    direct: bool = True  # 위키라도 거짓이면 API 게시 없이 복사(위키 편집기 원본 형식, 0041)
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,6 +386,16 @@ class WeeklyService:
             return fallback("매핑되는 머리글 없음" if headings else why)
         return layout
 
+    @property
+    def link_bases(self) -> tuple[str, ...]:
+        """편집기 링크로 허용하는 기준 주소(위키 등)."""
+        return self._link_bases
+
+    def export(self, draft: WeeklyDraft, fmt: ExportFormat) -> tuple[str, str | None]:
+        """마스킹한 초안을 복사 형식(텍스트, HTML 또는 None)으로 바꾼다(결정기록 0041)."""
+        draft.validate()
+        return export_draft(_masked(draft, self._link_bases), self.template, self._author, fmt)
+
     def convert(self, draft: WeeklyDraft, platform: Platform) -> tuple[str, str]:
         """마스킹한 초안을 대상 플랫폼 형식(텍스트, 위키용 HTML)으로 바꾼다. 게시는 하지 않는다."""
         draft.validate()
@@ -403,7 +416,7 @@ class WeeklyService:
             raise TypeError("승인된 보고서만 게시할 수 있습니다")
         page: WikiPage | None = None
         reason: str | None = None
-        if target.platform is Platform.WIKI:
+        if target.platform is Platform.WIKI and target.direct:
             try:
                 page = self.publish(approved)
             except WikiLoginRequiredError:
@@ -413,9 +426,9 @@ class WeeklyService:
                     raise
                 reason = str(exc)
         elif allow_fallback:
-            reason = "슬랙·기타 웹은 API 연동이 없어 복사 후 붙여넣는 방식으로 처리합니다"
+            reason = "위키 외 대상은 직접 게시하지 않고 복사 후 붙여넣는 방식으로 처리합니다"
         else:
-            raise WikiUnavailableError("슬랙·기타 웹은 자동 게시를 지원하지 않습니다")
+            raise WikiUnavailableError("위키 외 대상은 자동 게시를 지원하지 않습니다")
         masked = _masked(approved.draft, self._link_bases)
         if page is None:
             self._check_masked(approved)

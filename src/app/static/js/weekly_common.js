@@ -1,7 +1,7 @@
 // 주간보고 공용: 플랫폼 배지, 클립보드 복사(설정·주간보고 화면 공통). 모든 글자는 el()/textContent로만 넣는다.
 "use strict";
 
-const PLATFORM_MARK = { slack: "S", wiki: "W", web: "↗" };
+const PLATFORM_MARK = { slack: "S", wiki: "W", web: "↗", teams: "T", mail: "M", markdown: "#" };
 
 function platformBadge(platform, label) {
   const mark = PLATFORM_MARK[platform] || PLATFORM_MARK.web;

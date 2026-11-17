@@ -2,7 +2,7 @@
 
 - slack: mrkdwn(*굵게*, • 목록). `&<>`는 슬랙 규칙대로 치환하고 전체 멘션은 무력화한다.
 - wiki: Confluence 위키 마크업(h2./h3./*). 서식 기호는 백슬래시로 이스케이프한다.
-- web: 일반 텍스트.
+- web·teams·mail: 일반 텍스트. markdown: '### 머리글'·'- 항목'(전체 변환은 convert_formats.py).
 """
 
 from __future__ import annotations
@@ -52,11 +52,18 @@ def _plain_item(text: str) -> str:
     return f"- {single_line(text)}"
 
 
+def _md_head(text: str) -> str:
+    return f"### {single_line(text)}"
+
+
 # 플랫폼별 (머리글, 항목, 빈 영역 표시) 서식
 _STYLES: dict[Platform, tuple[Callable[[str], str], Callable[[str], str], str]] = {
     Platform.SLACK: (_slack_head, _slack_item, f"{_BULLET} -"),
     Platform.WIKI: (_wiki_head, _wiki_item, "* -"),
     Platform.WEB: (_plain, _plain_item, "- -"),
+    Platform.TEAMS: (_plain, _plain_item, "- -"),
+    Platform.MAIL: (_plain, _plain_item, "- -"),
+    Platform.MARKDOWN: (_md_head, _plain_item, "- -"),
 }
 
 
@@ -96,7 +103,7 @@ def to_platform_text(
 def _html_lines(clean_html: str, platform: Platform) -> list[str]:
     """편집기 본문(정리·마스킹된 HTML) → 플랫폼 줄(결정기록 0030). 표는 '칸 | 칸' 한 줄."""
     head, item, _empty = _STYLES[platform]
-    plain = {Platform.SLACK: _slack, Platform.WIKI: _wiki, Platform.WEB: single_line}[platform]
+    plain = {Platform.SLACK: _slack, Platform.WIKI: _wiki}.get(platform, single_line)
     lines: list[str] = []
     for kind, text in blocks(clean_html):
         if kind == "heading":

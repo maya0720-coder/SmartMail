@@ -228,7 +228,7 @@ def test_schema_migration_1_to_2_keeps_data(tmp_path: Path) -> None:
     ]
     assert {"digest", "summary_tries"} <= set(columns["mail_ref"])  # 스키마 3(결정기록 0021)
     assert (
-        db.query("PRAGMA user_version")[0][0] == SCHEMA_VERSION == 7
+        db.query("PRAGMA user_version")[0][0] == SCHEMA_VERSION == 8
     )  # 4: 결정기록 0027~0029, 5: 0035
     db.close()
     again = Database(path)  # 두 번 열어도 안전

@@ -52,11 +52,12 @@ ACCOUNT = "110-123-456789"
         ('<a href="javascript:alert(1)">링크</a>', "<a>링크</a>"),
         ('<a href="https://evil.example/x">밖</a>', "<a>밖</a>"),
         (f'<a href="{WIKI}pages/1">위키</a>', f'<a href="{WIKI}pages/1">위키</a>'),
-        ('<p style="color:red">색</p><style>p{}</style>', "<p>색</p>"),
+        # 허용 style은 남기고 style 태그는 내용째 버린다(결정기록 0041 D1)
+        ('<p style="color:red">색</p><style>p{}</style>', '<p style="color: red">색</p>'),
         ("<!-- 주석 --><p>본문</p>", "<p>본문</p>"),
         ("<iframe src='https://x'>숨김</iframe><p>ok</p>", "<p>ok</p>"),
         ("<h2>둘째</h2>", "<h3>둘째</h3>"),  # 본인 영역 경계(h2) 보호
-        ("<h1>첫째</h1>", "첫째"),
+        ("<h1>첫째</h1>", "<h3>첫째</h3>"),  # h1은 본인 영역 경계 보호로 h3(0041)
         ("<ul><li>하나<li>둘</ul>", "<ul><li>하나<li>둘</li></li></ul>"),
         ("<p><b>굵게</p>", "<p><b>굵게</b></p>"),  # 깨진 HTML은 닫아 준다
         ("</div></p>글자", "글자"),

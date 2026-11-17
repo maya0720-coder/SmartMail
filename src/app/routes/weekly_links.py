@@ -21,6 +21,7 @@ from domain.weekly.links import (
     Platform,
     ReferenceLink,
 )
+from domain.weekly.targets import ExportFormat
 from security.links import safe_link
 
 router = APIRouter(prefix="/api/weekly")
@@ -36,8 +37,13 @@ class LinkBody(BaseModel):
     outline: str = Field(default="", max_length=OUTLINE_INPUT_CHARS)
 
 
+PlatformName = Literal["slack", "wiki", "web", "teams", "mail", "markdown"]
+FormatName = Literal["wiki", "wiki_source", "slack", "teams", "mail", "markdown", "text"]
+
+
 class ConvertBody(DraftBody):
-    platform: Literal["slack", "wiki", "web"]
+    platform: PlatformName = "wiki"
+    format: FormatName | None = None  # 복사 형식 7종(결정기록 0041). 있으면 platform 대신 쓴다
 
 
 def _link_json(link: ReferenceLink, has_profile: bool = False) -> dict[str, object]:
@@ -85,12 +91,19 @@ def delete_link(request: Request, link_id: int) -> JSONResponse:
 
 @router.post("/convert")
 def convert(request: Request, body: ConvertBody) -> JSONResponse:
-    """초안을 마스킹한 뒤 대상 플랫폼 형식으로 바꾼다. 게시하지 않으므로 승인 번호가 필요 없다."""
+    """초안을 마스킹한 뒤 대상 형식으로 바꾼다. 게시하지 않으므로 승인 번호가 필요 없다."""
+    weekly = get_container(request).weekly
+    html: str | None
     try:
-        text, html = get_container(request).weekly.convert(body.to_draft(), Platform(body.platform))
+        if body.format is not None:
+            text, html = weekly.export(body.to_draft(), ExportFormat(body.format))
+        else:
+            text, html = weekly.convert(body.to_draft(), Platform(body.platform))
     except UserInputError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    return JSONResponse({"platform": body.platform, "text": text, "html": html})
+    return JSONResponse(
+        {"platform": body.platform, "format": body.format, "text": text, "html": html}
+    )
 
 
 @router.get("/cache")

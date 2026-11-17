@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-SCHEMA_VERSION: Final = 7  # 2: 0015, 3: 0021, 4: 0027~0030, 5: 0035, 6: 0037, 7: 0038
+SCHEMA_VERSION: Final = 8  # 2: 0015, 3: 0021, 4: 0027~0030, 5: 0035, 6: 0037, 7: 0038, 8: 0041
 
 # 사용자 데이터 테이블(전체 삭제 대상). 순서는 외래 키 의존의 역순.
 DATA_TABLES: Final = (
@@ -120,7 +120,8 @@ CREATE TABLE IF NOT EXISTS weekly_link (
     id INTEGER PRIMARY KEY,
     url TEXT NOT NULL CHECK (length(url) <= 500),
     name TEXT NOT NULL CHECK (length(name) <= 120),
-    platform TEXT NOT NULL CHECK (platform IN ('slack', 'wiki', 'web')),
+    platform TEXT NOT NULL
+        CHECK (platform IN ('slack', 'wiki', 'web', 'teams', 'mail', 'markdown')),
     outline TEXT NOT NULL DEFAULT '' CHECK (length(outline) <= 3000)
 );
 
@@ -128,7 +129,8 @@ CREATE TABLE IF NOT EXISTS weekly_link (
 CREATE TABLE IF NOT EXISTS weekly_publish_cache (
     id INTEGER PRIMARY KEY,
     week_start TEXT NOT NULL,
-    platform TEXT NOT NULL CHECK (platform IN ('slack', 'wiki', 'web')),
+    platform TEXT NOT NULL
+        CHECK (platform IN ('slack', 'wiki', 'web', 'teams', 'mail', 'markdown')),
     method TEXT NOT NULL CHECK (method IN ('api', 'clipboard')),
     link TEXT CHECK (link IS NULL OR length(link) <= 2000),
     published_at TEXT NOT NULL,
@@ -238,6 +240,9 @@ MIGRATION_7_TASK_COLUMNS: Final = (
         "INTEGER NOT NULL DEFAULT 0 CHECK (followup_dismissed IN (0, 1))",
     ),
 )
+# 게시 대상 플랫폼 확장(결정기록 0041): CHECK 제약을 넓히려면 표를 다시 만든다(데이터 보존)
+MIGRATION_8_PLATFORM_TABLES: Final = ("weekly_link", "weekly_publish_cache")
+MIGRATION_8_NEW_PLATFORM: Final = "'teams'"
 MIGRATION_4_DOMAIN_COMPANY: Final = """
 CREATE TABLE IF NOT EXISTS domain_company (
     domain TEXT PRIMARY KEY CHECK (length(domain) BETWEEN 1 AND 253),
@@ -293,6 +298,21 @@ def from_db_time(value: str | None) -> datetime | None:
     return None if value is None else datetime.fromisoformat(value)
 
 
+def _table_definitions(schema: str) -> dict[str, str]:
+    """SCHEMA의 CREATE TABLE 문(표 이름 → 문장). 'IF NOT EXISTS'는 뺀다."""
+    found: dict[str, str] = {}
+    for statement in schema.split(";"):
+        text = statement.strip()
+        head = "CREATE TABLE IF NOT EXISTS "
+        start = text.find(head)
+        if start < 0:
+            continue
+        body = text[start:]
+        name = body[len(head) :].split("(", 1)[0].strip()
+        found[name] = "CREATE TABLE " + body[len(head) :]
+    return found
+
+
 class Database:
     """SQLite 연결 하나를 감싼다. 여러 스레드에서 쓰면 잠금으로 직렬화한다."""
 
@@ -341,6 +361,36 @@ class Database:
             conn.execute(MIGRATION_6_WEEKLY_PROFILE)
             if "summary_state" not in existing["mail_ref"]:
                 conn.execute(MIGRATION_4_SUMMARY_STATE)
+        self._widen_platforms()
+
+    def _widen_platforms(self) -> None:
+        """스키마 8: 주간보고 플랫폼 CHECK에 teams·mail·markdown을 더한다(표 재생성, 데이터 보존).
+
+        새 DB는 SCHEMA에서 이미 넓은 CHECK로 만들어지므로 건너뛴다. 외래 키(양식 프로필 →
+        참고 링크)가 지워지지 않도록 재생성 동안만 외래 키 검사를 끈다.
+        """
+        tables = MIGRATION_8_PLATFORM_TABLES
+        rows = self._conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)", tables
+        ).fetchall()
+        stale = [str(r["name"]) for r in rows if MIGRATION_8_NEW_PLATFORM not in str(r["sql"])]
+        if not stale:
+            return
+        definitions = _table_definitions(SCHEMA)
+        self._conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with self.transaction() as conn:
+                for name in stale:
+                    # 표 이름·정의는 위 상수와 SCHEMA에서만 온다(사용자 입력 아님)
+                    temp = f"{name}__v8"
+                    conn.execute(definitions[name].replace(name, temp, 1))
+                    conn.execute(f"INSERT INTO {temp} SELECT * FROM {name}")  # noqa: S608
+                    conn.execute(f"DROP TABLE {name}")
+                    conn.execute(f"ALTER TABLE {temp} RENAME TO {name}")
+                if conn.execute("PRAGMA foreign_key_check").fetchall():
+                    raise sqlite3.IntegrityError("스키마 8 이전 중 외래 키 불일치")
+        finally:
+            self._conn.execute("PRAGMA foreign_keys = ON")
 
     @classmethod
     def in_memory(cls) -> Database:

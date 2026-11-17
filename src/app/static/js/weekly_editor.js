@@ -5,8 +5,13 @@
 // - 본인 영역 머리글·페이지 제목은 편집 영역 밖에 읽기 전용(회색)으로 둔다.
 "use strict";
 
-const RICH_TAGS = new Set(["h3", "h4", "p", "br", "ul", "ol", "li", "strong", "b", "em", "i", "u",
-  "table", "thead", "tbody", "tr", "th", "td", "a"]);
+// 허용 태그·속성은 서버 정리기(domain/weekly/rich.py)와 같다(HTML 편집 확장, 결정기록 0041 D1)
+const RICH_TAGS = new Set(["h3", "h4", "p", "br", "hr", "ul", "ol", "li", "strong", "b", "em", "i", "u", "s",
+  "sub", "sup", "code", "pre", "blockquote", "span", "div", "table", "caption", "colgroup", "col", "thead",
+  "tbody", "tfoot", "tr", "th", "td", "a"]);
+const RICH_VOID = new Set(["br", "hr", "col"]);
+const RICH_STYLE_PROPS = ["color", "background-color", "text-align", "font-weight", "font-style",
+  "text-decoration", "width", "vertical-align"];
 const RICH_SPAN_MAX = 20;
 const RICH_MAX_BYTES = 200000;
 
@@ -19,6 +24,41 @@ function spanValue(node, name) {
   return raw && Number.isInteger(n) && n >= 1 && n <= RICH_SPAN_MAX ? String(n) : null;
 }
 
+// 표·목록 보조 속성(서버가 다시 검사한다): 이름 → 값 검사
+const RICH_ATTRS = {
+  align: (tag, v) => ["th", "td"].includes(tag) && /^(left|center|right|justify)$/i.test(v),
+  valign: (tag, v) => ["th", "td"].includes(tag) && /^(top|middle|bottom|baseline)$/i.test(v),
+  width: (tag, v) => ["th", "td", "col"].includes(tag) && /^\d{1,4}(px|%)?$/.test(v),
+  start: (tag, v) => tag === "ol" && /^\d{1,4}$/.test(v),
+};
+function richAttrs(node, tag) {
+  const out = {};
+  if (tag === "td" || tag === "th") {
+    for (const name of ["colspan", "rowspan"]) { const v = spanValue(node, name); if (v) out[name] = v; }
+  }
+  if (tag === "col") { const v = spanValue(node, "span"); if (v) out.span = v; }
+  for (const [name, ok] of Object.entries(RICH_ATTRS)) {
+    const v = (node.getAttribute(name) || "").trim();
+    if (v && ok(tag, v)) out[name] = v;
+  }
+  return out;
+}
+
+// style은 허용 속성만 CSSOM으로 넣는다(문자열 대입 없음, CSP와 호환).
+// DOMParser 문서는 CSP 때문에 style 속성을 해석하지 않으므로 속성 글자를 직접 나눈다.
+function applyRichStyle(source, target) {
+  const raw = source.getAttribute("style") || "";
+  for (const part of raw.split(";")) {
+    const at = part.indexOf(":");
+    if (at < 0) continue;
+    const prop = part.slice(0, at).trim().toLowerCase();
+    const value = part.slice(at + 1).trim();
+    if (RICH_STYLE_PROPS.includes(prop) && value && !/url\(|expression|\\|\/\*|javascript:|@import/i.test(value)) {
+      target.style.setProperty(prop, value);
+    }
+  }
+}
+
 // 서버 HTML → 허용 노드만 다시 만든 DOM 조각(h2는 h3으로 낮춘다: 본인 영역 경계 보호)
 function richNodes(html) {
   const doc = new DOMParser().parseFromString(html || "", "text/html");
@@ -29,14 +69,13 @@ function richNodes(html) {
     if (tag === "h2") tag = "h3";
     const children = Array.from(node.childNodes).map(copy).filter(Boolean);
     if (!RICH_TAGS.has(tag)) return children.length ? children : null;  // 태그만 버리고 글자는 남김
-    const attrs = {};
+    const attrs = richAttrs(node, tag);
     if (tag === "a" && /^https:\/\//i.test(node.getAttribute("href") || "")) {
       Object.assign(attrs, { href: node.getAttribute("href"), target: "_blank", rel: "noopener noreferrer" });
     }
-    if (tag === "td" || tag === "th") {
-      for (const name of ["colspan", "rowspan"]) { const v = spanValue(node, name); if (v) attrs[name] = v; }
-    }
-    return el(tag, attrs, ...children);
+    const made = RICH_VOID.has(tag) ? el(tag, attrs) : el(tag, attrs, ...children);
+    applyRichStyle(node, made);
+    return made;
   };
   return Array.from(doc.body.childNodes).map(copy).flat().filter(Boolean);
 }
@@ -50,13 +89,13 @@ function serializeRich(root) {
     if (tag === "div") tag = "p";  // 편집 중 생기는 div 줄은 문단으로
     if (tag === "h1" || tag === "h2") tag = "h3";
     const inner = Array.from(node.childNodes).map(walk).join("");
-    if (tag === "br") return "<br />";
     if (!RICH_TAGS.has(tag)) return inner;
     let attrs = "";
     if (tag === "a" && /^https:\/\//i.test(node.getAttribute("href") || "")) attrs = ' href="' + escapeAttr(node.getAttribute("href")) + '"';
-    if (tag === "td" || tag === "th") {
-      for (const name of ["colspan", "rowspan"]) { const v = spanValue(node, name); if (v) attrs += " " + name + '="' + v + '"'; }
-    }
+    for (const [name, value] of Object.entries(richAttrs(node, tag))) attrs += " " + name + '="' + escapeAttr(value) + '"';
+    const style = node.getAttribute("style");
+    if (style && node.style.length) attrs += ' style="' + escapeAttr(style) + '"';
+    if (RICH_VOID.has(tag)) return "<" + tag + attrs + " />";
     return "<" + tag + attrs + ">" + inner + "</" + tag + ">";
   };
   return Array.from(root.childNodes).map(walk).join("");

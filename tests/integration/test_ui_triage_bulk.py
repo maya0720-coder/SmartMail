@@ -118,3 +118,28 @@ def test_ui_todo02_keyboard_only_bulk(tmp_path: Path) -> None:
         assert "2건을 업무 아님으로 정리했습니다" in page.inner_text("#toast")
         left = {t.id for t in container.tasks.list_tasks([TaskStatus.SUGGESTED])}
         assert len(left) == 3 and left < set(ids)
+
+
+@pytest.mark.slow
+def test_ui_todo02_range_follows_group_order(tmp_path: Path) -> None:
+    """묶음(오늘·이전)이 섞여도 Shift 범위는 화면에 보이는 순서를 따른다(자정 직후 회귀)."""
+    with demo_server(tmp_path) as (base, container), chromium() as browser:
+        repo = SqliteTaskRepository(container.db)
+        now = container.clock.now()
+        for n, age in enumerate([0, 0, 0, 30, 30, 30]):  # 먼저 만든(작은 id) 쪽이 오늘
+            repo.add(
+                Task(
+                    f"합성 묶음 {n}",
+                    TaskStatus.SUGGESTED,
+                    TaskSource.MAIL,
+                    now - timedelta(days=age, minutes=n),
+                    module_tag="일반업무",
+                )
+            )
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        _open(page, base)
+        page_ids = page.evaluate(PAGE_IDS)
+        assert page.locator("#tr-items .tr-item.sel").get_attribute("data-id") == page_ids[0]
+        _row(page, 1).click(modifiers=["Control"])
+        _row(page, 4).click(modifiers=["Shift"])
+        assert page.evaluate(PICKED) == page_ids[1:5]

@@ -61,8 +61,12 @@ function inTab(task, tab) {
   return task.module_tag === tab.slice(4);  // "cat:<구분>"
 }
 
+// 화면은 받은 시각 묶음(오늘·어제·이번 주·이전) 순서로 그리므로 순서도 묶음 기준으로 맞춘다
+// (Shift 범위·↑↓·페이지 나누기가 보이는 순서와 같아야 한다. 묶음 안에서는 기존 순서 유지)
+const GROUP_RANK = { today: 0, yesterday: 1, week: 2, older: 3 };
 function filteredItems() {
-  return TR.items.filter((t) => inTab(t, TR.tab));
+  const rank = (t) => GROUP_RANK[t.group || "older"] ?? 3;
+  return TR.items.filter((t) => inTab(t, TR.tab)).sort((a, b) => rank(a) - rank(b));
 }
 
 // 현재 페이지(페이지 번호는 범위 안으로 맞춘다)

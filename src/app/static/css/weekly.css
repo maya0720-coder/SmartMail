@@ -71,3 +71,14 @@
 .pf-block .pf-kind{color:var(--sub);font-size:12px}
 .pf-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
 .pf-cols label{display:grid;gap:2px;font-size:12px}
+/* HTML 편집·복사 형식(결정기록 0041) */
+.wk-html-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:8px}
+.wk-code{display:flex;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--card);min-height:360px;overflow:hidden}
+.wk-gutter{margin:0;padding:8px 6px;min-width:36px;text-align:right;color:var(--muted);background:var(--soft);font:12px/1.5 var(--mono);overflow:hidden;user-select:none}
+#html-code{flex:1;min-width:0;border:0;outline:none;resize:vertical;padding:8px;font:12px/1.5 var(--mono);background:transparent;color:var(--fg);white-space:pre;tab-size:2}
+.wk-html-side{display:flex;flex-direction:column;gap:6px;min-width:0}
+.wk-html-preview{min-height:360px;overflow:auto}
+.wk-removed.err,#html-size.err{color:var(--danger)}
+.wk-format{display:inline-flex;align-items:center;gap:6px}
+.wk-copyprev{white-space:pre-wrap;max-height:60vh;overflow:auto;padding:10px;background:var(--soft);border-radius:var(--r-ctl);font:12px/1.5 var(--mono)}
+@media (max-width:900px){.wk-html-split{grid-template-columns:minmax(0,1fr)}}

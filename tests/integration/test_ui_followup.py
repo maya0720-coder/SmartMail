@@ -35,6 +35,11 @@ def test_ui_todo07_followup_filter_badge_copy_and_clear(tmp_path: Path) -> None:
         page.goto(base + "/")
         follow = page.locator("#filters button[data-f='followup']")
         follow.wait_for()
+        # 버튼은 목록을 받기 전에 먼저 그려진다(건수 0). CSP 때문에 wait_for_function 대신 폴링
+        for _ in range(50):
+            if follow.inner_text().endswith(" 1"):
+                break
+            page.wait_for_timeout(100)
         assert follow.inner_text().endswith(" 1")
         follow.click()
         row = page.locator(f'#todo tr.row[data-id="{task.id}"]')

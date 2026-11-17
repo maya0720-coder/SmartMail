@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
@@ -26,12 +27,13 @@ from domain.weekly.report import (
     render_body,
     with_layout,
 )
-from domain.weekly.rich import MAX_HTML_BYTES, sanitize
+from domain.weekly.rich import MAX_HTML_BYTES, sanitize, sanitize_report
 from domain.weekly.service import (
     DeliveryTarget,
     WikiConflictError,
     WikiUnavailableError,
 )
+from domain.weekly.targets import FORMATS, ExportFormat
 from security.links import safe_link
 from security.logging_policy import EventType, Site, log_event
 
@@ -114,6 +116,10 @@ class PublishBody(DraftBody):
     approved: Literal[True]  # 사용자가 '승인 후 게시'를 눌렀을 때만 True
     target_link_id: int | None = Field(default=None, ge=1)  # 게시 대상 참고 링크(없으면 위키)
     fallback: bool = False  # API 게시가 안 될 때 클립보드 폴백 허용(화면에서 켠다)
+    # 복사 형식(결정기록 0041). 위키 형식만 직접 게시, 그 밖은 승인 후 복사 + 대상 열기
+    format: Literal["wiki", "wiki_source", "slack", "teams", "mail", "markdown", "text"] | None = (
+        None
+    )
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -178,12 +184,15 @@ def make_draft(
 
 @router.post("/preview")
 def preview(request: Request, body: DraftBody) -> JSONResponse:
+    weekly = get_container(request).weekly
     try:
-        result = get_container(request).weekly.preview(body.to_draft())
+        result = weekly.preview(body.to_draft())
+        removed = {} if body.html is None else sanitize_report(body.html, weekly.link_bases)[1]
     except UserInputError as exc:
         return _error(str(exc), 400)
     return JSONResponse(
         {
+            "removed": removed,  # 정리 때 버린 태그·속성 요약(결정기록 0041)
             "title": result.title,
             "section_html": result.section_html,
             "nonce": result.nonce,
@@ -199,14 +208,13 @@ def publish(request: Request, body: PublishBody) -> JSONResponse:
     weekly = container.weekly
     wiki_base = str(container.settings.wiki_base_url)
     try:
-        target = DeliveryTarget()
-        if body.target_link_id is not None:
-            link = container.weekly_links.get(body.target_link_id)
-            if link is None:
-                raise UserInputError("선택한 참고 링크를 찾을 수 없습니다")
-            target = DeliveryTarget(link.platform, link.url)
+        target = _target(container, body)
         approved = weekly.approve(body.to_draft(), body.nonce, body.mode)
         delivery = weekly.deliver(approved, target, allow_fallback=body.fallback)
+        text, html = delivery.text, delivery.html
+        if body.format is not None and delivery.method != "api":
+            text, copied = weekly.export(body.to_draft(), ExportFormat(body.format))
+            html = copied or ""
     except (WikiConflictError, OwnSectionError) as exc:
         log_event(EventType.WIKI_POST, Site.WIKI, success=False)
         return _error(str(exc), 409)
@@ -226,8 +234,13 @@ def publish(request: Request, body: PublishBody) -> JSONResponse:
             "link": None if page is None else safe_link(page.link, [wiki_base]),
             "method": delivery.method,
             "platform": delivery.platform.value,
-            "text": delivery.text,
-            "html": delivery.html,
+            "text": text,
+            "html": html,
+            "format": body.format,
+            # 메일 대상: 제목만 넣은 mailto(받는 사람·본문 없음, 발송은 사용자가 직접)
+            "mailto": "mailto:?subject=" + quote(delivery.title, safe="")
+            if body.format == "mail"
+            else None,
             "reason": delivery.reason,
             # 폴백이면 화면이 이 https 주소를 새 창으로 연다(noopener). 검증을 통과한 주소만 준다.
             "open_link": None
@@ -236,6 +249,19 @@ def publish(request: Request, body: PublishBody) -> JSONResponse:
             "cache_id": delivery.cache_id,
         }
     )
+
+
+def _target(container: Any, body: PublishBody) -> DeliveryTarget:
+    """게시 대상: 참고 링크(있으면 열 주소) + 복사 형식(없으면 링크 플랫폼 기본 형식)."""
+    link = None
+    if body.target_link_id is not None:
+        link = container.weekly_links.get(body.target_link_id)
+        if link is None:
+            raise UserInputError("선택한 참고 링크를 찾을 수 없습니다")
+    if body.format is None:
+        return DeliveryTarget() if link is None else DeliveryTarget(link.platform, link.url)
+    info = FORMATS[ExportFormat(body.format)]
+    return DeliveryTarget(info.platform, None if link is None else link.url, info.direct)
 
 
 @router.get("/history")

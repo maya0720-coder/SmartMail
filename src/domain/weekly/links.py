@@ -2,7 +2,8 @@
 
 - https만 허용한다. 사용자 정보·제어 문자·비ASCII 문자·과도한 길이는 거부한다.
 - 플랫폼은 호스트가 정확히 일치하거나 `.slack.com`으로 끝날 때만 슬랙으로 본다
-  (slack.com.evil.example은 기타 웹).
+  (slack.com.evil.example은 기타 웹). Teams·메일(Outlook 웹)·Markdown(노션·깃) 호스트도 같은
+  규칙으로 판별한다(결정기록 0041).
 - 서버는 이 링크를 직접 가져오지 않는다(SSRF 회피). 위키 본문은 위키 어댑터로만 읽는다.
 """
 
@@ -22,6 +23,10 @@ MAX_LINKS = 10  # 등록 가능한 참고 링크 수
 MAX_URL_CHARS = 500
 MAX_NAME_CHARS = 40
 SLACK_DOMAIN = "slack.com"
+# 호스트 정확 일치 또는 하위 도메인(결정기록 0041)
+TEAMS_DOMAINS = ("teams.microsoft.com", "teams.live.com")
+MAIL_DOMAINS = ("outlook.office.com", "outlook.office365.com", "outlook.live.com")
+MARKDOWN_DOMAINS = ("notion.so", "notion.site", "github.com", "gitlab.com")
 
 _URL_CHARS = re.compile(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$")
 _LABEL = r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?"
@@ -38,9 +43,19 @@ class Platform(StrEnum):
     SLACK = "slack"
     WIKI = "wiki"
     WEB = "web"
+    TEAMS = "teams"
+    MAIL = "mail"
+    MARKDOWN = "markdown"
 
 
-PLATFORM_LABELS = {Platform.SLACK: "슬랙", Platform.WIKI: "위키", Platform.WEB: "기타 웹"}
+PLATFORM_LABELS = {
+    Platform.SLACK: "슬랙",
+    Platform.WIKI: "위키",
+    Platform.WEB: "기타 웹",
+    Platform.TEAMS: "Teams",
+    Platform.MAIL: "메일",
+    Platform.MARKDOWN: "Markdown",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +102,22 @@ def _host(url: str) -> str:
     return (urlsplit(url).hostname or "").rstrip(".").lower()
 
 
+def _under(host: str, domains: tuple[str, ...]) -> bool:
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
 def detect_platform(url: str, wiki_base_url: str = "") -> Platform:
     """URL 패턴으로 플랫폼을 판별한다(normalize_url을 통과한 주소 기준)."""
     host = _host(url)
     if host == SLACK_DOMAIN or host.endswith("." + SLACK_DOMAIN):
         return Platform.SLACK
+    for domains, platform in (
+        (TEAMS_DOMAINS, Platform.TEAMS),
+        (MAIL_DOMAINS, Platform.MAIL),
+        (MARKDOWN_DOMAINS, Platform.MARKDOWN),
+    ):
+        if _under(host, domains):
+            return platform
     wiki_host = _host(wiki_base_url) if wiki_base_url else ""
     if wiki_host and host == wiki_host:
         return Platform.WIKI
