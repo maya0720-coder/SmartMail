@@ -19,6 +19,7 @@ import uvicorn
 
 from app.bootstrap import build_container
 from app.factory import create_app
+from config.run_mode import apply_run_mode
 from config.settings import ConfigError, load_settings
 from security.logging_policy import configure_logging
 
@@ -45,7 +46,8 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     open_browser = "--open" in sys.argv[1:]
     try:
-        settings = load_settings()
+        # [설정·연결]에서 고른 데이터 모드(실제/가상)를 반영한다(결정기록 0042)
+        settings = apply_run_mode(load_settings())
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2

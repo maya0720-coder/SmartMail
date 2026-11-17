@@ -12,9 +12,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.deps import get_container
+from app.weekly_brief import week_briefs
 from domain.calendar import week_start
 from domain.clock import KST
 from domain.errors import UserInputError
+from domain.models import Task
+from domain.weekly.brief import EMPTY_BRIEF
+from domain.weekly.brief_render import brief_item, render_brief_body
 from domain.weekly.form import MAX_HEADING_CHARS, FormLayout, layout_from_client
 from domain.weekly.links import Platform
 from domain.weekly.report import (
@@ -23,8 +27,6 @@ from domain.weekly.report import (
     OwnSectionError,
     WeeklyDraft,
     classify_week_tasks,
-    item_text,
-    render_body,
     with_layout,
 )
 from domain.weekly.rich import MAX_HTML_BYTES, sanitize, sanitize_report
@@ -163,16 +165,25 @@ def make_draft(
     layout = container.weekly.resolve_layout(link)
     draft = container.weekly.draft()
     profile = container.weekly_profiles.get(link.id) if link is not None else None
+    now = container.clock.now()
+    sections = classify_week_tasks(container.tasks.list_tasks(), now)
+    # 업무별 간략 요약(메일 수집 때 AI가 만든 마스킹 요약 기반, 개조식, 결정기록 0042)
+    briefs = week_briefs(container, sections, now)
+    template = with_layout(container.weekly.template, layout)
+
+    def line(task: Task) -> str:
+        return brief_item(task, template, briefs.get(task.id or -1, EMPTY_BRIEF))
+
+    draft.done, draft.planned, draft.issues = (
+        [line(t) for t in sections[key]] for key in ("done", "planned", "issues")
+    )
     if profile is not None:
         # 조직 양식 프로필 순서대로 초안을 만든다(결정기록 0037)
-        template = container.weekly.template
-        sections = classify_week_tasks(container.tasks.list_tasks(), container.clock.now())
-        section = container.weekly_profiles.render(
-            profile, sections, lambda task: item_text(task, template)
-        )
+        section = container.weekly_profiles.render(profile, sections, line)
         layout = replace(layout, label=f"양식 프로필 {profile.name}", source="link")
     else:
-        section = render_body(draft, with_layout(container.weekly.template, layout))
+        # 기본 양식: 개인 주간 보고서(요약·실적·업무별 현황·이슈·차주 계획, 결정기록 0042)
+        section = render_brief_body(sections, briefs, template)
     result = _draft_json(draft, layout, sanitize(section))
     # 양식 구조(편집기 잠금·비교·되돌리기용). 없으면 '기본 양식 사용 중' 안내를 띄운다
     result["profile"] = None if profile is None else profile.as_json()

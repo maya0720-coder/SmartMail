@@ -26,6 +26,7 @@ from app.routes import (
     mail,
     metrics,
     pages,
+    run_mode,
     summaries,
     task_progress,
     tasks,
@@ -137,6 +138,7 @@ def create_app(
     app.include_router(login_all.router)
     app.include_router(auth.router)
     app.include_router(data.router)
+    app.include_router(run_mode.router)
     app.include_router(mail.router)
     app.include_router(categories.router)
     app.include_router(companies.router)
