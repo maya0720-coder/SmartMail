@@ -126,7 +126,7 @@ class Settings(BaseSettings):
     ai_adapter: Literal["gllm", "fake"] = "gllm"
 
     # 데모 모드: 모든 외부 연동을 가짜(Fake) 어댑터로 바꾸고 화면에 '데모' 표시
-    demo_mode: bool = False
+    demo_mode: bool = True  # 기본은 가상 데이터(결정기록 0042, 시작 모드는 config/run_mode.py)
     # 데모 모드에서 가상 과거 사례(히스토리 카드)·가상 G-Knowledge 문서를 미리 넣을지(결정기록 0021)
     demo_seed: bool = True
 

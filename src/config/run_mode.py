@@ -3,7 +3,8 @@
 - [설정·연결]에서 고른 값을 DB 폴더의 `run_mode.json`에 `{"mode": "real" | "demo"}`로만 저장한다
   (개인정보·자격증명 없음). 앱을 다시 시작할 때 적용한다(DB·연동 구성이 시작 때 정해지므로).
 - 우선순위: 프로세스 환경 변수 `SMARTMAIL_DEMO_MODE`(실행 스크립트 `-Demo`) > 화면 선택값 >
-  `.env`·기본값. 환경 변수로 정한 실행은 화면 값을 무시하고 화면에 그 사실을 표시한다.
+  기본값(가상 데이터). 설정 파일의 `SMARTMAIL_DEMO_MODE`는 시작 모드를 정하지 않는다.
+  환경 변수로 정한 실행은 화면 값을 무시하고 화면에 그 사실을 표시한다.
 - 파일 형식이 잘못되면 조용히 넘어가지 않고 시작을 거부한다(개발지침 5장).
 """
 
@@ -22,6 +23,8 @@ DEMO_ENV: Final = ENV_PREFIX + "DEMO_MODE"
 MAX_FILE_BYTES: Final = 200
 RunMode = Literal["real", "demo"]
 MODES: Final[tuple[RunMode, ...]] = ("real", "demo")
+# 화면에서 고른 적이 없으면 가상 데이터로 시작한다(사용자 결정 2026-11-17, 설정 파일 값보다 우선)
+DEFAULT_MODE: Final[RunMode] = "demo"
 
 
 def run_mode_path(settings: Settings) -> Path:
@@ -61,10 +64,8 @@ def save_mode(path: Path, mode: RunMode) -> None:
 
 
 def apply_run_mode(settings: Settings, environ: Mapping[str, str] | None = None) -> Settings:
-    """시작 시 화면 선택값을 설정에 반영한다(환경 변수로 정했으면 그대로 둔다)."""
+    """시작 시 데이터 모드를 정한다: 환경 변수 > 화면 선택값 > 기본값(가상, DEFAULT_MODE)."""
     if forced_by_env(environ):
         return settings
-    saved = load_saved_mode(run_mode_path(settings))
-    if saved is None:
-        return settings
-    return settings.model_copy(update={"demo_mode": saved == "demo"})
+    mode = load_saved_mode(run_mode_path(settings)) or DEFAULT_MODE
+    return settings.model_copy(update={"demo_mode": mode == "demo"})

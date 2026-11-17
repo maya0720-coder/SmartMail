@@ -5,7 +5,7 @@ const RUN_MODE_LABELS = { real: "실제 데이터", demo: "가상 데이터(데�
 
 function showRunMode(state) {
   document.getElementById("rm-current").textContent = "지금: " + RUN_MODE_LABELS[state.current];
-  document.getElementById("rm-mode").value = state.saved || state.current;
+  document.getElementById("rm-mode").value = state.saved || state.default;
   const note = state.forced
     ? "이번 실행은 실행 스크립트(-Demo 등)로 정해져 화면 선택보다 우선합니다."
     : state.restart_needed

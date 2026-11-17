@@ -42,7 +42,9 @@ def test_run_mode_bad_file_fails_start(tmp_path: Path, content: str) -> None:
 
 def test_run_mode_precedence(tmp_path: Path) -> None:
     settings = make_settings(tmp_path, demo_mode=False)
-    assert apply_run_mode(settings, {}).demo_mode is False  # 저장값 없음 → .env 값
+    assert apply_run_mode(settings, {}).demo_mode is True  # 저장값 없음 → 기본 가상
+    save_mode(run_mode_path(settings), "real")
+    assert apply_run_mode(settings, {}).demo_mode is False  # 화면에서 실제 선택
     save_mode(run_mode_path(settings), "demo")
     assert apply_run_mode(settings, {}).demo_mode is True  # 화면 선택값
     forced = apply_run_mode(settings, {DEMO_ENV: "false"})
@@ -54,7 +56,13 @@ def test_run_mode_api(tmp_path: Path, clock: FixedClock, monkeypatch: pytest.Mon
     container = make_container(tmp_path, clock)  # 테스트 컨테이너는 데모 모드
     with app_client(container) as client:
         state = client.get("/api/run-mode").json()
-        assert state == {"current": "demo", "saved": None, "forced": False, "restart_needed": False}
+        assert state == {
+            "current": "demo",
+            "saved": None,
+            "default": "demo",
+            "forced": False,
+            "restart_needed": False,
+        }
         saved = client.put("/api/run-mode", json={"mode": "real"}).json()
         assert saved["saved"] == "real" and saved["restart_needed"] is True
         assert load_saved_mode(run_mode_path(container.settings)) == "real"

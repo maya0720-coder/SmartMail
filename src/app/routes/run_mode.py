@@ -13,7 +13,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 from app.deps import get_container
-from config.run_mode import RunMode, forced_by_env, load_saved_mode, run_mode_path, save_mode
+from config.run_mode import (
+    DEFAULT_MODE,
+    RunMode,
+    forced_by_env,
+    load_saved_mode,
+    run_mode_path,
+    save_mode,
+)
 from config.settings import ConfigError
 
 router = APIRouter(prefix="/api/run-mode")
@@ -34,10 +41,11 @@ def _state(request: Request) -> dict[str, object]:
     except ConfigError:
         saved = None
     forced = forced_by_env()
-    effective = current if forced or saved is None else saved
+    effective = current if forced else (saved or DEFAULT_MODE)
     return {
         "current": current,
         "saved": saved,
+        "default": DEFAULT_MODE,  # 고른 적이 없을 때 시작 모드
         "forced": forced,  # 실행 스크립트 -Demo 등 환경 변수로 정한 실행(화면 값보다 우선)
         "restart_needed": effective != current,
     }
